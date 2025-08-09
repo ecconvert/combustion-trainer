@@ -232,6 +232,9 @@ export default function CombustionTrainer() {
   const [fuelKey, setFuelKey] = useState("Natural Gas");
   const [unitSystem, setUnitSystem] = useState("imperial");
   const fuel = FUELS[fuelKey];
+  // Helper to identify liquid fuels vs gases (must be declared before meter memos)
+  const isOil = fuelKey === "Fuel Oil #2" || fuelKey === "Biodiesel";
+  const isGas = !isOil;
   const EP160 = { PURGE_HF_SEC: 30, LOW_FIRE_MIN_SEC: 30, PTFI_SEC: 10, MTFI_SPARK_OFF_SEC: 10, MTFI_PILOT_OFF_SEC: 15, POST_PURGE_SEC: 15, FFRT_SEC: 4 };
   const IGNITABLE_EA = { min: 0.85, max: 1.6 };
   const STABLE_EA = { min: 0.9, max: 1.5 };
@@ -282,6 +285,13 @@ export default function CombustionTrainer() {
     [gasAvg, gasDialSize],
   );
   const gasMBH = useMemo(() => gasCFH * fuel.HHV / 1000, [gasCFH, fuel]);
+  // Burner-driven (model) gas flow and expected meter behavior
+const gasSimCFH = useMemo(() => (isGas ? Math.max(0, fuelFlow) : 0), [isGas, fuelFlow]);
+const gasMeterRevSec = useMemo(
+  () => (gasSimCFH > 0 ? (3600 * gasDialSize) / gasSimCFH : 0),
+  [gasSimCFH, gasDialSize]
+);
+const gasMBH_model = useMemo(() => gasSimCFH * fuel.HHV / 1000, [gasSimCFH, fuel]);
 
   const [nozzleGPH100, setNozzleGPH100] = useState(0.75);
   const [oilPressure, setOilPressure] = useState(100);
@@ -290,6 +300,8 @@ export default function CombustionTrainer() {
     [nozzleGPH100, oilPressure],
   );
   const oilMBH = useMemo(() => oilGPH * fuel.HHV / 1000, [oilGPH, fuel]);
+  const oilSimGPH = useMemo(() => (isOil ? Math.max(0, fuelFlow) : 0), [isOil, fuelFlow]);
+  const oilSecPerGal = useMemo(() => (oilSimGPH > 0 ? 3600 / oilSimGPH : 0), [oilSimGPH]);  
 
   const startGasClock = () => {
     setGasRunning(true);
@@ -314,6 +326,21 @@ export default function CombustionTrainer() {
     rows.push({ lap: "avg", seconds: gasAvg.toFixed(2), CFH: gasCFH.toFixed(1), MBH: gasMBH.toFixed(1) });
     downloadCSV("gas-clock.csv", rows);
   };
+// Auto-clock the gas meter: generate a lap each full revolution at the current burner CFH
+useEffect(() => {
+  if (!gasRunning || !isGas || gasSimCFH <= 0) return;
+  let timer = null;
+  const schedule = () => {
+    const sec = (3600 * gasDialSize) / Math.max(0.01, gasSimCFH);
+    timer = setTimeout(() => {
+      setGasLaps((l) => [...l, sec]);
+      schedule();
+    }, sec * 1000);
+  };
+  schedule();
+  return () => { if (timer) clearTimeout(timer); };
+}, [gasRunning, gasDialSize, gasSimCFH, isGas]);
+
   const exportOilClock = () => {
     const rows = [
       {
@@ -425,8 +452,6 @@ export default function CombustionTrainer() {
   const [regPress, setRegPress] = useState(3.5); // in. w.c. for NG baseline; reset on fuel change
   // Only one regulator pressure, use regPress for both min and max
 
-  // Helper to identify liquid fuels vs gases
-  const isOil = fuelKey === "Fuel Oil #2" || fuelKey === "Biodiesel";
 
   // Derived setpoint as a function of fuel, air, and EA
   useEffect(() => {
@@ -1226,19 +1251,32 @@ const rheostatRampRef = useRef(null);
                   </datalist>
                 </label>
                 <div className="flex flex-wrap gap-2">
-                  <button className="btn btn-primary" onClick={startGasClock} disabled={gasRunning}>Start</button>
-                  <button className="btn" onClick={lapGasClock} disabled={!gasRunning}>Lap</button>
+                  <button className="btn btn-primary" onClick={startGasClock} disabled={gasRunning || !isGas}>Start</button>
+                  <button className="btn" onClick={lapGasClock} disabled title="Meter laps are generated automatically from current burner flow">Lap</button>
                   <button className="btn" onClick={stopGasClock} disabled={!gasRunning}>Stop</button>
                   <button className="btn" onClick={resetGasClock}>Reset</button>
                   <button className="btn" onClick={exportGasClock} disabled={!gasLaps.length}>Export</button>
                 </div>
-                <div className="text-sm">Avg sec/rev: <span className="font-semibold">{gasAvg.toFixed(1)}</span></div>
-                <div className="text-sm">CFH: <span className="font-semibold">{gasCFH.toFixed(1)}</span></div>
-                <div className="text-sm">Input MBH: <span className="font-semibold">{gasMBH.toFixed(1)}</span></div>
-                <div className="text-xs text-slate-500">Simulated CFH: {fuelFlow.toFixed(1)}</div>
+                {!isGas && (
+                  <div className="text-xs text-slate-500 mt-1">
+                    Gas meter is only active for Natural Gas/Propane. Select a gas fuel to clock.
+                  </div>
+                )}
+<div className="text-sm">
+  Sim sec/rev (from burner): <span className="font-semibold">
+    {gasMeterRevSec > 0 ? gasMeterRevSec.toFixed(1) : '—'}
+  </span>
+</div>
+<div className="text-sm">Meter CFH (clocked avg): <span className="font-semibold">{gasCFH.toFixed(1)}</span></div>
+<div className="text-sm">Burner CFH (model): <span className="font-semibold">{gasSimCFH.toFixed(1)}</span></div>
+<div className="text-sm">Input MBH (model): <span className="font-semibold">{gasMBH_model.toFixed(1)}</span></div>
               </div>
             ) : (
               <div className="mt-3 space-y-2">
+                <div className="text-sm">Burner GPH (model): <span className="font-semibold">{oilSimGPH.toFixed(2)}</span></div>
+<div className="text-sm">Sec/gal at current flow: <span className="font-semibold">{oilSecPerGal > 0 ? oilSecPerGal.toFixed(0) : '—'}</span></div>
+<div className="text-sm">Volume in 60s: <span className="font-semibold">{(oilSimGPH/60).toFixed(2)}</span> gal</div>
+<div className="text-xs text-slate-500">Field estimate from nozzle/pressure (optional):</div>
                 <label className="text-sm">
                   Nozzle GPH @100 psi
                   <input
