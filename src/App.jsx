@@ -90,74 +90,68 @@ function downloadCSV(filename, rows) {
 // --- Core steady-state combustion model (instantaneous) ---
 function computeCombustion({ fuel, fuelFlow, airFlow, stackTempF, ambientF }) {
   const { C, H, O } = fuel.formula;
-  const fuelMol = Math.max(0.0001, fuelFlow);
-  const O2_needed = fuelMol * (C + H / 4 - O / 2);
-  const airStoich = O2_needed / 0.21; // moles of air
+  const fuelMol = Math.max(0, fuelFlow);
   const airActual = Math.max(0.0001, airFlow);
-  const excessAir = airActual / airStoich;
 
-  // Incoming O2 and N2
+  const O2_needed = fuelMol * (C + H / 4 - O / 2);
+  const airStoich = O2_needed / 0.21;
+  const excessAir = airStoich > 0 ? airActual / airStoich : 0;
+
   const O2_in = 0.21 * airActual;
-  const N2_in = 0.79 * airActual; // ignoring Ar, etc.
+  const N2_in = 0.79 * airActual;
 
-  let O2_left = 0;
+  const O2_for_H2O = fuelMol * (H / 4);
+  const H2O = fuelMol * (H / 2);
+  const O2_after_H = Math.max(0, O2_in - O2_for_H2O);
+
+  const carbon = fuelMol * C;
   let CO2 = 0;
   let CO = 0;
-  let H2O = 0;
+  let O2_left = 0;
 
-  // Oxygen allocation
-  const O2_for_H2O = fuelMol * (H / 4);
-
-  if (O2_in >= O2_needed) {
-    // Complete combustion
-    O2_left = O2_in - O2_needed;
-    CO2 = fuelMol * C;
-    H2O = fuelMol * (H / 2);
-    CO = 0; // ideal
+  if (O2_after_H >= carbon) {
+    CO2 = carbon;
+    O2_left = O2_after_H - carbon;
   } else {
-    // Deficit: prioritize H2O, then split C into CO2/CO
-    const O2_after_H = Math.max(0, O2_in - O2_for_H2O);
-    const maxCO2_from_C = Math.min(fuelMol * C, O2_after_H);
-    CO2 = maxCO2_from_C;
-    const C_left = fuelMol * C - maxCO2_from_C;
-    const O2_left_for_CO = Math.max(0, O2_after_H - maxCO2_from_C);
-    const CO_from_O2 = Math.min(C_left, 2 * O2_left_for_CO);
-    CO = CO_from_O2 + Math.max(0, C_left - CO_from_O2); // push CO up if very rich
-    H2O = fuelMol * (H / 2);
+    CO2 = O2_after_H;
+    CO = carbon - CO2; // remainder becomes CO
     O2_left = 0;
   }
 
-  const totalDry = CO2 + CO + O2_left + N2_in; // dry basis
-  const O2_pct = clamp((O2_left / totalDry) * 100, 0, 20.9);
-  const CO2_pct = clamp((CO2 / totalDry) * 100, 0, 20);
-  const CO_ppm = clamp((CO / totalDry) * 1e6, 0, 40000);
+  const totalDry = CO2 + CO + O2_left + N2_in;
+  const tiny = 1e-9;
+  const O2_pct = clamp((O2_left / (totalDry + tiny)) * 100, 0, 20.9);
+  const CO2_pct = clamp((CO2 / (totalDry + tiny)) * 100, 0, 20);
+  const CO_ppm = clamp((CO / (totalDry + tiny)) * 1e6, 0, 40000);
 
-  // Flame temp proxy
+  // Flame temperature proxy
   const ea = clamp(excessAir, 0.2, 3);
-  const peak = 1.1; // slight lean
-  const flameK = Math.exp(-Math.pow((ea - peak) / 0.35, 2));
-  const flameTempF = ambientF + 1800 * flameK + 400 * Math.tanh(fuelMol / 10);
+  const flameTempF =
+    ambientF + 1800 * Math.exp(-Math.pow((ea - 1.1) / 0.35, 2)) + 400 * Math.tanh(fuelMol / 10);
 
-  // Stack loss proxy
-  const cp = 1.0; // arbitrary
-  const flueFlow = airActual + fuelMol; // proxy moles/min
-  const dT = stackTempF - ambientF;
   const burning = fuelMol > 0.05;
-  const fuelEnergyRate = fuelMol * 100; // scaling factor
-  const stackLoss = clamp((flueFlow * cp * dT) / Math.max(1, fuelEnergyRate) / 1000, 0, 0.45);
 
-  // Unburned/CO penalty
+  // Stack and unburned losses
+  const cp = 1.0;
+  const flueFlow = airActual + fuelMol;
+  const dT = stackTempF - ambientF;
+  const fuelEnergyRate = fuelMol * 100;
+  const stackLoss = clamp((flueFlow * cp * dT) / Math.max(1, fuelEnergyRate) / 1000, 0, 0.45);
   const unburnedLoss = clamp(CO_ppm / 40000, 0, 0.12);
 
-  // NOx proxy (update to depend on burning)
+  // NOx heuristic (temperature-sensitive, peaks slightly lean)
+  const kT = 6;
   const NOx_ppm = burning
-    ? clamp(10 + 300 * flameK + 50 * Math.max(0, 1.2 - Math.abs(ea - 1.1) * 2), 0, 800)
+    ? clamp(
+        kT *
+          Math.exp((flameTempF - 1400) / 300) *
+          clamp(1 + 0.5 * (ea - 1), 0.2, 1.8),
+        0,
+        2000,
+      )
     : 0;
 
-  // Efficiency proxy (update to depend on burning)
-  const efficiency = burning
-    ? clamp(1 - stackLoss - unburnedLoss, 0.45, 0.995)
-    : 0;
+  const efficiency = burning ? clamp(1 - stackLoss - unburnedLoss, 0.45, 0.995) : 0;
 
   const warnings = {
     soot: CO_ppm > 400,
@@ -165,8 +159,7 @@ function computeCombustion({ fuel, fuelFlow, airFlow, stackTempF, ambientF }) {
     underTemp: stackTempF < 180,
   };
 
-  // Analyzer-style derived values
-  const CO_airfree = Math.round(CO_ppm * (20.9 / Math.max(0.1, 20.9 - O2_pct))); // CO AF
+  const CO_airfree = Math.round(CO_ppm * (20.9 / Math.max(0.1, 20.9 - O2_pct)));
 
   return {
     O2_pct: Number(O2_pct.toFixed(2)),
@@ -273,6 +266,65 @@ export default function CombustionTrainer() {
   const [lockoutReason, setLockoutReason] = useState("");
   const [lockoutPending, setLockoutPending] = useState(false);
   const [scenarioSel, setScenarioSel] = useState("");
+
+  // Metering panel state
+  const [meterTab, setMeterTab] = useState("Gas");
+  const [gasDialSize, setGasDialSize] = useState(1);
+  const [gasRunning, setGasRunning] = useState(false);
+  const gasStartRef = useRef(null);
+  const [gasLaps, setGasLaps] = useState([]);
+  const gasAvg = useMemo(
+    () => (gasLaps.length ? gasLaps.reduce((a, b) => a + b, 0) / gasLaps.length : 0),
+    [gasLaps],
+  );
+  const gasCFH = useMemo(
+    () => (gasAvg > 0 ? (3600 * gasDialSize) / gasAvg : 0),
+    [gasAvg, gasDialSize],
+  );
+  const gasMBH = useMemo(() => gasCFH * fuel.HHV / 1000, [gasCFH, fuel]);
+
+  const [nozzleGPH100, setNozzleGPH100] = useState(0.75);
+  const [oilPressure, setOilPressure] = useState(100);
+  const oilGPH = useMemo(
+    () => nozzleGPH100 * Math.sqrt(oilPressure / 100),
+    [nozzleGPH100, oilPressure],
+  );
+  const oilMBH = useMemo(() => oilGPH * fuel.HHV / 1000, [oilGPH, fuel]);
+
+  const startGasClock = () => {
+    setGasRunning(true);
+    gasStartRef.current = performance.now();
+    setGasLaps([]);
+  };
+  const lapGasClock = () => {
+    if (!gasRunning) return;
+    const now = performance.now();
+    const dt = (now - gasStartRef.current) / 1000;
+    setGasLaps((l) => [...l, dt]);
+    gasStartRef.current = now;
+  };
+  const stopGasClock = () => setGasRunning(false);
+  const resetGasClock = () => {
+    setGasRunning(false);
+    setGasLaps([]);
+    gasStartRef.current = null;
+  };
+  const exportGasClock = () => {
+    const rows = gasLaps.map((t, i) => ({ lap: i + 1, seconds: t.toFixed(2) }));
+    rows.push({ lap: "avg", seconds: gasAvg.toFixed(2), CFH: gasCFH.toFixed(1), MBH: gasMBH.toFixed(1) });
+    downloadCSV("gas-clock.csv", rows);
+  };
+  const exportOilClock = () => {
+    const rows = [
+      {
+        nozzleGPH100: nozzleGPH100,
+        pressurePsi: oilPressure,
+        gphActual: oilGPH.toFixed(2),
+        MBH: oilMBH.toFixed(1),
+      },
+    ];
+    downloadCSV("oil-meter.csv", rows);
+  };
 
   // Tuning Mode
   const [tuningOn, setTuningOn] = useState(false);
@@ -1138,6 +1190,79 @@ const rheostatRampRef = useRef(null);
             <div className="col-span-2 text-xs text-slate-500 mt-1">
               Targets for {fuelKey}: O₂ {fuel.targets.O2[0]} to {fuel.targets.O2[1]} percent; CO AF ≤ {fuel.targets.COafMax} ppm; stack {fuel.targets.stackF[0]} to {fuel.targets.stackF[1]} °F.
             </div>
+          </div>
+
+          <div className="card">
+            <div className="label">Clock the Boiler (Metering)</div>
+            <div className="flex gap-2 mt-2">
+              <button
+                className={`btn ${meterTab === 'Gas' ? 'btn-primary' : ''}`}
+                onClick={() => setMeterTab('Gas')}
+              >
+                Gas Meter
+              </button>
+              <button
+                className={`btn ${meterTab === 'Oil' ? 'btn-primary' : ''}`}
+                onClick={() => setMeterTab('Oil')}
+              >
+                Oil Meter
+              </button>
+            </div>
+            {meterTab === 'Gas' ? (
+              <div className="mt-3 space-y-2">
+                <label className="text-sm">
+                  Dial size (ft³)
+                  <input
+                    type="number"
+                    list="dialSizes"
+                    className="w-full border rounded-md px-2 py-1 mt-1"
+                    value={gasDialSize}
+                    onChange={(e) => setGasDialSize(parseFloat(e.target.value || 0))}
+                  />
+                  <datalist id="dialSizes">
+                    <option value="0.25" />
+                    <option value="0.5" />
+                    <option value="1" />
+                    <option value="2" />
+                  </datalist>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <button className="btn btn-primary" onClick={startGasClock} disabled={gasRunning}>Start</button>
+                  <button className="btn" onClick={lapGasClock} disabled={!gasRunning}>Lap</button>
+                  <button className="btn" onClick={stopGasClock} disabled={!gasRunning}>Stop</button>
+                  <button className="btn" onClick={resetGasClock}>Reset</button>
+                  <button className="btn" onClick={exportGasClock} disabled={!gasLaps.length}>Export</button>
+                </div>
+                <div className="text-sm">Avg sec/rev: <span className="font-semibold">{gasAvg.toFixed(1)}</span></div>
+                <div className="text-sm">CFH: <span className="font-semibold">{gasCFH.toFixed(1)}</span></div>
+                <div className="text-sm">Input MBH: <span className="font-semibold">{gasMBH.toFixed(1)}</span></div>
+                <div className="text-xs text-slate-500">Simulated CFH: {fuelFlow.toFixed(1)}</div>
+              </div>
+            ) : (
+              <div className="mt-3 space-y-2">
+                <label className="text-sm">
+                  Nozzle GPH @100 psi
+                  <input
+                    type="number"
+                    className="w-full border rounded-md px-2 py-1 mt-1"
+                    value={nozzleGPH100}
+                    onChange={(e) => setNozzleGPH100(parseFloat(e.target.value || 0))}
+                  />
+                </label>
+                <label className="text-sm">
+                  Pump pressure (psi)
+                  <input
+                    type="number"
+                    className="w-full border rounded-md px-2 py-1 mt-1"
+                    value={oilPressure}
+                    onChange={(e) => setOilPressure(parseFloat(e.target.value || 0))}
+                  />
+                </label>
+                <div className="text-sm">Actual GPH: <span className="font-semibold">{oilGPH.toFixed(2)}</span></div>
+                <div className="text-sm">Input MBH: <span className="font-semibold">{oilMBH.toFixed(1)}</span></div>
+                <button className="btn mt-2" onClick={exportOilClock}>Export</button>
+              </div>
+            )}
           </div>
 
           <div className="card overflow-x-auto">
