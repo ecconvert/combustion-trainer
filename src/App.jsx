@@ -54,11 +54,24 @@ const FUELS = {
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
 const f2c = (f) => (f - 32) * (5 / 9);
-const c2f = (c) => c * (9 / 5) + 32;
 const num = (x, d = 0) => {
   const v = typeof x === "number" ? x : parseFloat(x);
   return Number.isFinite(v) ? v : d;
 };
+
+// Build a simple safe cam map using stoichiometric air with slight excess
+function buildSafeCamMap(fuel, minFuel, maxFuel) {
+  const { C, H, O } = fuel.formula;
+  const map = {};
+  for (let p = 0; p <= 100; p += 10) {
+    const fuelFlow = Number(lerp(minFuel, maxFuel, p / 100).toFixed(2));
+    const O2_needed = fuelFlow * (C + H / 4 - O / 2);
+    const airStoich = O2_needed / 0.21;
+    const airFlow = Number((airStoich * 1.1).toFixed(2)); // 10% excess air
+    map[p] = { fuel: fuelFlow, air: airFlow };
+  }
+  return map;
+}
 
 function downloadCSV(filename, rows) {
   if (!rows.length) return;
@@ -262,9 +275,9 @@ export default function CombustionTrainer() {
   const [scenarioSel, setScenarioSel] = useState("");
 
   // Tuning Mode
-  const [tuningStep, setTuningStep] = useState(0); // 0 = off
   const [tuningOn, setTuningOn] = useState(false);
   const [camMap, setCamMap] = useState({}); // { percent: { fuel, air } }
+  const [defaultsLoaded, setDefaultsLoaded] = useState(false);
 
   // Current cam position key (rounded to 10%)
   const currentCam = useMemo(() => clamp(Math.round(rheostat / 10) * 10, 0, 100), [rheostat]);
@@ -297,6 +310,25 @@ export default function CombustionTrainer() {
       setFuelFlow(num(f, fuelFlow));
       setAirFlow(num(a, airFlow));
     }
+  };
+
+  // Build and apply safe default cam map
+  const applySafeDefaults = () => {
+    if (Object.keys(camMap).length > 0) {
+      const ok = window.confirm(
+        "Overwrite existing tuning points with safe defaults?",
+      );
+      if (!ok) return;
+    }
+    const safe = buildSafeCamMap(fuel, minFuel, maxFuel);
+    setCamMap(safe);
+    if (safe[currentCam]) {
+      const { fuel: f, air: a } = safe[currentCam];
+      setFuelFlow(num(f, fuelFlow));
+      setAirFlow(num(a, airFlow));
+    }
+    setDefaultsLoaded(true);
+    setTimeout(() => setDefaultsLoaded(false), 3000);
   };
 
   // Baseline min/max fuel at baseline regulator pressures
@@ -622,20 +654,6 @@ export default function CombustionTrainer() {
 
   // Tuning assistant
   const tuningActive = tuningOn;
-  const nextTuning = () => setTuningStep((s) => Math.min(4, s + 1));
-  const prevTuning = () => setTuningStep((s) => Math.max(0, s - 1));
-  const startTuning = () => setTuningStep(1);
-  const stopTuning = () => setTuningStep(0);
-
-  // Auto coaching suggestion for air damper
-  const coach = useMemo(() => {
-    const [lo, hi] = fuel.targets.O2;
-    let tip = "You are in range.";
-    if (disp.O2 > hi) tip = "Reduce air slightly to cut excess air.";
-    if (disp.O2 < lo) tip = "Increase air to ensure safe O2.";
-    if (disp.COaf > fuel.targets.COafMax) tip = "CO air-free high. Add air until CO falls.";
-    return tip;
-  }, [disp.O2, disp.COaf, fuel.targets]);
 
   const ea = steady.excessAir; const phi = 1 / Math.max(0.01, ea);
   const stackTempDisplay = unitSystem === "imperial" ? Math.round(simStackF) : Math.round(f2c(simStackF));
@@ -801,8 +819,19 @@ const rheostatRampRef = useRef(null);
                   >
                     Clear {currentCam}%
                   </button>
+                  <button
+                    className="btn"
+                    disabled={!canSetFiring}
+                    onClick={applySafeDefaults}
+                    title="Load safe default cam map"
+                  >
+                    Set tuning to safe defaults
+                  </button>
                   {camMap[currentCam] && (
                     <span className="pill bg-green-100">Saved: F {camMap[currentCam].fuel} / A {camMap[currentCam].air}</span>
+                  )}
+                  {defaultsLoaded && (
+                    <span className="pill bg-blue-100">Safe defaults loaded</span>
                   )}
                 </div>
                 <div className="mt-2 text-xs text-slate-500">
