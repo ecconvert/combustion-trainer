@@ -907,9 +907,8 @@ const rheostatRampRef = useRef(null);
                   </button>
                   <button
                     className="btn"
-                    disabled={!canSetFiring}
                     onClick={applySafeDefaults}
-                    title="Load safe default cam map"
+                    title="Load safe default cam map (available anytime)"
                   >
                     Set tuning to safe defaults
                   </button>
