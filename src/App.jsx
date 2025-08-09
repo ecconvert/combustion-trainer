@@ -1,0 +1,1133 @@
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
+
+/*************************************************
+ * Combustion Trainer + Analyzer + Tuning Mode
+ * Single-file React app suitable for canvas preview
+ * NOTE: Educational model only
+ *************************************************/
+
+// --- Fuel data (simplified classroom presets) ---
+// Formula approximations and higher heating values (HHV)
+// Stoich O2 demand per mole of fuel: O2 = C + H/4 - O/2
+const FUELS = {
+  "Natural Gas": {
+    key: "Natural Gas",
+    formula: { C: 1, H: 4, O: 0 }, // CH4
+    HHV: 1000, // Btu per scf (display only)
+    unit: "scfh",
+    targets: { O2: [3, 6], stackF: [300, 475], COafMax: 100 },
+  },
+  Propane: {
+    key: "Propane",
+    formula: { C: 3, H: 8, O: 0 }, // C3H8
+    HHV: 2500, // Btu per scf
+    unit: "scfh",
+    targets: { O2: [3, 6], stackF: [320, 500], COafMax: 100 },
+  },
+  "Fuel Oil #2": {
+    key: "Fuel Oil #2",
+    formula: { C: 12, H: 23, O: 0 }, // approx C12H23
+    HHV: 138500, // Btu per gallon
+    unit: "gph",
+    targets: { O2: [2, 5], stackF: [350, 550], COafMax: 200 },
+  },
+  Biodiesel: {
+    key: "Biodiesel",
+    formula: { C: 19, H: 36, O: 2 }, // approx C19H36O2
+    HHV: 119000, // Btu per gallon
+    unit: "gph",
+    targets: { O2: [2, 5], stackF: [340, 520], COafMax: 200 },
+  },
+};
+
+// Utility
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const f2c = (f) => (f - 32) * (5 / 9);
+const c2f = (c) => c * (9 / 5) + 32;
+const num = (x, d = 0) => {
+  const v = typeof x === "number" ? x : parseFloat(x);
+  return Number.isFinite(v) ? v : d;
+};
+
+function downloadCSV(filename, rows) {
+  if (!rows.length) return;
+  const header = Object.keys(rows[0]).join(",");
+  const body = rows.map((r) => Object.values(r).join(",")).join("\n");
+  const csv = `${header}\n${body}`;
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// --- Core steady-state combustion model (instantaneous) ---
+function computeCombustion({ fuel, fuelFlow, airFlow, stackTempF, ambientF }) {
+  const { C, H, O } = fuel.formula;
+  const fuelMol = Math.max(0.0001, fuelFlow);
+  const O2_needed = fuelMol * (C + H / 4 - O / 2);
+  const airStoich = O2_needed / 0.21; // moles of air
+  const airActual = Math.max(0.0001, airFlow);
+  const excessAir = airActual / airStoich;
+
+  // Incoming O2 and N2
+  const O2_in = 0.21 * airActual;
+  const N2_in = 0.79 * airActual; // ignoring Ar, etc.
+
+  let O2_left = 0;
+  let CO2 = 0;
+  let CO = 0;
+  let H2O = 0;
+
+  // Oxygen allocation
+  const O2_for_H2O = fuelMol * (H / 4);
+
+  if (O2_in >= O2_needed) {
+    // Complete combustion
+    O2_left = O2_in - O2_needed;
+    CO2 = fuelMol * C;
+    H2O = fuelMol * (H / 2);
+    CO = 0; // ideal
+  } else {
+    // Deficit: prioritize H2O, then split C into CO2/CO
+    const O2_after_H = Math.max(0, O2_in - O2_for_H2O);
+    const maxCO2_from_C = Math.min(fuelMol * C, O2_after_H);
+    CO2 = maxCO2_from_C;
+    const C_left = fuelMol * C - maxCO2_from_C;
+    const O2_left_for_CO = Math.max(0, O2_after_H - maxCO2_from_C);
+    const CO_from_O2 = Math.min(C_left, 2 * O2_left_for_CO);
+    CO = CO_from_O2 + Math.max(0, C_left - CO_from_O2); // push CO up if very rich
+    H2O = fuelMol * (H / 2);
+    O2_left = 0;
+  }
+
+  const totalDry = CO2 + CO + O2_left + N2_in; // dry basis
+  const O2_pct = clamp((O2_left / totalDry) * 100, 0, 20.9);
+  const CO2_pct = clamp((CO2 / totalDry) * 100, 0, 20);
+  const CO_ppm = clamp((CO / totalDry) * 1e6, 0, 40000);
+
+  // Flame temp proxy
+  const ea = clamp(excessAir, 0.2, 3);
+  const peak = 1.1; // slight lean
+  const flameK = Math.exp(-Math.pow((ea - peak) / 0.35, 2));
+  const flameTempF = ambientF + 1800 * flameK + 400 * Math.tanh(fuelMol / 10);
+
+  // Stack loss proxy
+  const cp = 1.0; // arbitrary
+  const flueFlow = airActual + fuelMol; // proxy moles/min
+  const dT = stackTempF - ambientF;
+  const burning = fuelMol > 0.05;
+  const fuelEnergyRate = fuelMol * 100; // scaling factor
+  const stackLoss = clamp((flueFlow * cp * dT) / Math.max(1, fuelEnergyRate) / 1000, 0, 0.45);
+
+  // Unburned/CO penalty
+  const unburnedLoss = clamp(CO_ppm / 40000, 0, 0.12);
+
+  // NOx proxy (update to depend on burning)
+  const NOx_ppm = burning
+    ? clamp(10 + 300 * flameK + 50 * Math.max(0, 1.2 - Math.abs(ea - 1.1) * 2), 0, 800)
+    : 0;
+
+  // Efficiency proxy (update to depend on burning)
+  const efficiency = burning
+    ? clamp(1 - stackLoss - unburnedLoss, 0.45, 0.995)
+    : 0;
+
+  const warnings = {
+    soot: CO_ppm > 400,
+    overTemp: stackTempF > 500,
+    underTemp: stackTempF < 180,
+  };
+
+  // Analyzer-style derived values
+  const CO_airfree = Math.round(CO_ppm * (20.9 / Math.max(0.1, 20.9 - O2_pct))); // CO AF
+
+  return {
+    O2_pct: Number(O2_pct.toFixed(2)),
+    CO2_pct: Number(CO2_pct.toFixed(2)),
+    CO_ppm: Math.round(CO_ppm),
+    CO_airfree,
+    NOx_ppm: Math.round(NOx_ppm),
+    stackTempF: Math.round(stackTempF),
+    excessAir: Number(excessAir.toFixed(2)),
+    efficiency: Number((efficiency * 100).toFixed(1)),
+    flameTempF: Math.round(flameTempF),
+    warnings,
+  };
+}
+
+// Flame component
+function Flame({ phi, intensity }) {
+  let color = "#48b3ff"; // lean -> blue
+  if (phi > 1.05 && phi < 1.2) color = "#ff8c00"; // near stoich -> orange
+  if (phi >= 1.2) color = "#ffd54d"; // rich -> yellow
+  const size = clamp(40 + intensity * 60, 30, 120);
+  return (
+    <div
+      aria-label="flame"
+      className="mx-auto rounded-full opacity-90 shadow-inner"
+      style={{
+        width: size,
+        height: size * 1.2,
+        background: `radial-gradient(circle at 50% 60%, ${color}, transparent 60%)`,
+        filter: "blur(1px)",
+        animation: "flicker 0.18s infinite alternate",
+      }}
+    />
+  );
+}
+
+// Spark component
+function Spark() {
+  return (
+    <div
+      aria-label="spark"
+      className="absolute"
+      style={{
+        width: 14,
+        height: 14,
+        borderRadius: "50%",
+        background: "radial-gradient(circle, #fff59d, rgba(255,193,7,0.9) 40%, rgba(255,193,7,0) 70%)",
+        filter: "blur(0.5px)",
+        animation: "spark 0.08s infinite alternate",
+      }}
+    />
+  );
+}
+
+
+// Simple LED pill
+function Led({ on, label, color = "limegreen" }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div
+        className="w-3 h-3 rounded-full"
+        style={{ background: on ? color : "#cbd5e1", boxShadow: on ? `0 0 10px ${color}` : "none" }}
+      />
+      <span className="text-xs text-slate-600">{label}</span>
+    </div>
+  );
+}
+
+export default function CombustionTrainer() {
+  const [fuelKey, setFuelKey] = useState("Natural Gas");
+  const [unitSystem, setUnitSystem] = useState("imperial");
+  const fuel = FUELS[fuelKey];
+  const EP160 = { PURGE_HF_SEC: 30, LOW_FIRE_MIN_SEC: 30, PTFI_SEC: 10, MTFI_SPARK_OFF_SEC: 10, MTFI_PILOT_OFF_SEC: 15, POST_PURGE_SEC: 15, FFRT_SEC: 4 };
+  const IGNITABLE_EA = { min: 0.85, max: 1.6 };
+  const STABLE_EA = { min: 0.9, max: 1.5 };
+  
+  const [boilerOn, setBoilerOn] = useState(true);
+  const [rheostat, setRheostat] = useState(0);
+  const [minFuel, setMinFuel] = useState(2);
+  const [maxFuel, setMaxFuel] = useState(18);
+
+  // User inputs
+  const [fuelFlow, setFuelFlow] = useState(5); // arbitrary mol/min scale
+  const [airFlow, setAirFlow] = useState(60); // moles/min scale
+  const [ambientF, setAmbientF] = useState(70);
+
+  // --- Burner simulator FSM ---
+  const [burnerState, setBurnerState] = useState("OFF");
+  const [simStackF, setSimStackF] = useState(150);
+  const [setpointF, setSetpointF] = useState(350);
+  const stateTimeRef = useRef(0); // milliseconds in state
+
+  // Analyzer FSM
+  const [anState, setAnState] = useState("OFF"); // OFF, ZERO, READY, SAMPLING, HOLD
+  const [anTambF, setAnTambF] = useState(70);
+  const [probeInFlue, setProbeInFlue] = useState(false);
+  const [saved, setSaved] = useState([]);
+  const [t5Spark, setT5Spark] = useState(false);
+  const [t6Pilot, setT6Pilot] = useState(false);
+  const [t7Main, setT7Main] = useState(false);
+  const [flameSignal, setFlameSignal] = useState(0);
+  const [stateCountdown, setStateCountdown] = useState(null);
+  const flameOutTimerRef = useRef(0);
+  const [lockoutReason, setLockoutReason] = useState("");
+  const [lockoutPending, setLockoutPending] = useState(false);
+  const [scenarioSel, setScenarioSel] = useState("");
+
+  // Tuning Mode
+  const [tuningStep, setTuningStep] = useState(0); // 0 = off
+  const [tuningOn, setTuningOn] = useState(false);
+  const [camMap, setCamMap] = useState({}); // { percent: { fuel, air } }
+
+  // Current cam position key (rounded to 10%)
+  const currentCam = useMemo(() => clamp(Math.round(rheostat / 10) * 10, 0, 100), [rheostat]);
+
+  // Save current fuel/air at current cam position
+  const setCamAtCurrent = () => {
+    setCamMap((m) => ({
+      ...m,
+      [currentCam]: {
+        fuel: Number(parseFloat(fuelFlow).toFixed(2)),
+        air: Number(parseFloat(airFlow).toFixed(2)),
+      },
+    }));
+  };
+
+  // Clear saved point at current cam position
+  const clearCamAtCurrent = () => {
+    setCamMap((m) => {
+      const n = { ...m };
+      delete n[currentCam];
+      return n;
+    });
+  };
+
+  // If a saved cam point exists for a given position, apply its flows
+  const applyCamIfSaved = (pos) => {
+    const k = clamp(Math.round(pos / 10) * 10, 0, 100);
+    if (camMap && camMap[k]) {
+      const { fuel: f, air: a } = camMap[k];
+      setFuelFlow(num(f, fuelFlow));
+      setAirFlow(num(a, airFlow));
+    }
+  };
+
+  // Baseline min/max fuel at baseline regulator pressures
+  const BASE_MIN_FUEL = 2;
+  const BASE_MAX_FUEL = 18;
+
+  // Testing/simulation regulator settings
+  const [regPress, setRegPress] = useState(3.5); // in. w.c. for NG baseline; reset on fuel change
+  // Only one regulator pressure, use regPress for both min and max
+
+  // Helper to identify liquid fuels vs gases
+  const isOil = fuelKey === "Fuel Oil #2" || fuelKey === "Biodiesel";
+
+  // Derived setpoint as a function of fuel, air, and EA
+  useEffect(() => {
+    const { C, H, O } = fuel.formula;
+    const fuelMol = Math.max(0.0001, fuelFlow);
+    const O2_needed = fuelMol * (C + H / 4 - O / 2);
+    const airStoich = O2_needed / 0.21;
+    const EA = Math.max(0.2, airFlow / Math.max(0.001, airStoich));
+    // Base stack target rises with firing rate and EA (more air = more loss)
+    const base = 250 + 18 * fuelMol + 40 * Math.tanh((EA - 1) * 1.5);
+    setSetpointF(clamp(base, 150, 600));
+  }, [fuel, fuelFlow, airFlow]);
+
+  // Reset regulator baselines when fuel type changes
+  useEffect(() => {
+    const baseP = isOil ? 100 : (fuelKey === "Propane" ? 11 : 3.5); // psi for oil, in. w.c. for gas
+    setRegPress(baseP);
+  }, [fuelKey, isOil]);
+
+  // Map regulator setpoints to min/max fuel via sqrt pressure law (orifice/nozzle proxy)
+  useEffect(() => {
+    const baseP = isOil ? 100 : (fuelKey === "Propane" ? 11 : 3.5);
+    const scale = Math.sqrt(Math.max(0, regPress) / Math.max(0.0001, baseP));
+    // New logic: map regulator pressure to min/max fuel using Math.max, not clamp
+    const newMin = Math.max(0, BASE_MIN_FUEL * scale);
+    const newMax = Math.max(newMin, BASE_MAX_FUEL * scale);
+    setMinFuel(newMin);
+    setMaxFuel(newMax);
+  }, [regPress, fuelKey, isOil]);
+
+  // Clamp fuelFlow within min/max bounds whenever they change
+  useEffect(() => {
+    setFuelFlow((v) => clamp(v, minFuel, maxFuel));
+  }, [minFuel, maxFuel]);
+
+  // Time loop 10 Hz
+  useEffect(() => {
+    const id = setInterval(() => {
+      const dtms = 100;
+      stateTimeRef.current += dtms;
+
+      // Compute EA_now once per tick for use in logic
+      const { C: _C, H: _H, O: _O } = fuel.formula;
+      const _O2_needed = Math.max(0.0001, fuelFlow) * (_C + _H / 4 - _O / 2);
+      const _airStoich = _O2_needed / 0.21;
+      const EA_now = Math.max(0.1, airFlow / Math.max(0.001, _airStoich));
+
+      if (!boilerOn) {
+        if (burnerState !== "OFF" && burnerState !== "POSTPURGE") {
+          setT5Spark(false); setT6Pilot(false); setT7Main(false);
+          setBurnerState("POSTPURGE");
+          stateTimeRef.current = 0;
+        }
+      } else if (burnerState === "OFF") {
+        setBurnerState("DRIVE_HI");
+        stateTimeRef.current = 0;
+      } else if (burnerState === "DRIVE_HI") {
+        if (stateTimeRef.current >= 1000) { setBurnerState("PREPURGE_HI"); stateTimeRef.current = 0; }
+      } else if (burnerState === "PREPURGE_HI") {
+        if (stateTimeRef.current >= EP160.PURGE_HF_SEC * 1000) { setBurnerState("DRIVE_LOW"); stateTimeRef.current = 0; }
+      } else if (burnerState === "DRIVE_LOW") {
+        if (stateTimeRef.current >= 1000) { setBurnerState("LOW_PURGE_MIN"); stateTimeRef.current = 0; }
+      } else if (burnerState === "LOW_PURGE_MIN") {
+        if (stateTimeRef.current >= EP160.LOW_FIRE_MIN_SEC * 1000) {
+          setBurnerState("PTFI");
+          setT5Spark(true); setT6Pilot(true); setT7Main(false);
+          stateTimeRef.current = 0;
+        }
+      } else if (burnerState === "PTFI") {
+        if (stateTimeRef.current >= EP160.PTFI_SEC * 1000) {
+          if (flameSignal >= 10) {
+            setT7Main(true);
+            setBurnerState("MTFI");
+            stateTimeRef.current = 0;
+          } else {
+            setT5Spark(false); setT6Pilot(false); setT7Main(false);
+            setBurnerState("LOCKOUT");
+            setLockoutReason("PTFI FLAME FAIL");
+            stateTimeRef.current = 0;
+          }
+        }
+      } else if (burnerState === "MTFI") {
+        if (stateTimeRef.current >= EP160.MTFI_SPARK_OFF_SEC * 1000) setT5Spark(false);
+        if (stateTimeRef.current >= EP160.MTFI_PILOT_OFF_SEC * 1000) {
+          setT6Pilot(false);
+          setBurnerState("RUN_AUTO");
+          stateTimeRef.current = 0;
+        }
+      } else if (burnerState === "RUN_AUTO") {
+        // EA-based blowout check
+        if (EA_now < IGNITABLE_EA.min || EA_now > IGNITABLE_EA.max) {
+          setT7Main(false);
+          setBurnerState("POSTPURGE");
+          setLockoutReason("FLAME BLOWOUT (EA out of range)");
+          setLockoutPending(true);
+          stateTimeRef.current = 0;
+        } else
+        if (flameSignal < 10) {
+          flameOutTimerRef.current += dtms;
+          if (flameOutTimerRef.current >= EP160.FFRT_SEC * 1000) {
+            setT7Main(false);
+            setBurnerState("LOCKOUT");
+            setLockoutReason("FLAME FAIL");
+            stateTimeRef.current = 0;
+          }
+        } else {
+          flameOutTimerRef.current = 0;
+        }
+      } else if (burnerState === "POSTPURGE") {
+        if (stateTimeRef.current >= EP160.POST_PURGE_SEC * 1000) {
+          if (lockoutPending) {
+            setBurnerState("LOCKOUT");
+          } else {
+            setBurnerState("OFF");
+          }
+          setLockoutPending(false);
+          setStateCountdown(null);
+          stateTimeRef.current = 0;
+        }
+      }
+
+      // Countdown for timed states
+      let remaining = null;
+      if (burnerState === "PREPURGE_HI") remaining = EP160.PURGE_HF_SEC - stateTimeRef.current / 1000;
+      else if (burnerState === "LOW_PURGE_MIN") remaining = EP160.LOW_FIRE_MIN_SEC - stateTimeRef.current / 1000;
+      else if (burnerState === "PTFI") remaining = EP160.PTFI_SEC - stateTimeRef.current / 1000;
+      else if (burnerState === "MTFI") remaining = EP160.MTFI_PILOT_OFF_SEC - stateTimeRef.current / 1000;
+      else if (burnerState === "POSTPURGE") remaining = EP160.POST_PURGE_SEC - stateTimeRef.current / 1000;
+      setStateCountdown(remaining !== null ? Math.max(0, Math.ceil(remaining)) : null);
+
+      setFlameSignal((prev) => {
+        if (!(burnerState === "PTFI" || burnerState === "MTFI" || burnerState === "RUN_AUTO")) {
+          return 0;
+        }
+        let target = 0;
+        const { C, H, O } = fuel.formula;
+        const O2_needed = Math.max(0.0001, fuelFlow) * (C + H / 4 - O / 2);
+        const airStoich = O2_needed / 0.21;
+        const EA = Math.max(0.1, airFlow / Math.max(0.001, airStoich));
+        const k = Math.exp(-Math.pow((EA - 1.05) / 0.35, 2));
+        if (burnerState === "PTFI") {
+          const ignitable = EA > IGNITABLE_EA.min && EA < IGNITABLE_EA.max && fuelFlow > 0.5;
+          target = ignitable ? 22 + 6 * k : 5;
+        } else if (burnerState === "MTFI" || burnerState === "RUN_AUTO") {
+          target = 25 + 55 * k * Math.tanh(fuelFlow / 10);
+        }
+        const noise = (Math.random() - 0.5) * 2;
+        return clamp(prev + (target - prev) * 0.25 + noise, 0, 80);
+      });
+
+      setSimStackF((prev) => {
+        const dt = 0.1;
+        let tau = 1.5;
+        let target = ambientF;
+        if (burnerState === "OFF" || burnerState === "DRIVE_HI" || burnerState === "PREPURGE_HI" || burnerState === "DRIVE_LOW" || burnerState === "LOW_PURGE_MIN" || burnerState === "POSTPURGE" || burnerState === "LOCKOUT") {
+          tau = 3; target = ambientF;
+        } else if (burnerState === "PTFI") {
+          tau = 2.5; target = Math.max(ambientF + 40, setpointF - 80);
+        } else if (burnerState === "MTFI") {
+          tau = 4; target = Math.max(ambientF + 80, setpointF - 40);
+        } else if (burnerState === "RUN_AUTO") {
+          tau = 6; target = setpointF;
+        }
+        return prev + (target - prev) * (dt / tau);
+      });
+    }, 100);
+    return () => clearInterval(id);
+  }, [boilerOn, burnerState, setpointF, ambientF, fuel.formula, fuelFlow, airFlow, flameSignal, lockoutPending]);
+  // Link rheostat to fuel/air flows
+  useEffect(() => {
+    if (tuningOn) return; // do nothing while tuning
+
+    // If a tuned cam point exists for this position, apply it
+    const mapKey = clamp(Math.round(rheostat / 10) * 10, 0, 100);
+    if (camMap && camMap[mapKey]) {
+      const { fuel: f, air: a } = camMap[mapKey];
+      setFuelFlow(num(f, fuelFlow));
+      setAirFlow(num(a, airFlow));
+      return;
+    }
+
+    // Fallback to default linear mapping
+    const mn = clamp(minFuel, 0, 20);
+    const mx = clamp(Math.max(mn, maxFuel), 0, 20);
+    const frac = clamp(rheostat / 100, 0, 1);
+    const targetFuel = mn + (mx - mn) * frac;
+    const { C, H, O } = fuel.formula;
+    const O2_needed = Math.max(0.0001, targetFuel) * (C + H / 4 - O / 2);
+    const airStoich = O2_needed / 0.21;
+    const targetEA = 1.2;
+    const targetAir = clamp(airStoich * targetEA, 0, 200);
+    setFuelFlow(targetFuel);
+    setAirFlow(targetAir);
+  }, [rheostat, minFuel, maxFuel, fuel, tuningOn, camMap]);
+
+  // Instantaneous chemistry at the simulated stack temperature
+  const steady = useMemo(() => {
+    const effectiveFuel = t7Main ? fuelFlow : (t6Pilot ? Math.min(fuelFlow, Math.max(0.5, minFuel * 0.5)) : 0);
+    return computeCombustion({ fuel, fuelFlow: effectiveFuel, airFlow, stackTempF: simStackF, ambientF });
+  }, [fuel, fuelFlow, airFlow, simStackF, ambientF, t7Main, t6Pilot, minFuel]);
+
+  // Analyzer displayed values with sensor lag and states
+  const [disp, setDisp] = useState({ O2: 20.9, CO2: 0, CO: 0, COaf: 0, NOx: 0, StackF: 70, Eff: 0 });
+  useEffect(() => {
+    const id = setInterval(() => {
+      // time constants
+      const tauO2 = 0.8, tauCO = 2.0, tauNOx = 1.2, tauT = 3.0; // seconds
+      const dt = 0.2; // s
+
+      const targetO2 = steady.O2_pct;
+      const targetCO2 = steady.CO2_pct;
+      const targetCO = steady.CO_ppm;
+      const targetNOx = steady.NOx_ppm;
+      const targetStack = simStackF;
+
+      const nextO2 = lerp(disp.O2, targetO2, dt / tauO2);
+      const nextCO = lerp(disp.CO, targetCO, dt / tauCO);
+      const nextNOx = lerp(dispNOx(), targetNOx, dt / tauNOx);
+      const nextT = lerp(disp.StackF, targetStack, dt / tauT);
+      const nextCO2 = lerp(disp.CO2, targetCO2, dt / 1.0);
+
+      const COaf = Math.round(nextCO * (20.9 / Math.max(0.1, 20.9 - nextO2)));
+      const Eff = steady.efficiency; // leave as steady calc for simplicity
+
+      setDisp({ O2: nextO2, CO2: nextCO2, CO: nextCO, COaf, NOx: nextNOx, StackF: nextT, Eff });
+    }, 200);
+
+    function dispNOx() { return disp.NOx; }
+    return () => clearInterval(id);
+  }, [steady, simStackF, anTambF, anState, probeInFlue, disp.NOx, disp.O2, disp.CO, disp.CO2, disp.StackF]);
+
+  // Analyzer controls
+  const startAnalyzer = () => { setAnState("ZERO"); setProbeInFlue(false); setAnTambF(ambientF); };
+  const finishZero = () => { setAnState("READY"); };
+  const insertProbe = () => { if (anState === "READY") { setProbeInFlue(true); setAnState("SAMPLING"); } };
+  const holdAnalyzer = () => { if (anState === "SAMPLING") setAnState("HOLD"); };
+  const resumeAnalyzer = () => { if (anState === "HOLD") setAnState("SAMPLING"); };
+  const saveReading = () => {
+    const row = {
+      t: new Date().toLocaleTimeString(),
+      Fuel: fuelKey,
+      O2: Number(disp.O2.toFixed(2)),
+      CO2: Number(disp.CO2.toFixed(2)),
+      COaf: Math.round(disp.COaf),
+      CO: Math.round(disp.CO),
+      NOx: Math.round(disp.NOx),
+      StackF: Math.round(disp.StackF),
+      Eff: Number(Number(disp.Eff).toFixed(1)),
+      EA: steady.excessAir,
+      Mode: burnerState,
+    };
+    setSaved((s) => [...s, row]);
+  };
+
+  const resetProgrammer = () => {
+    setLockoutReason("");
+    setLockoutPending(false);
+    flameOutTimerRef.current = 0;
+    stateTimeRef.current = 0;
+    setT5Spark(false); setT6Pilot(false); setT7Main(false);
+    setBurnerState(boilerOn ? "DRIVE_HI" : "OFF");
+  };
+
+  // Testing helper: advance one state or finish current timed state
+  const advanceStep = () => {
+    // If the boiler is OFF, kick the sequence off
+    if (burnerState === "OFF") { setBurnerState("DRIVE_HI"); stateTimeRef.current = 0; return; }
+
+    // Drive states are short; just jump to the next state
+    if (burnerState === "DRIVE_HI") { setBurnerState("PREPURGE_HI"); stateTimeRef.current = 0; return; }
+    if (burnerState === "DRIVE_LOW") { setBurnerState("LOW_PURGE_MIN"); stateTimeRef.current = 0; return; }
+
+    // For timed states, push the internal timer to the cutoff so the main loop advances on the next tick
+    if (burnerState === "PREPURGE_HI") { stateTimeRef.current = EP160.PURGE_HF_SEC * 1000; return; }
+    if (burnerState === "LOW_PURGE_MIN") { stateTimeRef.current = EP160.LOW_FIRE_MIN_SEC * 1000; return; }
+    if (burnerState === "PTFI") { stateTimeRef.current = EP160.PTFI_SEC * 1000; return; }
+    if (burnerState === "MTFI") { stateTimeRef.current = EP160.MTFI_PILOT_OFF_SEC * 1000; return; }
+    if (burnerState === "POSTPURGE") { stateTimeRef.current = EP160.POST_PURGE_SEC * 1000; return; }
+
+    // No-op for RUN_AUTO and LOCKOUT
+  };
+
+  // Log history for trend chart
+  const [history, setHistory] = useState([]);
+  useEffect(() => {
+    const now = Date.now();
+    const row = {
+      ts: now,
+      t: new Date(now).toLocaleTimeString(),
+      O2: Number(disp.O2.toFixed(2)),
+      CO2: Number(disp.CO2.toFixed(2)),
+      CO: Math.round(disp.CO),
+      NOx: Math.round(disp.NOx),
+      StackF: Math.round(disp.StackF),
+      Eff: Number(Number(disp.Eff).toFixed(1)),
+    };
+    setHistory((h) => [...h.slice(-300), row]);
+  }, [disp]);
+
+  // Scenario presets (adds to previous ones)
+  const applyScenario = (key) => {
+    const s = {
+      "Low air, hot stack": () => { setAirFlow(30); setFuelFlow(8); },
+      "High draft, cold stack": () => { setAirFlow(140); setFuelFlow(4); },
+      "Dirty nozzles (incomplete)": () => { setFuelFlow(9); setAirFlow(50); },
+      "Biodiesel blend, medium stack": () => { setFuelKey("Biodiesel"); setFuelFlow(6); setAirFlow(90); },
+      Reset: () => { setFuelKey("Natural Gas"); setFuelFlow(5); setAirFlow(60); },
+    };
+    s[key]?.();
+  };
+
+  // Tuning assistant
+  const tuningActive = tuningOn;
+  const nextTuning = () => setTuningStep((s) => Math.min(4, s + 1));
+  const prevTuning = () => setTuningStep((s) => Math.max(0, s - 1));
+  const startTuning = () => setTuningStep(1);
+  const stopTuning = () => setTuningStep(0);
+
+  // Auto coaching suggestion for air damper
+  const coach = useMemo(() => {
+    const [lo, hi] = fuel.targets.O2;
+    let tip = "You are in range.";
+    if (disp.O2 > hi) tip = "Reduce air slightly to cut excess air.";
+    if (disp.O2 < lo) tip = "Increase air to ensure safe O2.";
+    if (disp.COaf > fuel.targets.COafMax) tip = "CO air-free high. Add air until CO falls.";
+    return tip;
+  }, [disp.O2, disp.COaf, fuel.targets]);
+
+  const ea = steady.excessAir; const phi = 1 / Math.max(0.01, ea);
+  const stackTempDisplay = unitSystem === "imperial" ? Math.round(simStackF) : Math.round(f2c(simStackF));
+const flameActive =
+  (burnerState === "PTFI" || burnerState === "MTFI" || burnerState === "RUN_AUTO") &&
+  (t7Main || t6Pilot) &&
+  flameSignal >= 10;
+const showSpark = burnerState === "PTFI" && t5Spark;
+const canSetFiring = burnerState === "RUN_AUTO";
+const rheostatRampRef = useRef(null);
+
+  // Smoothly ramp rheostat to 0 when shutting down (power off, postpurge, or lockout)
+  useEffect(() => {
+    const shouldRampDown = (!boilerOn) || burnerState === "POSTPURGE" || burnerState === "LOCKOUT" || burnerState === "OFF";
+
+    // Start ramp if needed and not already running
+    if (shouldRampDown && rheostat > 0 && !rheostatRampRef.current) {
+      rheostatRampRef.current = setInterval(() => {
+        setRheostat((v) => {
+          const step = 5; // percent per tick
+          const next = Math.max(0, v - step);
+          if (next === 0 && rheostatRampRef.current) {
+            clearInterval(rheostatRampRef.current);
+            rheostatRampRef.current = null;
+          }
+          return next;
+        });
+      }, 100); // 100 ms for a ~2 second full ramp (100 -> 0)
+    }
+
+    // Stop ramp if no longer appropriate
+    if ((!shouldRampDown || burnerState === "RUN_AUTO") && rheostatRampRef.current) {
+      clearInterval(rheostatRampRef.current);
+      rheostatRampRef.current = null;
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (rheostatRampRef.current) {
+        clearInterval(rheostatRampRef.current);
+        rheostatRampRef.current = null;
+      }
+    };
+  }, [burnerState, boilerOn, rheostat]);
+  
+  return (
+    <div className="min-h-screen w-full bg-slate-50 text-slate-900">
+      <style>{`
+        @keyframes flicker { from { transform: scale(1) translateY(0px); opacity: 0.9; } to { transform: scale(1.04) translateY(-2px); opacity: 1; } }
+        @keyframes spark { from { transform: translateY(2px) scale(0.9); opacity: .7; } to { transform: translateY(-2px) scale(1.1); opacity: 1; } }
+        .card { background: white; border-radius: 1rem; box-shadow: 0 6px 16px rgba(15,23,42,0.08); padding: 1rem; }
+        .label { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: #64748b; }
+        .value { font-size: 1.1rem; font-weight: 600; }
+        .btn { padding: .5rem .75rem; border-radius: .75rem; border: 1px solid #cbd5e1; background: white; }
+        .btn-primary { background: #0f172a; color: white; border-color: #0f172a; }
+        .pill { padding: .25rem .5rem; border-radius: 9999px; font-size: .7rem; }
+      `}</style>
+
+      <header className="px-6 py-4 border-b bg-white sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto flex items-center gap-4">
+          <h1 className="text-2xl font-semibold">Combustion Trainer</h1>
+          <div className="ml-auto flex items-center gap-3">
+            <select aria-label="unit system" className="border rounded-md px-2 py-1" value={unitSystem} onChange={(e) => setUnitSystem(e.target.value)}>
+              <option value="imperial">Imperial</option>
+              <option value="metric">Metric</option>
+            </select>
+            <button className="btn" onClick={() => downloadCSV("session.csv", history)}>Export Trend CSV</button>
+            <button className="btn" onClick={() => downloadCSV("saved-readings.csv", saved)}>Export Saved Readings</button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto p-6 grid grid-cols-12 gap-4">
+        {/* Left controls */}
+        <section className="col-span-12 lg:col-span-3 space-y-4">
+          <div className="card">
+            <div className="label">Fuel</div>
+            <select aria-label="fuel selector" className="w-full border rounded-md px-2 py-2 mt-1" value={fuelKey} onChange={(e) => setFuelKey(e.target.value)}>
+              {Object.keys(FUELS).map((k) => (
+                <option key={k} value={k}>{k}</option>
+              ))}
+            </select>
+            <div className="mt-2 text-sm text-slate-600">HHV: {FUELS[fuelKey].HHV.toLocaleString()} Btu/{FUELS[fuelKey].unit}</div>
+            <div className="mt-1 text-xs text-slate-500">Targets: O₂ {fuel.targets.O2[0]} to {fuel.targets.O2[1]} percent, CO air-free ≤ {fuel.targets.COafMax} ppm</div>
+          </div>
+
+          {!tuningActive && (
+            <div className="card">
+              <div className="label">Fuel Flow ({FUELS[fuelKey].unit}, scaled)</div>
+              <input aria-label="fuel flow slider" type="range" min={minFuel} max={maxFuel} step={0.1} value={fuelFlow} onChange={(e) => setFuelFlow(parseFloat(e.target.value))} className="w-full" />
+              <div className="value">{fuelFlow.toFixed(1)}</div>
+            </div>
+          )}
+
+          <div className="card">
+            <div className="label">Boiler Power</div>
+            <div className="flex items-center gap-2 mt-2">
+              <button className={`btn ${boilerOn ? 'btn-primary' : ''}`} onClick={() => setBoilerOn(true)}>On</button>
+              <button className="btn" onClick={() => setBoilerOn(false)}>Off</button>
+            </div>
+            <div className="label mt-4">Firing Rate (rheostat)</div>
+            <input
+              aria-label="firing rate"
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={rheostat}
+              onChange={(e) => { if (!canSetFiring) return; setRheostat(parseInt(e.target.value)); }}
+              className="w-full"
+              disabled={!canSetFiring}
+            />            
+            <div className="value">{rheostat}%</div>
+          </div>
+
+          {tuningActive && (
+            <div className="card">
+              <div className="label">Tuning Controls (Fuel & Air)</div>
+              <div className="mt-2 grid grid-cols-1 gap-4">
+                <div>
+                  <div className="label">Fuel Flow ({FUELS[fuelKey].unit}, scaled)</div>
+                  <input aria-label="tuning fuel flow" type="range" min={minFuel} max={maxFuel} step={0.1} value={fuelFlow} onChange={(e) => setFuelFlow(parseFloat(e.target.value))} className="w-full" />
+                  <div className="value">{fuelFlow.toFixed(1)}</div>
+                </div>
+                <div>
+                  <div className="label">Air Flow (cfm, scaled)</div>
+                  <input aria-label="tuning air flow" type="range" min={0} max={200} step={1} value={airFlow} onChange={(e) => setAirFlow(parseFloat(e.target.value))} className="w-full" />
+                  <div className="value">{airFlow}</div>
+                </div>
+              </div>
+              <div className="mt-3">
+                <div className="label">Camshaft Intervals</div>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {[0,10,20,30,40,50,60,70,80,90,100].map((p) => (
+                    <button
+                      key={p}
+                      className={`btn ${rheostat === p ? 'btn-primary' : ''}`}
+                      disabled={!canSetFiring}
+                      onClick={() => {
+                        if (!canSetFiring) return;
+                        setRheostat(p);
+                        applyCamIfSaved(p);
+                      }}
+                    >
+                      {p}%
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    className="btn btn-primary"
+                    disabled={!canSetFiring}
+                    onClick={setCamAtCurrent}
+                    title="Save current fuel and air at this cam position"
+                  >
+                    Set {currentCam}%
+                  </button>
+                  <button
+                    className="btn"
+                    disabled={!camMap[currentCam]}
+                    onClick={clearCamAtCurrent}
+                    title="Clear saved point at this cam position"
+                  >
+                    Clear {currentCam}%
+                  </button>
+                  {camMap[currentCam] && (
+                    <span className="pill bg-green-100">Saved: F {camMap[currentCam].fuel} / A {camMap[currentCam].air}</span>
+                  )}
+                </div>
+                <div className="mt-2 text-xs text-slate-500">
+                  Saved cam points: {Object.keys(camMap).length ? Object.keys(camMap).sort((a,b)=>a-b).join(', ') : 'none'}
+                </div>
+                <details className="mt-4">
+                <summary className="label cursor-pointer">Advanced inputs</summary>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  <label className="text-sm col-span-2">
+                    Air Flow
+                    <input
+                      type="number"
+                      className="w-full border rounded-md px-2 py-1 mt-1"
+                      value={airFlow}
+                      onChange={(e) => setAirFlow(parseFloat(e.target.value || 0))}
+                    />
+                  </label>
+                  <label className="text-sm col-span-2">
+                    Fuel Flow
+                    <input
+                      type="number"
+                      className="w-full border rounded-md px-2 py-1 mt-1"
+                      value={fuelFlow}
+                      onChange={(e) => setFuelFlow(parseFloat(e.target.value || 0))}
+                    />
+                  </label>
+                </div>
+              </details>
+              <details className="mt-3">
+                <summary className="label cursor-pointer">Regulators</summary>
+                {!isOil ? (
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    <label className="text-sm col-span-2">
+                      Manifold pressure (in. w.c.)
+                      <input
+                        type="number"
+                        className="w-full border rounded-md px-2 py-1 mt-1"
+                        value={regPress}
+                        onChange={(e) => setRegPress(parseFloat(e.target.value || 0))}
+                      />
+                    </label>
+                    <div className="text-xs text-slate-500 col-span-2 mt-1">
+                      Typical appliance manifold: NG ~3.5 in. w.c., LP ~10–11 in. w.c. Adjusting pressure raises input roughly with the square root of pressure.
+                    </div>
+                    <div className="text-xs text-slate-500 col-span-2">
+                      Derived Min/Max fuel: {minFuel.toFixed(1)} / {maxFuel.toFixed(1)} (scaled)
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    <label className="text-sm col-span-2">
+                      Pump pressure (psi)
+                      <input
+                        type="number"
+                        className="w-full border rounded-md px-2 py-1 mt-1"
+                        value={regPress}
+                        onChange={(e) => setRegPress(parseFloat(e.target.value || 0))}
+                      />
+                    </label>
+                    <div className="text-xs text-slate-500 col-span-2 mt-1">
+                      Oil nozzles are rated at 100 psi and flow scales ~√pressure. Higher pressure also improves atomization but watch for overfire.
+                    </div>
+                    <div className="text-xs text-slate-500 col-span-2">
+                      Derived Min/Max fuel: {minFuel.toFixed(1)} / {maxFuel.toFixed(1)} (scaled)
+                    </div>
+                  </div>
+                )}
+              </details>
+<div className="flex items-center gap-2 mt-2">
+  <button
+    className="btn"
+    disabled={!canSetFiring}
+    onClick={() => {
+      if (!canSetFiring) return;
+      setRheostat((v) => {
+        const next = clamp(Math.round(v / 10) * 10 - 10, 0, 100);
+        applyCamIfSaved(next);
+        return next;
+      });
+    }}
+  >
+    -10%
+  </button>
+  <div className="value">{rheostat}%</div>
+  <button
+    className="btn"
+    disabled={!canSetFiring}
+    onClick={() => {
+      if (!canSetFiring) return;
+      setRheostat((v) => {
+        const next = clamp(Math.round(v / 10) * 10 + 10, 0, 100);
+        applyCamIfSaved(next);
+        return next;
+      });
+    }}
+  >
+    +10%
+  </button>
+</div>              </div>
+            </div>
+          )}
+
+<div className="card">
+  <div className="label">Start Troubleshooting Scenarios</div>
+  <select
+    aria-label="troubleshooting scenarios"
+    className="w-full border rounded-md px-2 py-2 mt-2"
+    value={scenarioSel}
+    onChange={(e) => {
+      const v = e.target.value;
+      setScenarioSel(v);
+      if (v) {
+        applyScenario(v);
+        setScenarioSel("");
+      }
+    }}
+  >
+    <option value="">Start Troubleshooting Scenarios</option>
+    {[
+      "Low air, hot stack",
+      "High draft, cold stack",
+      "Dirty nozzles (incomplete)",
+      "Biodiesel blend, medium stack",
+      "Reset",
+    ].map((s) => (
+      <option key={s} value={s}>{s}</option>
+    ))}
+  </select>
+</div>
+
+          <div className="card">
+
+            
+            <div className="label">Tuning Mode</div>
+            <div className="flex gap-2 mt-2">
+              <button className={`btn ${!tuningOn ? 'btn-primary' : ''}`} onClick={() => setTuningOn(false)}>Off</button>
+              <button className={`btn ${tuningOn ? 'btn-primary' : ''}`} onClick={() => setTuningOn(true)}>On</button>
+            </div>
+            <div className="text-xs text-slate-500 mt-2">
+              When ON, adjust fuel and air together and step the cam in 10% intervals.
+            </div>
+          </div>
+        </section>
+
+        {/* Middle: boiler visualization */}
+        <section className="col-span-12 lg:col-span-6">
+          <div className="card">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="label">Stack Temperature</div>
+                <div className="value">{stackTempDisplay} {unitSystem === "imperial" ? "°F" : "°C"}</div>
+                <div className="text-xs text-slate-500">State: {burnerState}</div>
+              </div>
+              <div className="text-sm text-slate-600">Flame Test {steady.flameTempF} °F</div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="md:col-span-2">
+                <div aria-label="combustion chamber" className="relative h-72 rounded-3xl border bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden">
+                  <div className="absolute inset-6 rounded-full border-2 border-slate-300" />
+                  <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-24 h-8 bg-slate-400 rounded-t-2xl" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    {flameActive ? <Flame phi={phi} intensity={fuelFlow / 10} /> : null}
+                    {showSpark ? <Spark /> : null}
+                  </div>
+                  <div className="absolute bottom-3 right-3 space-y-1 text-xs">
+                    {steady.warnings.soot && (<div className="px-2 py-1 rounded bg-yellow-100 text-yellow-900">Soot risk</div>)}
+                    {steady.warnings.overTemp && (<div className="px-2 py-1 rounded bg-red-100 text-red-800">Over-temp</div>)}
+                    {steady.warnings.underTemp && (<div className="px-2 py-1 rounded bg-blue-100 text-blue-900">Condensate risk</div>)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right-side chamber controls */}
+              <div className="space-y-4">
+                {!tuningActive && (
+                  <>
+                    <div className="label">Air Flow (cfm, scaled)</div>
+                    <input aria-label="air flow slider" type="range" min={0} max={200} step={1} value={airFlow} onChange={(e) => setAirFlow(parseFloat(e.target.value))} className="w-full" />
+                    <div className="value">{airFlow}</div>
+                  </>
+                )}
+
+                <div className="label mt-6">Ambient Temperature (°F)</div>
+                <input aria-label="ambient temperature" type="number" className="w-full border rounded-md px-2 py-1" value={ambientF} onChange={(e) => setAmbientF(parseFloat(e.target.value || 0))} />
+              </div>
+            </div>
+          </div>
+
+          {/* Analyzer dock */}
+          <div className="card mt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="label">Analyzer</div>
+                <div className="text-sm">State: {anState} {probeInFlue && <span className="pill bg-slate-100 ml-2">Probe in flue</span>}</div>
+              </div>
+              <div className="flex gap-2 items-center">
+                <Led on={anState !== "OFF"} label="Power" />
+                <Led on={anState === "ZERO"} label="Zero" color="#06b6d4" />
+                <Led on={anState === "SAMPLING"} label="Sampling" color="#84cc16" />
+                <Led on={anState === "HOLD"} label="Hold" color="#f59e0b" />
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button className="btn" onClick={startAnalyzer}>Start</button>
+              <button className="btn" onClick={finishZero} disabled={anState !== "ZERO"}>Finish Zero</button>
+              <button className="btn" onClick={insertProbe} disabled={anState !== "READY"}>Insert Probe</button>
+              <button className="btn" onClick={() => setProbeInFlue(false)}>Remove Probe</button>
+              <button className="btn" onClick={holdAnalyzer} disabled={anState !== "SAMPLING"}>Hold</button>
+              <button className="btn" onClick={resumeAnalyzer} disabled={anState !== "HOLD"}>Resume</button>
+              <button className="btn-primary" onClick={saveReading} disabled={anState === "OFF"}>Save Reading</button>
+            </div>
+            <div className="mt-2 text-xs text-slate-500">Zero in room air to capture combustion air temperature. Then insert probe to sample.</div>
+          </div>
+
+          <div className="card mt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="label">Programmer (EP160)</div>
+                <div className="text-sm">State: {burnerState} {stateCountdown !== null && (<span className="pill bg-slate-100 ml-2">{stateCountdown}s left</span>)} {burnerState === "LOCKOUT" && (<span className="pill bg-red-100 ml-2">Lockout: {lockoutReason}</span>)}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Led on={t5Spark} label="T5 Spark" color="#06b6d4" />
+                <Led on={t6Pilot} label="T6 Pilot" color="#f59e0b" />
+                <Led on={t7Main} label="T7 Main" color="#84cc16" />
+              </div>
+            </div>
+            <div className="mt-2 flex items-center gap-4">
+              <div className="text-sm">Flame Signal: <span className="font-semibold">{Math.round(flameSignal)}</span> (10 min, 20–80 normal)</div>
+              <button className="btn" onClick={advanceStep}>Advance simulation</button>
+              {burnerState === "LOCKOUT" && (<button className="btn btn-primary" onClick={resetProgrammer}>Reset Programmer</button>)}
+            </div>
+            <div className="mt-2 text-xs text-slate-500">Prepurge {EP160.PURGE_HF_SEC}s → Low fire {EP160.LOW_FIRE_MIN_SEC}s → PTFI {EP160.PTFI_SEC}s → MTFI (spark off {EP160.MTFI_SPARK_OFF_SEC}s, pilot off {EP160.MTFI_PILOT_OFF_SEC}s) → Run → Post purge {EP160.POST_PURGE_SEC}s.</div>
+          </div>
+          {/* Trend chart */}
+          <div className="card mt-4">
+            <div className="label">Trend (last {history.length} points)</div>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={history} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="ts" type="number" domain={["dataMin", "dataMax"]} hide />
+                  <YAxis yAxisId="left" domain={[0, 100]} />
+                  <YAxis yAxisId="right" orientation="right" domain={[0, 600]} />
+                  <Tooltip />
+                  <Legend />
+                  <Line yAxisId="left" type="monotone" dataKey="O2" dot={false} name="O₂ %" strokeWidth={2} isAnimationActive={false} />
+                  <Line yAxisId="left" type="monotone" dataKey="CO2" dot={false} name="CO₂ %" strokeWidth={2} isAnimationActive={false} />
+                  <Line yAxisId="right" type="monotone" dataKey="StackF" dot={false} name="Stack °F" strokeWidth={2} isAnimationActive={false} />
+                  <Line yAxisId="left" type="monotone" dataKey="Eff" dot={false} name="Eff %" strokeWidth={2} isAnimationActive={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </section>
+
+        {/* Right readouts and saved table */}
+        <section className="col-span-12 lg:col-span-3 space-y-4">
+          <div className="card grid grid-cols-2 gap-3" role="group" aria-label="readouts">
+            <div><div className="label">O₂ (dry)</div><div className="value">{disp.O2.toFixed(2)}%</div></div>
+            <div><div className="label">CO₂ (dry)</div><div className="value">{disp.CO2.toFixed(2)}%</div></div>
+            <div><div className="label">CO</div><div className="value">{Math.round(disp.CO)} ppm</div></div>
+            <div><div className="label">CO air-free</div><div className="value">{Math.round(disp.COaf)} ppm</div></div>
+            <div><div className="label">NOₓ</div><div className="value">{Math.round(disp.NOx)} ppm</div></div>
+            <div><div className="label">Excess Air</div><div className="value">{((steady.excessAir - 1) * 100).toFixed(1)}%</div></div>
+            <div><div className="label">Efficiency</div><div className="value">{Number(disp.Eff).toFixed(1)}%</div></div>
+            <div><div className="label">Stack</div><div className="value">{Math.round(disp.StackF)} °F</div></div>
+
+            {/* Targets overlay */}
+            <div className="col-span-2 text-xs text-slate-500 mt-1">
+              Targets for {fuelKey}: O₂ {fuel.targets.O2[0]} to {fuel.targets.O2[1]} percent; CO AF ≤ {fuel.targets.COafMax} ppm; stack {fuel.targets.stackF[0]} to {fuel.targets.stackF[1]} °F.
+            </div>
+          </div>
+
+          <div className="card overflow-x-auto">
+            <div className="label mb-2">Saved readings</div>
+            <table className="min-w-full text-xs">
+              <thead>
+                <tr className="text-left text-slate-500">
+                  {"t,Fuel,O2,CO2,COaf,CO,NOx,StackF,Eff,EA,Mode".split(",").map((h) => (
+                    <th key={h} className="py-1 pr-3">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {saved.slice(-40).map((r, i) => (
+                  <tr key={i} className="border-t">
+                    {Object.values(r).map((v, j) => (
+                      <td key={j} className="py-1 pr-3 whitespace-nowrap">{v}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+        </section>
+
+        {/* Data table */}
+        <section className="col-span-12">
+          <div className="card overflow-x-auto">
+            <div className="label mb-2">Trend table</div>
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="text-left text-slate-500">{"t,O2,CO2,CO,NOx,StackF,Eff".split(",").map((h) => (<th key={h} className="py-1 pr-4">{h}</th>))}</tr>
+              </thead>
+              <tbody>
+                {history.slice(-60).map((r, i) => (
+                  <tr key={i} className="border-t">
+                    <td className="py-1 pr-4 whitespace-nowrap">{r.t}</td>
+                    <td className="py-1 pr-4">{r.O2}</td>
+                    <td className="py-1 pr-4">{r.CO2}</td>
+                    <td className="py-1 pr-4">{r.CO}</td>
+                    <td className="py-1 pr-4">{r.NOx}</td>
+                    <td className="py-1 pr-4">{r.StackF}</td>
+                    <td className="py-1 pr-4">{r.Eff}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+
+      <footer className="max-w-7xl mx-auto p-6 text-xs text-slate-500">Educational model. For classroom intuition only.</footer>
+    </div>
+  );
+}
