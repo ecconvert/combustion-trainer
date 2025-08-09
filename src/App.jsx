@@ -285,13 +285,22 @@ export default function CombustionTrainer() {
     [gasAvg, gasDialSize],
   );
   const gasMBH = useMemo(() => gasCFH * fuel.HHV / 1000, [gasCFH, fuel]);
-  // Burner-driven (model) gas flow and expected meter behavior
-const gasSimCFH = useMemo(() => (isGas ? Math.max(0, fuelFlow) : 0), [isGas, fuelFlow]);
-const gasMeterRevSec = useMemo(
-  () => (gasSimCFH > 0 ? (3600 * gasDialSize) / gasSimCFH : 0),
-  [gasSimCFH, gasDialSize]
-);
-const gasMBH_model = useMemo(() => gasSimCFH * fuel.HHV / 1000, [gasSimCFH, fuel]);
+  // Mapped vs actual burner gas flow
+  const effectiveFuel = useMemo(
+    () => (t7Main ? fuelFlow : (t6Pilot ? Math.min(fuelFlow, Math.max(0.5, minFuel * 0.5)) : 0)),
+    [t7Main, t6Pilot, fuelFlow, minFuel]
+  );
+
+  // Always tracks cam/reg mapping regardless of flame state
+  const gasCamCFH = useMemo(() => (isGas ? Math.max(0, fuelFlow) : 0), [isGas, fuelFlow]);
+  // Actual burner flow (zero when valves closed / flame out)
+  const gasBurnerCFH = useMemo(() => (isGas ? Math.max(0, effectiveFuel) : 0), [isGas, effectiveFuel]);
+
+  const gasMeterRevSec = useMemo(
+    () => (gasBurnerCFH > 0 ? (3600 * gasDialSize) / gasBurnerCFH : 0),
+    [gasBurnerCFH, gasDialSize]
+  );
+  const gasMBH_model = useMemo(() => gasBurnerCFH * fuel.HHV / 1000, [gasBurnerCFH, fuel]);
 
   const [nozzleGPH100, setNozzleGPH100] = useState(0.75);
   const [oilPressure, setOilPressure] = useState(100);
@@ -300,8 +309,10 @@ const gasMBH_model = useMemo(() => gasSimCFH * fuel.HHV / 1000, [gasSimCFH, fuel
     [nozzleGPH100, oilPressure],
   );
   const oilMBH = useMemo(() => oilGPH * fuel.HHV / 1000, [oilGPH, fuel]);
-  const oilSimGPH = useMemo(() => (isOil ? Math.max(0, fuelFlow) : 0), [isOil, fuelFlow]);
-  const oilSecPerGal = useMemo(() => (oilSimGPH > 0 ? 3600 / oilSimGPH : 0), [oilSimGPH]);  
+  // Always-tracking mapping vs actual burner flow
+  const oilCamGPH = useMemo(() => (isOil ? Math.max(0, fuelFlow) : 0), [isOil, fuelFlow]);
+  const oilBurnerGPH = useMemo(() => (isOil ? Math.max(0, effectiveFuel) : 0), [isOil, effectiveFuel]);
+  const oilSecPerGal = useMemo(() => (oilBurnerGPH > 0 ? 3600 / oilBurnerGPH : 0), [oilBurnerGPH]);
 
   const startGasClock = () => {
     setGasRunning(true);
@@ -328,10 +339,10 @@ const gasMBH_model = useMemo(() => gasSimCFH * fuel.HHV / 1000, [gasSimCFH, fuel
   };
 // Auto-clock the gas meter: generate a lap each full revolution at the current burner CFH
 useEffect(() => {
-  if (!gasRunning || !isGas || gasSimCFH <= 0) return;
+  if (!gasRunning || !isGas || gasBurnerCFH <= 0) return;
   let timer = null;
   const schedule = () => {
-    const sec = (3600 * gasDialSize) / Math.max(0.01, gasSimCFH);
+    const sec = (3600 * gasDialSize) / Math.max(0.01, gasBurnerCFH);
     timer = setTimeout(() => {
       setGasLaps((l) => [...l, sec]);
       schedule();
@@ -339,7 +350,7 @@ useEffect(() => {
   };
   schedule();
   return () => { if (timer) clearTimeout(timer); };
-}, [gasRunning, gasDialSize, gasSimCFH, isGas]);
+}, [gasRunning, gasDialSize, gasBurnerCFH, isGas]);
 
   const exportOilClock = () => {
     const rows = [
@@ -622,8 +633,6 @@ useEffect(() => {
   }, [boilerOn, burnerState, setpointF, ambientF, fuel.formula, fuelFlow, airFlow, flameSignal, lockoutPending]);
   // Link rheostat to fuel/air flows
   useEffect(() => {
-    if (tuningOn) return; // do nothing while tuning
-
     // If a tuned cam point exists for this position, apply it
     const mapKey = clamp(Math.round(rheostat / 10) * 10, 0, 100);
     if (camMap && camMap[mapKey]) {
@@ -655,33 +664,32 @@ useEffect(() => {
 
   // Analyzer displayed values with sensor lag and states
   const [disp, setDisp] = useState({ O2: 20.9, CO2: 0, CO: 0, COaf: 0, NOx: 0, StackF: 70, Eff: 0 });
+  // Keep latest steady-state and stack temperature in refs for a stable analyzer smoother
+  const steadyRef = useRef(steady);
+  useEffect(() => { steadyRef.current = steady; }, [steady]);
+  const simStackRef = useRef(simStackF);
+  useEffect(() => { simStackRef.current = simStackF; }, [simStackF]);
+
+  // Analyzer smoothing loop (runs continuously; does not reset on every render)
   useEffect(() => {
+    const tauO2 = 0.8, tauCO = 2.0, tauNOx = 1.2, tauT = 3.0; // seconds
+    const dt = 0.2; // s
     const id = setInterval(() => {
-      // time constants
-      const tauO2 = 0.8, tauCO = 2.0, tauNOx = 1.2, tauT = 3.0; // seconds
-      const dt = 0.2; // s
-
-      const targetO2 = steady.O2_pct;
-      const targetCO2 = steady.CO2_pct;
-      const targetCO = steady.CO_ppm;
-      const targetNOx = steady.NOx_ppm;
-      const targetStack = simStackF;
-
-      const nextO2 = lerp(disp.O2, targetO2, dt / tauO2);
-      const nextCO = lerp(disp.CO, targetCO, dt / tauCO);
-      const nextNOx = lerp(dispNOx(), targetNOx, dt / tauNOx);
-      const nextT = lerp(disp.StackF, targetStack, dt / tauT);
-      const nextCO2 = lerp(disp.CO2, targetCO2, dt / 1.0);
-
-      const COaf = Math.round(nextCO * (20.9 / Math.max(0.1, 20.9 - nextO2)));
-      const Eff = steady.efficiency; // leave as steady calc for simplicity
-
-      setDisp({ O2: nextO2, CO2: nextCO2, CO: nextCO, COaf, NOx: nextNOx, StackF: nextT, Eff });
+      const s = steadyRef.current;
+      const stackTarget = simStackRef.current;
+      setDisp((prev) => {
+        const nextO2 = lerp(prev.O2, s.O2_pct, dt / tauO2);
+        const nextCO = lerp(prev.CO, s.CO_ppm, dt / tauCO);
+        const nextNOx = lerp(prev.NOx, s.NOx_ppm, dt / tauNOx);
+        const nextT = lerp(prev.StackF, stackTarget, dt / tauT);
+        const nextCO2 = lerp(prev.CO2, s.CO2_pct, dt / 1.0);
+        const COaf = Math.round(nextCO * (20.9 / Math.max(0.1, 20.9 - nextO2)));
+        const Eff = s.efficiency; // keep efficiency from steady calc
+        return { O2: nextO2, CO2: nextCO2, CO: nextCO, COaf, NOx: nextNOx, StackF: nextT, Eff };
+      });
     }, 200);
-
-    function dispNOx() { return disp.NOx; }
     return () => clearInterval(id);
-  }, [steady, simStackF, anTambF, anState, probeInFlue, disp.NOx, disp.O2, disp.CO, disp.CO2, disp.StackF]);
+  }, []);
 
   // Analyzer controls
   const startAnalyzer = () => { setAnState("ZERO"); setProbeInFlue(false); setAnTambF(ambientF); };
@@ -693,6 +701,9 @@ useEffect(() => {
     const row = {
       t: new Date().toLocaleTimeString(),
       Fuel: fuelKey,
+      Rate: rheostat, // percent
+      FuelFlow: Number(parseFloat(fuelFlow).toFixed(2)),
+      AirFlow: Number(parseFloat(airFlow).toFixed(2)),
       O2: Number(disp.O2.toFixed(2)),
       CO2: Number(disp.CO2.toFixed(2)),
       COaf: Math.round(disp.COaf),
@@ -738,19 +749,21 @@ useEffect(() => {
   const [history, setHistory] = useState([]);
   useEffect(() => {
     const now = Date.now();
-    const row = {
-      ts: now,
-      t: new Date(now).toLocaleTimeString(),
-      O2: Number(disp.O2.toFixed(2)),
-      CO2: Number(disp.CO2.toFixed(2)),
-      CO: Math.round(disp.CO),
-      NOx: Math.round(disp.NOx),
-      StackF: Math.round(disp.StackF),
-      Eff: Number(Number(disp.Eff).toFixed(1)),
-    };
+const row = {
+  ts: now,
+  t: new Date(now).toLocaleTimeString(),
+  Rate: rheostat,
+  FuelFlow: Number(parseFloat(fuelFlow).toFixed(2)),
+  AirFlow: Number(parseFloat(airFlow).toFixed(2)),
+  O2: Number(disp.O2.toFixed(2)),
+  CO2: Number(disp.CO2.toFixed(2)),
+  CO: Math.round(disp.CO),
+  NOx: Math.round(disp.NOx),
+  StackF: Math.round(disp.StackF),
+  Eff: Number(Number(disp.Eff).toFixed(1)),
+  };
     setHistory((h) => [...h.slice(-300), row]);
-  }, [disp]);
-
+  }, [disp, rheostat, fuelFlow, airFlow]);
   // Scenario presets (adds to previous ones)
   const applyScenario = (key) => {
     const s = {
@@ -851,13 +864,6 @@ const rheostatRampRef = useRef(null);
             <div className="mt-1 text-xs text-slate-500">Targets: O₂ {fuel.targets.O2[0]} to {fuel.targets.O2[1]} percent, CO air-free ≤ {fuel.targets.COafMax} ppm</div>
           </div>
 
-          {!tuningActive && (
-            <div className="card">
-              <div className="label">Fuel Flow ({FUELS[fuelKey].unit}, scaled)</div>
-              <input aria-label="fuel flow slider" type="range" min={minFuel} max={maxFuel} step={0.1} value={fuelFlow} onChange={(e) => setFuelFlow(parseFloat(e.target.value))} className="w-full" />
-              <div className="value">{fuelFlow.toFixed(1)}</div>
-            </div>
-          )}
 
           <div className="card">
             <div className="label">Boiler Power</div>
@@ -876,8 +882,20 @@ const rheostatRampRef = useRef(null);
               onChange={(e) => { if (!canSetFiring) return; setRheostat(parseInt(e.target.value)); }}
               className="w-full"
               disabled={!canSetFiring}
-            />            
+            />
             <div className="value">{rheostat}%</div>
+            {!tuningActive && (
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <div>
+                  <div className="label">Fuel Flow ({FUELS[fuelKey].unit}, scaled)</div>
+                  <div className="value">{fuelFlow.toFixed(2)}</div>
+                </div>
+                <div>
+                  <div className="label">Air Flow (cfm, scaled)</div>
+                  <div className="value">{Number(airFlow).toFixed(2)}</div>
+                </div>
+              </div>
+            )}
           </div>
 
           {tuningActive && (
@@ -887,12 +905,12 @@ const rheostatRampRef = useRef(null);
                 <div>
                   <div className="label">Fuel Flow ({FUELS[fuelKey].unit}, scaled)</div>
                   <input aria-label="tuning fuel flow" type="range" min={minFuel} max={maxFuel} step={0.1} value={fuelFlow} onChange={(e) => setFuelFlow(parseFloat(e.target.value))} className="w-full" />
-                  <div className="value">{fuelFlow.toFixed(1)}</div>
+                  <div className="value">{fuelFlow.toFixed(2)}</div>
                 </div>
                 <div>
                   <div className="label">Air Flow (cfm, scaled)</div>
                   <input aria-label="tuning air flow" type="range" min={0} max={200} step={1} value={airFlow} onChange={(e) => setAirFlow(parseFloat(e.target.value))} className="w-full" />
-                  <div className="value">{airFlow}</div>
+                  <div className="value">{Number(airFlow).toFixed(2)}</div>
                 </div>
               </div>
               <div className="mt-3">
@@ -987,7 +1005,7 @@ const rheostatRampRef = useRef(null);
                       Typical appliance manifold: NG ~3.5 in. w.c., LP ~10–11 in. w.c. Adjusting pressure raises input roughly with the square root of pressure.
                     </div>
                     <div className="text-xs text-slate-500 col-span-2">
-                      Derived Min/Max fuel: {minFuel.toFixed(1)} / {maxFuel.toFixed(1)} (scaled)
+                      Derived Min/Max fuel: {minFuel.toFixed(2)} / {maxFuel.toFixed(2)} (scaled)
                     </div>
                   </div>
                 ) : (
@@ -1005,7 +1023,7 @@ const rheostatRampRef = useRef(null);
                       Oil nozzles are rated at 100 psi and flow scales ~√pressure. Higher pressure also improves atomization but watch for overfire.
                     </div>
                     <div className="text-xs text-slate-500 col-span-2">
-                      Derived Min/Max fuel: {minFuel.toFixed(1)} / {maxFuel.toFixed(1)} (scaled)
+                      Derived Min/Max fuel: {minFuel.toFixed(2)} / {maxFuel.toFixed(2)} (scaled)
                     </div>
                   </div>
                 )}
@@ -1120,8 +1138,7 @@ const rheostatRampRef = useRef(null);
                 {!tuningActive && (
                   <>
                     <div className="label">Air Flow (cfm, scaled)</div>
-                    <input aria-label="air flow slider" type="range" min={0} max={200} step={1} value={airFlow} onChange={(e) => setAirFlow(parseFloat(e.target.value))} className="w-full" />
-                    <div className="value">{airFlow}</div>
+                    <div className="value">{Number(airFlow).toFixed(2)}</div>
                   </>
                 )}
 
@@ -1262,21 +1279,23 @@ const rheostatRampRef = useRef(null);
                     Gas meter is only active for Natural Gas/Propane. Select a gas fuel to clock.
                   </div>
                 )}
-<div className="text-sm">
-  Sim sec/rev (from burner): <span className="font-semibold">
-    {gasMeterRevSec > 0 ? gasMeterRevSec.toFixed(1) : '—'}
-  </span>
-</div>
-<div className="text-sm">Meter CFH (clocked avg): <span className="font-semibold">{gasCFH.toFixed(1)}</span></div>
-<div className="text-sm">Burner CFH (model): <span className="font-semibold">{gasSimCFH.toFixed(1)}</span></div>
-<div className="text-sm">Input MBH (model): <span className="font-semibold">{gasMBH_model.toFixed(1)}</span></div>
+                <div className="text-sm">
+                  Sim sec/rev (from burner): <span className="font-semibold">
+                    {gasMeterRevSec > 0 ? gasMeterRevSec.toFixed(1) : '—'}
+                  </span>
+                </div>
+                <div className="text-sm">Meter CFH (clocked avg): <span className="font-semibold">{gasCFH.toFixed(1)}</span></div>
+                <div className="text-sm">Burner CFH (model): <span className="font-semibold">{gasBurnerCFH.toFixed(1)}</span></div>
+                <div className="text-sm">Cam/Reg CFH (mapped): <span className="font-semibold">{gasCamCFH.toFixed(1)}</span></div>
+                <div className="text-sm">Input MBH (model): <span className="font-semibold">{gasMBH_model.toFixed(1)}</span></div>
               </div>
             ) : (
               <div className="mt-3 space-y-2">
-                <div className="text-sm">Burner GPH (model): <span className="font-semibold">{oilSimGPH.toFixed(2)}</span></div>
-<div className="text-sm">Sec/gal at current flow: <span className="font-semibold">{oilSecPerGal > 0 ? oilSecPerGal.toFixed(0) : '—'}</span></div>
-<div className="text-sm">Volume in 60s: <span className="font-semibold">{(oilSimGPH/60).toFixed(2)}</span> gal</div>
-<div className="text-xs text-slate-500">Field estimate from nozzle/pressure (optional):</div>
+                <div className="text-sm">Burner GPH (model): <span className="font-semibold">{oilBurnerGPH.toFixed(2)}</span></div>
+                <div className="text-sm">Cam/Reg GPH (mapped): <span className="font-semibold">{oilCamGPH.toFixed(2)}</span></div>
+                <div className="text-sm">Sec/gal at current flow: <span className="font-semibold">{oilSecPerGal > 0 ? oilSecPerGal.toFixed(0) : '—'}</span></div>
+                <div className="text-sm">Volume in 60s: <span className="font-semibold">{(oilBurnerGPH/60).toFixed(2)}</span> gal</div>
+                <div className="text-xs text-slate-500">Field estimate from nozzle/pressure (optional):</div>
                 <label className="text-sm">
                   Nozzle GPH @100 psi
                   <input
@@ -1307,9 +1326,9 @@ const rheostatRampRef = useRef(null);
             <table className="min-w-full text-xs">
               <thead>
                 <tr className="text-left text-slate-500">
-                  {"t,Fuel,O2,CO2,COaf,CO,NOx,StackF,Eff,EA,Mode".split(",").map((h) => (
-                    <th key={h} className="py-1 pr-3">{h}</th>
-                  ))}
+                  {"t,Fuel,Rate,FuelFlow,AirFlow,O2,CO2,COaf,CO,NOx,StackF,Eff,EA,Mode".split(",").map((h) => (
+  <th key={h} className="py-1 pr-3">{h}</th>
+))}
                 </tr>
               </thead>
               <tbody>
