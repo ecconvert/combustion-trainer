@@ -9,171 +9,11 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-
-/*************************************************
- * Combustion Trainer + Analyzer + Tuning Mode
- * Single-file React app suitable for canvas preview
- * NOTE: Educational model only
- *************************************************/
-
-// --- Fuel data (simplified classroom presets) ---
-// Formula approximations and higher heating values (HHV)
-// Stoich O2 demand per mole of fuel: O2 = C + H/4 - O/2
-const FUELS = {
-  "Natural Gas": {
-    key: "Natural Gas",
-    formula: { C: 1, H: 4, O: 0 }, // CH4
-    HHV: 1000, // Btu per scf (display only)
-    unit: "scfh",
-    targets: { O2: [3, 6], stackF: [300, 475], COafMax: 100 },
-  },
-  Propane: {
-    key: "Propane",
-    formula: { C: 3, H: 8, O: 0 }, // C3H8
-    HHV: 2500, // Btu per scf
-    unit: "scfh",
-    targets: { O2: [3, 6], stackF: [320, 500], COafMax: 100 },
-  },
-  "Fuel Oil #2": {
-    key: "Fuel Oil #2",
-    formula: { C: 12, H: 23, O: 0 }, // approx C12H23
-    HHV: 138500, // Btu per gallon
-    unit: "gph",
-    targets: { O2: [2, 5], stackF: [350, 550], COafMax: 200 },
-  },
-  Biodiesel: {
-    key: "Biodiesel",
-    formula: { C: 19, H: 36, O: 2 }, // approx C19H36O2
-    HHV: 119000, // Btu per gallon
-    unit: "gph",
-    targets: { O2: [2, 5], stackF: [340, 520], COafMax: 200 },
-  },
-};
-
-// Utility
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const lerp = (a, b, t) => a + (b - a) * t;
-const f2c = (f) => (f - 32) * (5 / 9);
-const num = (x, d = 0) => {
-  const v = typeof x === "number" ? x : parseFloat(x);
-  return Number.isFinite(v) ? v : d;
-};
-
-// Build a simple safe cam map using stoichiometric air with slight excess
-function buildSafeCamMap(fuel, minFuel, maxFuel) {
-  const { C, H, O } = fuel.formula;
-  const map = {};
-  for (let p = 0; p <= 100; p += 10) {
-    const fuelFlow = Number(lerp(minFuel, maxFuel, p / 100).toFixed(2));
-    const O2_needed = fuelFlow * (C + H / 4 - O / 2);
-    const airStoich = O2_needed / 0.21;
-    const airFlow = Number((airStoich * 1.1).toFixed(2)); // 10% excess air
-    map[p] = { fuel: fuelFlow, air: airFlow };
-  }
-  return map;
-}
-
-function downloadCSV(filename, rows) {
-  if (!rows.length) return;
-  const header = Object.keys(rows[0]).join(",");
-  const body = rows.map((r) => Object.values(r).join(",")).join("\n");
-  const csv = `${header}\n${body}`;
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-// --- Core steady-state combustion model (instantaneous) ---
-function computeCombustion({ fuel, fuelFlow, airFlow, stackTempF, ambientF }) {
-  const { C, H, O } = fuel.formula;
-  const fuelMol = Math.max(0, fuelFlow);
-  const airActual = Math.max(0.0001, airFlow);
-
-  const O2_needed = fuelMol * (C + H / 4 - O / 2);
-  const airStoich = O2_needed / 0.21;
-  const excessAir = airStoich > 0 ? airActual / airStoich : 0;
-
-  const O2_in = 0.21 * airActual;
-  const N2_in = 0.79 * airActual;
-
-  const O2_for_H2O = fuelMol * (H / 4);
-  const H2O = fuelMol * (H / 2);
-  const O2_after_H = Math.max(0, O2_in - O2_for_H2O);
-
-  const carbon = fuelMol * C;
-  let CO2 = 0;
-  let CO = 0;
-  let O2_left = 0;
-
-  if (O2_after_H >= carbon) {
-    CO2 = carbon;
-    O2_left = O2_after_H - carbon;
-  } else {
-    CO2 = O2_after_H;
-    CO = carbon - CO2; // remainder becomes CO
-    O2_left = 0;
-  }
-
-  const totalDry = CO2 + CO + O2_left + N2_in;
-  const tiny = 1e-9;
-  const O2_pct = clamp((O2_left / (totalDry + tiny)) * 100, 0, 20.9);
-  const CO2_pct = clamp((CO2 / (totalDry + tiny)) * 100, 0, 20);
-  const CO_ppm = clamp((CO / (totalDry + tiny)) * 1e6, 0, 40000);
-
-  // Flame temperature proxy
-  const ea = clamp(excessAir, 0.2, 3);
-  const flameTempF =
-    ambientF + 1800 * Math.exp(-Math.pow((ea - 1.1) / 0.35, 2)) + 400 * Math.tanh(fuelMol / 10);
-
-  const burning = fuelMol > 0.05;
-
-  // Stack and unburned losses
-  const cp = 1.0;
-  const flueFlow = airActual + fuelMol;
-  const dT = stackTempF - ambientF;
-  const fuelEnergyRate = fuelMol * 100;
-  const stackLoss = clamp((flueFlow * cp * dT) / Math.max(1, fuelEnergyRate) / 1000, 0, 0.45);
-  const unburnedLoss = clamp(CO_ppm / 40000, 0, 0.12);
-
-  // NOx heuristic (temperature-sensitive, peaks slightly lean)
-  const kT = 6;
-  const NOx_ppm = burning
-    ? clamp(
-        kT *
-          Math.exp((flameTempF - 1400) / 300) *
-          clamp(1 + 0.5 * (ea - 1), 0.2, 1.8),
-        0,
-        2000,
-      )
-    : 0;
-
-  const efficiency = burning ? clamp(1 - stackLoss - unburnedLoss, 0.45, 0.995) : 0;
-
-  const warnings = {
-    soot: CO_ppm > 400,
-    overTemp: stackTempF > 500,
-    underTemp: stackTempF < 180,
-  };
-
-  const CO_airfree = Math.round(CO_ppm * (20.9 / Math.max(0.1, 20.9 - O2_pct)));
-
-  return {
-    O2_pct: Number(O2_pct.toFixed(2)),
-    CO2_pct: Number(CO2_pct.toFixed(2)),
-    CO_ppm: Math.round(CO_ppm),
-    CO_airfree,
-    NOx_ppm: Math.round(NOx_ppm),
-    stackTempF: Math.round(stackTempF),
-    excessAir: Number(excessAir.toFixed(2)),
-    efficiency: Number((efficiency * 100).toFixed(1)),
-    flameTempF: Math.round(flameTempF),
-    warnings,
-  };
-}
+import { FUELS } from "./lib/fuels";
+import { clamp, lerp, f2c, num } from "./lib/math";
+import { downloadCSV } from "./lib/csv";
+import { computeCombustion } from "./lib/chemistry";
+import { buildSafeCamMap } from "./lib/cam";
 
 // Flame component
 function Flame({ phi, intensity }) {
@@ -257,7 +97,6 @@ export default function CombustionTrainer() {
 
   // Analyzer FSM
   const [anState, setAnState] = useState("OFF"); // OFF, ZERO, READY, SAMPLING, HOLD
-  const [anTambF, setAnTambF] = useState(70);
   const [probeInFlue, setProbeInFlue] = useState(false);
   const [saved, setSaved] = useState([]);
   const [t5Spark, setT5Spark] = useState(false);
@@ -368,40 +207,6 @@ useEffect(() => {
   const [tuningOn, setTuningOn] = useState(false);
   const [camMap, setCamMap] = useState({}); // { percent: { fuel, air } }
   const [defaultsLoaded, setDefaultsLoaded] = useState(false);
-
-  // Excess air profiles for auto-generated cam maps
-  const EXCESS_AIR_PROFILES = {
-    "Natural Gas": [0, 1.4, 1.35, 1.32, 1.29, 1.26, 1.24, 1.23, 1.22, 1.21, 1.2],
-    Propane: [0, 1.4, 1.35, 1.32, 1.29, 1.26, 1.24, 1.23, 1.22, 1.21, 1.2],
-    "Fuel Oil #2": [0, 1.45, 1.4, 1.35, 1.32, 1.3, 1.28, 1.26, 1.24, 1.22, 1.2],
-    Biodiesel: [0, 1.45, 1.4, 1.35, 1.32, 1.3, 1.28, 1.26, 1.24, 1.22, 1.2],
-  };
-
-  // Build a conservative cam map using stoichiometric air requirements
-  function BuildSafeCamMap(fuelKey, minFuel, maxFuel) {
-    const { C, H, O } = FUELS[fuelKey].formula;
-    const profile = EXCESS_AIR_PROFILES[fuelKey] || EXCESS_AIR_PROFILES["Natural Gas"];
-    const map = {};
-
-    for (let pct = 0; pct <= 100; pct += 10) {
-      if (pct === 0) {
-        map[pct] = { fuel: 0, air: 0 };
-        continue;
-      }
-      const t = (pct - 10) / 90; // 0 at 10%, 1 at 100%
-      const fuel = clamp(lerp(minFuel, maxFuel, t), minFuel, maxFuel);
-      const O2_needed = fuel * (C + H / 4 - O / 2);
-      const airStoich = O2_needed / 0.21;
-      const ea = profile[pct / 10] ?? 1.2;
-      const air = airStoich * ea;
-      map[pct] = {
-        fuel: Number(fuel.toFixed(2)),
-        air: Number(air.toFixed(2)),
-      };
-    }
-
-    return map;
-  }
 
   // Current cam position key (rounded to 10%)
   const currentCam = useMemo(() => clamp(Math.round(rheostat / 10) * 10, 0, 100), [rheostat]);
@@ -692,7 +497,7 @@ useEffect(() => {
   }, []);
 
   // Analyzer controls
-  const startAnalyzer = () => { setAnState("ZERO"); setProbeInFlue(false); setAnTambF(ambientF); };
+  const startAnalyzer = () => { setAnState("ZERO"); setProbeInFlue(false); };
   const finishZero = () => { setAnState("READY"); };
   const insertProbe = () => { if (anState === "READY") { setProbeInFlue(true); setAnState("SAMPLING"); } };
   const holdAnalyzer = () => { if (anState === "SAMPLING") setAnState("HOLD"); };
