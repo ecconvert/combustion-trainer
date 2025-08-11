@@ -35,6 +35,16 @@ import { useUIState } from "./components/UIStateContext";
  * @param {number} props.intensity - 0–1 scale controlling size/brightness.
  * @param {boolean} [props.pilot=false] - Render a smaller pilot flame.
  */
+
+const seriesConfig = [
+  { key: 'O2', name: 'O₂ %', yAxisId: 'left' },
+  { key: 'CO2', name: 'CO₂ %', yAxisId: 'left' },
+  { key: 'CO', name: 'CO ppm', yAxisId: 'right' },
+  { key: 'NOx', name: 'NOₓ ppm', yAxisId: 'right' },
+  { key: 'StackF', name: 'Stack °F', yAxisId: 'right' },
+  { key: 'Eff', name: 'Eff %', yAxisId: 'left' },
+];
+
 function Flame({ phi, intensity, pilot = false }) {
   let color = "#48b3ff"; // lean -> blue
   if (phi > 1.05 && phi < 1.2) color = "#ff8c00"; // near stoich -> orange
@@ -880,46 +890,28 @@ const rheostatRampRef = useRef(null);
                     <YAxis yAxisId="right" orientation="right" domain={[0, 600]} />
                     <Tooltip />
                     <Legend />
-                    <Line
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey="O2"
-                      dot={false}
-                      name="O₂ %"
-                      strokeWidth={2}
-                      isAnimationActive={false}
-                    />
-                    <Line
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey="CO2"
-                      dot={false}
-                      name="CO₂ %"
-                      strokeWidth={2}
-                      isAnimationActive={false}
-                    />
-                    <Line
-                      yAxisId="right"
-                      type="monotone"
-                      dataKey="StackF"
-                      dot={false}
-                      name="Stack °F"
-                      strokeWidth={2}
-                      isAnimationActive={false}
-                    />
-                    <Line
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey="Eff"
-                      dot={false}
-                      name="Eff %"
-                      strokeWidth={2}
-                      isAnimationActive={false}
-                    />
+                    {seriesConfig.map((series) =>
+                      seriesVisibility[series.key] && (
+                        <Line
+                          key={series.key}
+                          yAxisId={series.yAxisId}
+                          type="monotone"
+                          dataKey={series.key}
+                          dot={false}
+                          name={series.name}
+                          strokeWidth={2}
+                          isAnimationActive={false}
+                        />
+                      )
+                    )}
                   </LineChart>
                 </ResponsiveContainer>
               </div>
             </div>
+            <SeriesVisibility
+              visibility={seriesVisibility}
+              setVisibility={setSeriesVisibility}
+            />
             <div className="card">
               <div className="label">Clock the Boiler (Metering)</div>
               <div className="flex gap-2 mt-2">
