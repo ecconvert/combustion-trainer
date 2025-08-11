@@ -16,18 +16,24 @@ import { computeCombustion } from "./lib/chemistry";
 import { buildSafeCamMap } from "./lib/cam";
 
 // Flame component
-function Flame({ phi, intensity }) {
+function Flame({ phi, intensity, pilot = false }) {
   let color = "#48b3ff"; // lean -> blue
   if (phi > 1.05 && phi < 1.2) color = "#ff8c00"; // near stoich -> orange
   if (phi >= 1.2) color = "#ffd54d"; // rich -> yellow
-  const size = clamp(40 + intensity * 60, 30, 120);
+  let size = clamp(40 + intensity * 60, 30, 120);
+
+  if (pilot) {
+    color = "#ff8c00"; // pilot flame bright orange
+    size = clamp(20 + intensity * 40, 10, 60);
+  }
+
   return (
     <div
       aria-label="flame"
       className="mx-auto rounded-full opacity-90 shadow-inner"
       style={{
         width: size,
-        height: size * 1.2,
+        height: size * (pilot ? 1.1 : 1.2),
         background: `radial-gradient(circle at 50% 60%, ${color}, transparent 60%)`,
         filter: "blur(1px)",
         animation: "flicker 0.18s infinite alternate",
@@ -51,6 +57,29 @@ function Spark() {
         animation: "spark 0.08s infinite alternate",
       }}
     />
+  );
+}
+
+// Smoke component shown during soot warning
+function Smoke() {
+  return (
+    <div
+      aria-label="smoke"
+      className="absolute bottom-1/2 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none"
+    >
+      <div
+        className="w-4 h-4 rounded-full bg-gray-400 opacity-60"
+        style={{ animation: "smoke 1.5s infinite" }}
+      />
+      <div
+        className="w-3 h-3 rounded-full bg-gray-400 opacity-40 mt-1"
+        style={{ animation: "smoke 1.5s infinite 0.3s" }}
+      />
+      <div
+        className="w-5 h-5 rounded-full bg-gray-300 opacity-30 mt-1"
+        style={{ animation: "smoke 1.5s infinite 0.6s" }}
+      />
+    </div>
   );
 }
 
@@ -462,10 +491,10 @@ useEffect(() => {
   }, [rheostat, minFuel, maxFuel, fuel, tuningOn, camMap]);
 
   // Instantaneous chemistry at the simulated stack temperature
-  const steady = useMemo(() => {
-    const effectiveFuel = t7Main ? fuelFlow : (t6Pilot ? Math.min(fuelFlow, Math.max(0.5, minFuel * 0.5)) : 0);
-    return computeCombustion({ fuel, fuelFlow: effectiveFuel, airFlow, stackTempF: simStackF, ambientF });
-  }, [fuel, fuelFlow, airFlow, simStackF, ambientF, t7Main, t6Pilot, minFuel]);
+  const steady = useMemo(
+    () => computeCombustion({ fuel, fuelFlow: effectiveFuel, airFlow, stackTempF: simStackF, ambientF }),
+    [fuel, effectiveFuel, airFlow, simStackF, ambientF],
+  );
 
   // Analyzer displayed values with sensor lag and states
   const [disp, setDisp] = useState({ O2: 20.9, CO2: 0, CO: 0, COaf: 0, NOx: 0, StackF: 70, Eff: 0 });
@@ -586,6 +615,8 @@ const row = {
 
   const ea = steady.excessAir; const phi = 1 / Math.max(0.01, ea);
   const stackTempDisplay = unitSystem === "imperial" ? Math.round(simStackF) : Math.round(f2c(simStackF));
+  const flameIntensity = effectiveFuel / 10;
+  const isPilotFlame = t6Pilot && !t7Main;
 const flameActive =
   (burnerState === "PTFI" || burnerState === "MTFI" || burnerState === "RUN_AUTO") &&
   (t7Main || t6Pilot) &&
@@ -633,6 +664,7 @@ const rheostatRampRef = useRef(null);
       <style>{`
         @keyframes flicker { from { transform: scale(1) translateY(0px); opacity: 0.9; } to { transform: scale(1.04) translateY(-2px); opacity: 1; } }
         @keyframes spark { from { transform: translateY(2px) scale(0.9); opacity: .7; } to { transform: translateY(-2px) scale(1.1); opacity: 1; } }
+        @keyframes smoke { from { transform: translateY(0) scale(0.8); opacity: .6; } to { transform: translateY(-30px) scale(1.4); opacity: 0; } }
         .card { background: white; border-radius: 1rem; box-shadow: 0 6px 16px rgba(15,23,42,0.08); padding: 1rem; }
         .label { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: #64748b; }
         .value { font-size: 1.1rem; font-weight: 600; }
@@ -927,7 +959,8 @@ const rheostatRampRef = useRef(null);
                   <div className="absolute inset-6 rounded-full border-2 border-slate-300" />
                   <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-24 h-8 bg-slate-400 rounded-t-2xl" />
                   <div className="absolute inset-0 flex items-center justify-center">
-                    {flameActive ? <Flame phi={phi} intensity={fuelFlow / 10} /> : null}
+                    {flameActive ? <Flame phi={phi} intensity={flameIntensity} pilot={isPilotFlame} /> : null}
+                    {flameActive && steady.warnings.soot ? <Smoke /> : null}
                     {showSpark ? <Spark /> : null}
                   </div>
                   <div className="absolute bottom-3 right-3 space-y-1 text-xs">
