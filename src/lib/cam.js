@@ -20,7 +20,7 @@ export function buildSafeCamMap(fuel, minFuel, maxFuel) {
     const t = (pct - 10) / 90; // 0 at 10%, 1 at 100%
     const fuelFlow = clamp(lerp(minFuel, maxFuel, t), minFuel, maxFuel);
     const O2_needed = fuelFlow * (C + H / 4 - O / 2);
-    const airStoich = O2_needed / 0.21;
+    const airStoich = O2_needed / OXYGEN_IN_AIR_FRACTION;
     const ea = profile[pct / 10] ?? 1.2;
     const airFlow = airStoich * ea;
     map[pct] = {
