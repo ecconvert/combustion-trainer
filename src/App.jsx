@@ -1217,221 +1217,8 @@ const rheostatRampRef = useRef(null);
       </header>
 
       <main className="max-w-7xl mx-auto p-6 grid grid-cols-12 gap-4">
-        {/* Left controls */}
-        <section className="col-span-12 lg:col-span-3 space-y-4">
-          <div className="card">
-            <div className="label">Fuel</div>
-            <select aria-label="fuel selector" className="w-full border rounded-md px-2 py-2 mt-1" value={fuelKey} onChange={(e) => setFuelKey(e.target.value)}>
-              {Object.keys(FUELS).map((k) => (
-                <option key={k} value={k}>{k}</option>
-              ))}
-            </select>
-            <div className="mt-2 text-sm text-slate-600">HHV: {FUELS[fuelKey].HHV.toLocaleString()} Btu/{FUELS[fuelKey].unit}</div>
-            <div className="mt-1 text-xs text-slate-500">Targets: O₂ {fuel.targets.O2[0]} to {fuel.targets.O2[1]} percent, CO air-free ≤ {fuel.targets.COafMax} ppm</div>
-          </div>
-
-
-          <div className="card">
-            <div className="label">Boiler Power</div>
-            <div className="flex items-center gap-2 mt-2">
-              <button className={`btn ${boilerOn ? 'btn-primary' : ''}`} onClick={() => setBoilerOn(true)}>On</button>
-              <button className="btn" onClick={() => setBoilerOn(false)}>Off</button>
-            </div>
-            <div className="label mt-4">Firing Rate (rheostat)</div>
-            <input
-              aria-label="firing rate"
-              type="range"
-              min={0}
-              max={100}
-              step={1}
-              value={rheostat}
-              onChange={(e) => { if (!canSetFiring) return; setRheostat(parseInt(e.target.value)); }}
-              className="w-full"
-              disabled={!canSetFiring}
-            />
-            <div className="value">{rheostat}%</div>
-            {!tuningActive && (
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <div>
-                  <div className="label">Fuel Flow ({FUELS[fuelKey].unit}, scaled)</div>
-                  <div className="value">{fuelFlow.toFixed(2)}</div>
-                </div>
-                <div>
-                  <div className="label">Air Flow (cfm, scaled)</div>
-                  <div className="value">{Number(airFlow).toFixed(2)}</div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {tuningActive && (
-            <div className="card">
-              <div className="label">Tuning Controls (Fuel & Air)</div>
-              <div className="mt-2 grid grid-cols-1 gap-4">
-                <div>
-                  <div className="label">Fuel Flow ({FUELS[fuelKey].unit}, scaled)</div>
-                  <input aria-label="tuning fuel flow" type="range" min={minFuel} max={maxFuel} step={0.1} value={fuelFlow} onChange={(e) => setFuelFlow(parseFloat(e.target.value))} className="w-full" />
-                  <div className="value">{fuelFlow.toFixed(2)}</div>
-                </div>
-                <div>
-                  <div className="label">Air Flow (cfm, scaled)</div>
-                  <input aria-label="tuning air flow" type="range" min={0} max={200} step={1} value={airFlow} onChange={(e) => setAirFlow(parseFloat(e.target.value))} className="w-full" />
-                  <div className="value">{Number(airFlow).toFixed(2)}</div>
-                </div>
-              </div>
-              <div className="mt-3">
-                <div className="label">Camshaft Intervals</div>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {[0,10,20,30,40,50,60,70,80,90,100].map((p) => (
-                    <button
-                      key={p}
-                      className={`btn ${rheostat === p ? 'btn-primary' : ''}`}
-                      disabled={!canSetFiring}
-                      onClick={() => {
-                        if (!canSetFiring) return;
-                        setRheostat(p);
-                        applyCamIfSaved(p);
-                      }}
-                    >
-                      {p}%
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-3 flex items-center gap-2">
-                  <button
-                    className="btn btn-primary"
-                    disabled={!canSetFiring}
-                    onClick={setCamAtCurrent}
-                    title="Save current fuel and air at this cam position"
-                  >
-                    Set {currentCam}%
-                  </button>
-                  <button
-                    className="btn"
-                    disabled={!camMap[currentCam]}
-                    onClick={clearCamAtCurrent}
-                    title="Clear saved point at this cam position"
-                  >
-                    Clear {currentCam}%
-                  </button>
-                  <button
-                    className="btn"
-                    onClick={applySafeDefaults}
-                    title="Load safe default cam map (available anytime)"
-                  >
-                    Set tuning to safe defaults
-                  </button>
-                  {camMap[currentCam] && (
-                    <span className="pill bg-green-100">Saved: F {camMap[currentCam].fuel} / A {camMap[currentCam].air}</span>
-                  )}
-                  {defaultsLoaded && (
-                    <span className="pill bg-blue-100">Safe defaults loaded</span>
-                  )}
-                </div>
-                <div className="mt-2 text-xs text-slate-500">
-                  Saved cam points: {Object.keys(camMap).length ? Object.keys(camMap).sort((a,b)=>a-b).join(', ') : 'none'}
-                </div>
-                <details className="mt-4">
-                <summary className="label cursor-pointer">Advanced inputs</summary>
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                  <label className="text-sm col-span-2">
-                    Air Flow
-                    <input
-                      type="number"
-                      className="w-full border rounded-md px-2 py-1 mt-1"
-                      value={airFlow}
-                      onChange={(e) => setAirFlow(parseFloat(e.target.value || 0))}
-                    />
-                  </label>
-                  <label className="text-sm col-span-2">
-                    Fuel Flow
-                    <input
-                      type="number"
-                      className="w-full border rounded-md px-2 py-1 mt-1"
-                      value={fuelFlow}
-                      onChange={(e) => setFuelFlow(parseFloat(e.target.value || 0))}
-                    />
-                  </label>
-                </div>
-              </details>
-              <details className="mt-3">
-                <summary className="label cursor-pointer">Regulators</summary>
-                {!isOil ? (
-                  <div className="grid grid-cols-2 gap-2 mt-2">
-                    <label className="text-sm col-span-2">
-                      Manifold pressure (in. w.c.)
-                      <input
-                        type="number"
-                        className="w-full border rounded-md px-2 py-1 mt-1"
-                        value={regPress}
-                        onChange={(e) => setRegPress(parseFloat(e.target.value || 0))}
-                      />
-                    </label>
-                    <div className="text-xs text-slate-500 col-span-2 mt-1">
-                      Typical appliance manifold: NG ~3.5 in. w.c., LP ~10–11 in. w.c. Adjusting pressure raises input roughly with the square root of pressure.
-                    </div>
-                    <div className="text-xs text-slate-500 col-span-2">
-                      Derived Min/Max fuel: {minFuel.toFixed(2)} / {maxFuel.toFixed(2)} (scaled)
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-2 mt-2">
-                    <label className="text-sm col-span-2">
-                      Pump pressure (psi)
-                      <input
-                        type="number"
-                        className="w-full border rounded-md px-2 py-1 mt-1"
-                        value={regPress}
-                        onChange={(e) => setRegPress(parseFloat(e.target.value || 0))}
-                      />
-                    </label>
-                    <div className="text-xs text-slate-500 col-span-2 mt-1">
-                      Oil nozzles are rated at 100 psi and flow scales ~√pressure. Higher pressure also improves atomization but watch for overfire.
-                    </div>
-                    <div className="text-xs text-slate-500 col-span-2">
-                      Derived Min/Max fuel: {minFuel.toFixed(2)} / {maxFuel.toFixed(2)} (scaled)
-                    </div>
-                  </div>
-                )}
-              </details>
-<div className="flex items-center gap-2 mt-2">
-  <button
-    className="btn"
-    disabled={!canSetFiring}
-    onClick={() => {
-      if (!canSetFiring) return;
-      setRheostat((v) => {
-        const next = clamp(Math.round(v / 10) * 10 - 10, 0, 100);
-        applyCamIfSaved(next);
-        return next;
-      });
-    }}
-  >
-    -10%
-  </button>
-  <div className="value">{rheostat}%</div>
-  <button
-    className="btn"
-    disabled={!canSetFiring}
-    onClick={() => {
-      if (!canSetFiring) return;
-      setRheostat((v) => {
-        const next = clamp(Math.round(v / 10) * 10 + 10, 0, 100);
-        applyCamIfSaved(next);
-        return next;
-      });
-    }}
-  >
-    +10%
-  </button>
-</div>              </div>
-            </div>
-          )}
-
-        </section>
-
         {/* Middle: boiler visualization */}
-        <section className="col-span-12 lg:col-span-6">
+        <section className="col-span-12 lg:col-span-9">
           <div className="card">
             <div className="flex items-center justify-between">
               <div>
@@ -1488,6 +1275,215 @@ const rheostatRampRef = useRef(null);
             </div>
           </div>
 
+
+          <div className="card mt-4">
+            <div className="label mb-2">Boiler Control Panel</div>
+            <CollapsibleSection title="Fuel Selector">
+              <select aria-label="fuel selector" className="w-full border rounded-md px-2 py-2 mt-1" value={fuelKey} onChange={(e) => setFuelKey(e.target.value)}>
+                {Object.keys(FUELS).map((k) => (
+                  <option key={k} value={k}>{k}</option>
+                ))}
+              </select>
+              <div className="mt-2 text-sm text-slate-600">HHV: {FUELS[fuelKey].HHV.toLocaleString()} Btu/{FUELS[fuelKey].unit}</div>
+              <div className="mt-1 text-xs text-slate-500">Targets: O₂ {fuel.targets.O2[0]} to {fuel.targets.O2[1]} percent, CO air-free ≤ {fuel.targets.COafMax} ppm</div>
+            </CollapsibleSection>
+
+            <div className="label mt-4">Boiler Power</div>
+            <div className="flex items-center gap-2 mt-2">
+              <button className={`btn ${boilerOn ? 'btn-primary' : ''}`} onClick={() => setBoilerOn(true)}>On</button>
+              <button className="btn" onClick={() => setBoilerOn(false)}>Off</button>
+            </div>
+            <div className="label mt-4">Firing Rate (rheostat)</div>
+            <input
+              aria-label="firing rate"
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={rheostat}
+              onChange={(e) => { if (!canSetFiring) return; setRheostat(parseInt(e.target.value)); }}
+              className="w-full"
+              disabled={!canSetFiring}
+            />
+            <div className="value">{rheostat}%</div>
+
+            <CollapsibleSection title="Fuel/Air Flows">
+              {tuningActive ? (
+                <div>
+                  <div className="mt-2 grid grid-cols-1 gap-4">
+                    <div>
+                      <div className="label">Fuel Flow ({FUELS[fuelKey].unit}, scaled)</div>
+                      <input aria-label="tuning fuel flow" type="range" min={minFuel} max={maxFuel} step={0.1} value={fuelFlow} onChange={(e) => setFuelFlow(parseFloat(e.target.value))} className="w-full" />
+                      <div className="value">{fuelFlow.toFixed(2)}</div>
+                    </div>
+                    <div>
+                      <div className="label">Air Flow (cfm, scaled)</div>
+                      <input aria-label="tuning air flow" type="range" min={0} max={200} step={1} value={airFlow} onChange={(e) => setAirFlow(parseFloat(e.target.value))} className="w-full" />
+                      <div className="value">{Number(airFlow).toFixed(2)}</div>
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <div className="label">Camshaft Intervals</div>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {[0,10,20,30,40,50,60,70,80,90,100].map((p) => (
+                        <button
+                          key={p}
+                          className={`btn ${rheostat === p ? 'btn-primary' : ''}`}
+                          disabled={!canSetFiring}
+                          onClick={() => {
+                            if (!canSetFiring) return;
+                            setRheostat(p);
+                            applyCamIfSaved(p);
+                          }}
+                        >
+                          {p}%
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-3 flex items-center gap-2">
+                      <button
+                        className="btn btn-primary"
+                        disabled={!canSetFiring}
+                        onClick={setCamAtCurrent}
+                        title="Save current fuel and air at this cam position"
+                      >
+                        Set {currentCam}%
+                      </button>
+                      <button
+                        className="btn"
+                        disabled={!camMap[currentCam]}
+                        onClick={clearCamAtCurrent}
+                        title="Clear saved point at this cam position"
+                      >
+                        Clear {currentCam}%
+                      </button>
+                      <button
+                        className="btn"
+                        onClick={applySafeDefaults}
+                        title="Load safe default cam map (available anytime)"
+                      >
+                        Set tuning to safe defaults
+                      </button>
+                      {camMap[currentCam] && (
+                        <span className="pill bg-green-100">Saved: F {camMap[currentCam].fuel} / A {camMap[currentCam].air}</span>
+                      )}
+                      {defaultsLoaded && (
+                        <span className="pill bg-blue-100">Safe defaults loaded</span>
+                      )}
+                    </div>
+                    <div className="mt-2 text-xs text-slate-500">
+                      Saved cam points: {Object.keys(camMap).length ? Object.keys(camMap).sort((a,b)=>a-b).join(', ') : 'none'}
+                    </div>
+                    <details className="mt-4">
+                      <summary className="label cursor-pointer">Advanced inputs</summary>
+                      <div className="grid grid-cols-2 gap-2 mt-2">
+                        <label className="text-sm col-span-2">
+                          Air Flow
+                          <input
+                            type="number"
+                            className="w-full border rounded-md px-2 py-1 mt-1"
+                            value={airFlow}
+                            onChange={(e) => setAirFlow(parseFloat(e.target.value || 0))}
+                          />
+                        </label>
+                        <label className="text-sm col-span-2">
+                          Fuel Flow
+                          <input
+                            type="number"
+                            className="w-full border rounded-md px-2 py-1 mt-1"
+                            value={fuelFlow}
+                            onChange={(e) => setFuelFlow(parseFloat(e.target.value || 0))}
+                          />
+                        </label>
+                      </div>
+                    </details>
+                    <details className="mt-3">
+                      <summary className="label cursor-pointer">Regulators</summary>
+                      {!isOil ? (
+                        <div className="grid grid-cols-2 gap-2 mt-2">
+                          <label className="text-sm col-span-2">
+                            Manifold pressure (in. w.c.)
+                            <input
+                              type="number"
+                              className="w-full border rounded-md px-2 py-1 mt-1"
+                              value={regPress}
+                              onChange={(e) => setRegPress(parseFloat(e.target.value || 0))}
+                            />
+                          </label>
+                          <div className="text-xs text-slate-500 col-span-2 mt-1">
+                            Typical appliance manifold: NG ~3.5 in. w.c., LP ~10–11 in. w.c. Adjusting pressure raises input roughly with the square root of pressure.
+                          </div>
+                          <div className="text-xs text-slate-500 col-span-2">
+                            Derived Min/Max fuel: {minFuel.toFixed(2)} / {maxFuel.toFixed(2)} (scaled)
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2 mt-2">
+                          <label className="text-sm col-span-2">
+                            Pump pressure (psi)
+                            <input
+                              type="number"
+                              className="w-full border rounded-md px-2 py-1 mt-1"
+                              value={regPress}
+                              onChange={(e) => setRegPress(parseFloat(e.target.value || 0))}
+                            />
+                          </label>
+                          <div className="text-xs text-slate-500 col-span-2 mt-1">
+                            Oil nozzles are rated at 100 psi and flow scales ~√pressure. Higher pressure also improves atomization but watch for overfire.
+                          </div>
+                          <div className="text-xs text-slate-500 col-span-2">
+                            Derived Min/Max fuel: {minFuel.toFixed(2)} / {maxFuel.toFixed(2)} (scaled)
+                          </div>
+                        </div>
+                      )}
+                    </details>
+                    <div className="flex items-center gap-2 mt-2">
+                      <button
+                        className="btn"
+                        disabled={!canSetFiring}
+                        onClick={() => {
+                          if (!canSetFiring) return;
+                          setRheostat((v) => {
+                            const next = clamp(Math.round(v / 10) * 10 - 10, 0, 100);
+                            applyCamIfSaved(next);
+                            return next;
+                          });
+                        }}
+                      >
+                        -10%
+                      </button>
+                      <div className="value">{rheostat}%</div>
+                      <button
+                        className="btn"
+                        disabled={!canSetFiring}
+                        onClick={() => {
+                          if (!canSetFiring) return;
+                          setRheostat((v) => {
+                            const next = clamp(Math.round(v / 10) * 10 + 10, 0, 100);
+                            applyCamIfSaved(next);
+                            return next;
+                          });
+                        }}
+                      >
+                        +10%
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="label">Fuel Flow ({FUELS[fuelKey].unit}, scaled)</div>
+                    <div className="value">{fuelFlow.toFixed(2)}</div>
+                  </div>
+                  <div>
+                    <div className="label">Air Flow (cfm, scaled)</div>
+                    <div className="value">{Number(airFlow).toFixed(2)}</div>
+                  </div>
+                </div>
+              )}
+            </CollapsibleSection>
+          </div>
 
           <div className="card mt-4">
             <div className="flex items-center justify-between">
