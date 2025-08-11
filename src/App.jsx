@@ -747,14 +747,7 @@ const rheostatRampRef = useRef(null);
                 aria-label="troubleshooting scenarios"
                 className="w-full border rounded-md px-2 py-2 mt-2"
                 value={scenarioSel}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setScenarioSel(v);
-                  if (v) {
-                    applyScenario(v);
-                    setScenarioSel("");
-                  }
-                }}
+                onChange={handleScenarioChange}
               >
                 <option value="">Start Troubleshooting Scenarios</option>
                 {[
