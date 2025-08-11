@@ -1,7 +1,11 @@
 import { clamp } from "./math";
 
-export function COAirFree(co, o2) {
-  return Math.round(co * (20.9 / Math.max(0.1, 20.9 - o2)));
+export const OXYGEN_IN_AIR_PERCENT = 20.9;
+export const OXYGEN_IN_AIR_FRACTION = OXYGEN_IN_AIR_PERCENT / 100;
+export const NITROGEN_IN_AIR_FRACTION = 1 - OXYGEN_IN_AIR_FRACTION;
+
+function coAirFree(co, o2) {
+  return Math.round(co * (OXYGEN_IN_AIR_PERCENT / Math.max(0.1, OXYGEN_IN_AIR_PERCENT - o2)));
 }
 
 export function computeCombustion({ fuel, fuelFlow, airFlow, stackTempF, ambientF }) {
@@ -10,11 +14,11 @@ export function computeCombustion({ fuel, fuelFlow, airFlow, stackTempF, ambient
   const airActual = Math.max(0.0001, airFlow);
 
   const O2_needed = fuelMol * (C + H / 4 - O / 2);
-  const airStoich = O2_needed / 0.21;
+  const airStoich = O2_needed / OXYGEN_IN_AIR_FRACTION;
   const excessAir = airStoich > 0 ? airActual / airStoich : 0;
 
-  const O2_in = 0.21 * airActual;
-  const N2_in = 0.79 * airActual;
+  const O2_in = OXYGEN_IN_AIR_FRACTION * airActual;
+  const N2_in = NITROGEN_IN_AIR_FRACTION * airActual;
 
   const O2_for_H2O = fuelMol * (H / 4);
   const O2_after_H = Math.max(0, O2_in - O2_for_H2O);
