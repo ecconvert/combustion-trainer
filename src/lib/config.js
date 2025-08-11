@@ -64,7 +64,7 @@ export function saveConfig(cfg) {
   try {
     const valid = validateConfig(cfg);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(valid));
-  } catch {
-    // ignore
+  } catch (error) {
+    console.error("Failed to save config to localStorage:", error);
   }
 }
