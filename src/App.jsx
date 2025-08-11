@@ -616,11 +616,14 @@ const row = {
   const ea = steady.excessAir; const phi = 1 / Math.max(0.01, ea);
   const stackTempDisplay = unitSystem === "imperial" ? Math.round(simStackF) : Math.round(f2c(simStackF));
   const flameIntensity = effectiveFuel / 10;
-  const isPilotFlame = t6Pilot && !t7Main;
+  const pilotFuel = Math.min(fuelFlow, Math.max(0.5, minFuel * 0.5));
+  const pilotIntensity = pilotFuel / 10;
 const flameActive =
   (burnerState === "PTFI" || burnerState === "MTFI" || burnerState === "RUN_AUTO") &&
   (t7Main || t6Pilot) &&
   flameSignal >= 10;
+const showPilotFlame = flameActive && t6Pilot;
+const showMainFlame = flameActive && t7Main;
 const showSpark = burnerState === "PTFI" && t5Spark;
 const canSetFiring = burnerState === "RUN_AUTO";
 const rheostatRampRef = useRef(null);
@@ -958,10 +961,23 @@ const rheostatRampRef = useRef(null);
                 <div aria-label="combustion chamber" className="relative h-72 rounded-3xl border bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden">
                   <div className="absolute inset-6 rounded-full border-2 border-slate-300" />
                   <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-24 h-8 bg-slate-400 rounded-t-2xl" />
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    {flameActive ? <Flame phi={phi} intensity={flameIntensity} pilot={isPilotFlame} /> : null}
+                  <div className="absolute inset-0">
+                    {showMainFlame && (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Flame phi={phi} intensity={flameIntensity} />
+                      </div>
+                    )}
+                    {showPilotFlame && (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Flame phi={1} intensity={pilotIntensity} pilot />
+                      </div>
+                    )}
                     {flameActive && steady.warnings.soot ? <Smoke /> : null}
-                    {showSpark ? <Spark /> : null}
+                    {showSpark ? (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Spark />
+                      </div>
+                    ) : null}
                   </div>
                   <div className="absolute bottom-3 right-3 space-y-1 text-xs">
                     {steady.warnings.soot && (<div className="px-2 py-1 rounded bg-yellow-100 text-yellow-900">Soot risk</div>)}
