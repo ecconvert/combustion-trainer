@@ -36,6 +36,18 @@ import { useUIState } from "./components/UIStateContext";
  * @param {boolean} [props.pilot=false] - Render a smaller pilot flame.
  */
 
+
+
+const handleScenarioChange = (e) => {
+  const v = e.target.value;
+  setScenarioSel(v);
+  if (v) {
+    applyScenario(v);
+    setScenarioSel("");
+  }
+};
+
+
 const seriesConfig = [
   { key: 'O2', name: 'O₂ %', yAxisId: 'left' },
   { key: 'CO2', name: 'CO₂ %', yAxisId: 'left' },
