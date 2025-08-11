@@ -33,11 +33,11 @@ export function validateConfig(partial = {}) {
   const cfg = {
     ...base,
     ...partial,
-    general: { ...base.general, ...partial.general },
-    analyzer: { ...base.analyzer, ...partial.analyzer },
-    units: { ...base.units, ...partial.units },
-    ambient: { ...base.ambient, ...partial.ambient },
-    data: { ...base.data, ...partial.data },
+    general: { ...base.general, ...(partial.general || {}) },
+    analyzer: { ...base.analyzer, ...(partial.analyzer || {}) },
+    units: { ...base.units, ...(partial.units || {}) },
+    ambient: { ...base.ambient, ...(partial.ambient || {}) },
+    data: { ...base.data, ...(partial.data || {}) },
   };
 
   // Clamp numeric fields to reasonable ranges
