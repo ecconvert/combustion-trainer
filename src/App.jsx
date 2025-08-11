@@ -1114,8 +1114,8 @@ const rheostatRampRef = useRef(null);
                   </tr>
                 </thead>
                 <tbody>
-                  {history.slice(-60).map((r, i) => (
-                    <tr key={i} className="border-t">
+                  {history.slice(-60).map((r) => (
+                    <tr key={r.ts} className="border-t">
                       <td className="py-1 pr-4 whitespace-nowrap">{r.t}</td>
                       <td className="py-1 pr-4">{r.O2}</td>
                       <td className="py-1 pr-4">{r.CO2}</td>
