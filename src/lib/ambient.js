@@ -14,6 +14,7 @@
 export async function zipToAmbient(zip, baseUrl, zipGeoBaseUrl) {
   // Look up latitude and longitude for the ZIP
   const geoRes = await fetch(`${zipGeoBaseUrl}/${zip}`);
+  if (!geoRes.ok) throw new Error(`Failed to fetch geo data for ZIP ${zip}: ${geoRes.statusText}`);
   const geo = await geoRes.json();
   const place = geo?.places?.[0];
   if (!place) throw new Error("Invalid ZIP code");
