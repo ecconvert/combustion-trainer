@@ -4,6 +4,28 @@ Interactive classroom simulator for boiler combustion, tuning, and analyzer basi
 
 > **Educational tool** — values and behaviors are simplified to teach concepts. Not intended for field calibration.
 
+## Prerequisites
+
+- [Node.js](https://nodejs.org/) 18 or later
+- npm (comes with Node)
+
+## Setup and run
+
+Install dependencies and start the development server:
+
+```bash
+npm i
+npm run dev
+```
+
+Open the printed URL (usually `http://localhost:5173`).
+
+Build & preview production:
+```bash
+npm run build
+npm run preview
+```
+
 ## What it simulates
 
 - **Fuel/Air mixing & excess air**  
@@ -25,21 +47,7 @@ Interactive classroom simulator for boiler combustion, tuning, and analyzer basi
 - **Troubleshooting scenarios**  
   Low air / hot stack, high draft / cold stack, dirty nozzles, biodiesel blend, and reset.
 
-## Quick start
-
-```bash
-npm i
-npm run dev
-```
-Open the printed URL (usually `http://localhost:5173`).
-
-Build & preview production:
-```bash
-npm run build
-npm run preview
-```
-
-## How to use
+## Example usage
 
 ### 1) Pick a fuel
 Choose **Natural Gas**, **Propane**, **Fuel Oil #2**, or **Biodiesel**. The UI shows HHV and typical O₂/CO‑AF targets.

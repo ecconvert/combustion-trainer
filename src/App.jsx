@@ -1,3 +1,11 @@
+/**
+ * Main simulator UI for the Combustion Trainer.
+ *
+ * This single file contains React components and state management for
+ * the entire educational boiler simulator. It depends on several helper
+ * modules located in `src/lib` for math, chemistry calculations, cam
+ * map generation and CSV export. Recharts is used for trend plotting.
+ */
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   LineChart,
@@ -15,7 +23,14 @@ import { downloadCSV } from "./lib/csv";
 import { computeCombustion } from "./lib/chemistry";
 import { buildSafeCamMap } from "./lib/cam";
 
-// Flame component
+/**
+ * Visual representation of a flame.
+ *
+ * @param {Object} props
+ * @param {number} props.phi - Equivalence ratio (φ) used to choose color.
+ * @param {number} props.intensity - 0–1 scale controlling size/brightness.
+ * @param {boolean} [props.pilot=false] - Render a smaller pilot flame.
+ */
 function Flame({ phi, intensity, pilot = false }) {
   let color = "#48b3ff"; // lean -> blue
   if (phi > 1.05 && phi < 1.2) color = "#ff8c00"; // near stoich -> orange
@@ -42,7 +57,9 @@ function Flame({ phi, intensity, pilot = false }) {
   );
 }
 
-// Spark component
+/**
+ * Small animated spark used during ignition.
+ */
 function Spark() {
   return (
     <div
@@ -60,7 +77,9 @@ function Spark() {
   );
 }
 
-// Smoke component shown during soot warning
+/**
+ * Puff of smoke displayed when CO levels indicate soot production.
+ */
 function Smoke() {
   return (
     <div
@@ -84,7 +103,14 @@ function Smoke() {
 }
 
 
-// Simple LED pill
+/**
+ * Simple status LED with label.
+ *
+ * @param {Object} props
+ * @param {boolean} props.on - Whether the LED is lit.
+ * @param {string} props.label - Text label shown to the right.
+ * @param {string} [props.color="limegreen"] - Light color when on.
+ */
 function Led({ on, label, color = "limegreen" }) {
   return (
     <div className="flex items-center gap-2">
@@ -98,86 +124,95 @@ function Led({ on, label, color = "limegreen" }) {
 }
 
 export default function CombustionTrainer() {
-  const [fuelKey, setFuelKey] = useState("Natural Gas");
-  const [unitSystem, setUnitSystem] = useState("imperial");
-  const fuel = FUELS[fuelKey];
-  // Helper to identify liquid fuels vs gases (must be declared before meter memos)
+  // ----------------------- Fuel selection -----------------------
+  const [fuelKey, setFuelKey] = useState("Natural Gas"); // currently selected fuel key
+  const [unitSystem, setUnitSystem] = useState("imperial"); // display units
+  const fuel = FUELS[fuelKey]; // lookup fuel properties
+  // Helper booleans for conditional UI/logic
   const isOil = fuelKey === "Fuel Oil #2" || fuelKey === "Biodiesel";
   const isGas = !isOil;
+
+  // Programmer timing constants derived from a common Fireye EP-160 sequence
   const EP160 = { PURGE_HF_SEC: 30, LOW_FIRE_MIN_SEC: 30, PTFI_SEC: 10, MTFI_SPARK_OFF_SEC: 10, MTFI_PILOT_OFF_SEC: 15, POST_PURGE_SEC: 15, FFRT_SEC: 4 };
-  const IGNITABLE_EA = { min: 0.85, max: 1.6 };
-  const STABLE_EA = { min: 0.9, max: 1.5 };
-  
-  const [boilerOn, setBoilerOn] = useState(true);
-  const [rheostat, setRheostat] = useState(0);
-  const [minFuel, setMinFuel] = useState(2);
+  // Ranges for air/fuel ratio expressed as excess air (EA)
+  const IGNITABLE_EA = { min: 0.85, max: 1.6 }; // flame can light within this EA window
+  const STABLE_EA = { min: 0.9, max: 1.5 }; // stable flame once running
+
+  // ----------------------- Global state -----------------------
+  const [boilerOn, setBoilerOn] = useState(true); // master power switch
+  const [rheostat, setRheostat] = useState(0); // firing-rate input 0–100%
+  const [minFuel, setMinFuel] = useState(2); // derived from regulator pressure
   const [maxFuel, setMaxFuel] = useState(18);
 
-  // User inputs
-  const [fuelFlow, setFuelFlow] = useState(5); // arbitrary mol/min scale
-  const [airFlow, setAirFlow] = useState(60); // moles/min scale
-  const [ambientF, setAmbientF] = useState(70);
+  // User-adjustable flow inputs (molar basis)
+  const [fuelFlow, setFuelFlow] = useState(5); // fuel flow (arbitrary mol/min scale)
+  const [airFlow, setAirFlow] = useState(60); // combustion air flow (mol/min)
+  const [ambientF, setAmbientF] = useState(70); // surrounding temperature
 
-  // --- Burner simulator FSM ---
-  const [burnerState, setBurnerState] = useState("OFF");
-  const [simStackF, setSimStackF] = useState(150);
-  const [setpointF, setSetpointF] = useState(350);
-  const stateTimeRef = useRef(0); // milliseconds in state
+  // ----------------------- Burner simulator state machine -----------------------
+  const [burnerState, setBurnerState] = useState("OFF"); // current programmer state
+  const [simStackF, setSimStackF] = useState(150); // simulated stack temperature
+  const [setpointF, setSetpointF] = useState(350); // stack temperature target
+  const stateTimeRef = useRef(0); // milliseconds elapsed in current state
 
-  // Analyzer FSM
+  // ----------------------- Analyzer state machine -----------------------
   const [anState, setAnState] = useState("OFF"); // OFF, ZERO, READY, SAMPLING, HOLD
-  const [probeInFlue, setProbeInFlue] = useState(false);
-  const [saved, setSaved] = useState([]);
-  const [t5Spark, setT5Spark] = useState(false);
+  const [probeInFlue, setProbeInFlue] = useState(false); // whether probe inserted
+  const [saved, setSaved] = useState([]); // logged analyzer readings
+  const [t5Spark, setT5Spark] = useState(false); // output relay states for animation
   const [t6Pilot, setT6Pilot] = useState(false);
   const [t7Main, setT7Main] = useState(false);
-  const [flameSignal, setFlameSignal] = useState(0);
-  const [stateCountdown, setStateCountdown] = useState(null);
-  const flameOutTimerRef = useRef(0);
+  const [flameSignal, setFlameSignal] = useState(0); // simulated flame scanner strength
+  const [stateCountdown, setStateCountdown] = useState(null); // seconds remaining in timed states
+  const flameOutTimerRef = useRef(0); // tracks flame failure detection time
   const [lockoutReason, setLockoutReason] = useState("");
   const [lockoutPending, setLockoutPending] = useState(false);
-  const [scenarioSel, setScenarioSel] = useState("");
+  const [scenarioSel, setScenarioSel] = useState(""); // current troubleshooting scenario
 
-  // Metering panel state
-  const [meterTab, setMeterTab] = useState("Gas");
-  const [gasDialSize, setGasDialSize] = useState(1);
-  const [gasRunning, setGasRunning] = useState(false);
-  const gasStartRef = useRef(null);
-  const [gasLaps, setGasLaps] = useState([]);
+  // ----------------------- Metering panel -----------------------
+  const [meterTab, setMeterTab] = useState("Gas"); // which meter UI is visible
+  const [gasDialSize, setGasDialSize] = useState(1); // cubic ft per dial revolution
+  const [gasRunning, setGasRunning] = useState(false); // manual timing running?
+  const gasStartRef = useRef(null); // timestamp when manual timing started
+  const [gasLaps, setGasLaps] = useState([]); // recorded revolution times
   const gasAvg = useMemo(
     () => (gasLaps.length ? gasLaps.reduce((a, b) => a + b, 0) / gasLaps.length : 0),
     [gasLaps],
   );
+  // Convert average lap time into cubic feet per hour and MBH
   const gasCFH = useMemo(
     () => (gasAvg > 0 ? (3600 * gasDialSize) / gasAvg : 0),
     [gasAvg, gasDialSize],
   );
   const gasMBH = useMemo(() => gasCFH * fuel.HHV / 1000, [gasCFH, fuel]);
+
   // Mapped vs actual burner gas flow
   const effectiveFuel = useMemo(
     () => (t7Main ? fuelFlow : (t6Pilot ? Math.min(fuelFlow, Math.max(0.5, minFuel * 0.5)) : 0)),
     [t7Main, t6Pilot, fuelFlow, minFuel]
   );
 
-  // Always tracks cam/reg mapping regardless of flame state
+  // Always track cam/reg mapping regardless of flame state
   const gasCamCFH = useMemo(() => (isGas ? Math.max(0, fuelFlow) : 0), [isGas, fuelFlow]);
-  // Actual burner flow (zero when valves closed / flame out)
+  // Actual burner flow (zero when valves closed or flame out)
   const gasBurnerCFH = useMemo(() => (isGas ? Math.max(0, effectiveFuel) : 0), [isGas, effectiveFuel]);
 
+  // Derived gas meter statistics for the running burner
   const gasMeterRevSec = useMemo(
     () => (gasBurnerCFH > 0 ? (3600 * gasDialSize) / gasBurnerCFH : 0),
     [gasBurnerCFH, gasDialSize]
   );
   const gasMBH_model = useMemo(() => gasBurnerCFH * fuel.HHV / 1000, [gasBurnerCFH, fuel]);
 
-  const [nozzleGPH100, setNozzleGPH100] = useState(0.75);
-  const [oilPressure, setOilPressure] = useState(100);
+  // Oil metering parameters
+  const [nozzleGPH100, setNozzleGPH100] = useState(0.75); // nozzle rating at 100 psi
+  const [oilPressure, setOilPressure] = useState(100); // pump pressure
   const oilGPH = useMemo(
     () => nozzleGPH100 * Math.sqrt(oilPressure / 100),
     [nozzleGPH100, oilPressure],
   );
   const oilMBH = useMemo(() => oilGPH * fuel.HHV / 1000, [oilGPH, fuel]);
-  // Always-tracking mapping vs actual burner flow
+  // Always-tracking mapping vs actual burner flow for oil
   const oilCamGPH = useMemo(() => (isOil ? Math.max(0, fuelFlow) : 0), [isOil, fuelFlow]);
   const oilBurnerGPH = useMemo(() => (isOil ? Math.max(0, effectiveFuel) : 0), [isOil, effectiveFuel]);
   const oilSecPerGal = useMemo(() => (oilBurnerGPH > 0 ? 3600 / oilBurnerGPH : 0), [oilBurnerGPH]);
@@ -332,19 +367,22 @@ useEffect(() => {
     setFuelFlow((v) => clamp(v, minFuel, maxFuel));
   }, [minFuel, maxFuel]);
 
-  // Time loop 10 Hz
+  // Main 10 Hz loop that advances the burner state machine and simulated sensors
   useEffect(() => {
     const id = setInterval(() => {
-      const dtms = 100;
-      stateTimeRef.current += dtms;
+      const dtms = 100; // loop interval in milliseconds
+      stateTimeRef.current += dtms; // track elapsed time in current state
 
-      // Compute EA_now once per tick for use in logic
+      // Compute current excess air (EA) for control logic
       const { C: _C, H: _H, O: _O } = fuel.formula;
       const _O2_needed = Math.max(0.0001, fuelFlow) * (_C + _H / 4 - _O / 2);
       const _airStoich = _O2_needed / 0.21;
       const EA_now = Math.max(0.1, airFlow / Math.max(0.001, _airStoich));
 
+      // ---- Programmer state machine ----
+      // Each branch represents a step in the ignition sequence.
       if (!boilerOn) {
+        // If power is cut, jump to postpurge to clear the chamber
         if (burnerState !== "OFF" && burnerState !== "POSTPURGE") {
           setT5Spark(false); setT6Pilot(false); setT7Main(false);
           setBurnerState("POSTPURGE");
@@ -354,24 +392,30 @@ useEffect(() => {
         setBurnerState("DRIVE_HI");
         stateTimeRef.current = 0;
       } else if (burnerState === "DRIVE_HI") {
+        // brief high-fire drive to open air damper
         if (stateTimeRef.current >= 1000) { setBurnerState("PREPURGE_HI"); stateTimeRef.current = 0; }
       } else if (burnerState === "PREPURGE_HI") {
+        // high-fire purge clears the chamber
         if (stateTimeRef.current >= EP160.PURGE_HF_SEC * 1000) { setBurnerState("DRIVE_LOW"); stateTimeRef.current = 0; }
       } else if (burnerState === "DRIVE_LOW") {
+        // move to low-fire for minimum purge
         if (stateTimeRef.current >= 1000) { setBurnerState("LOW_PURGE_MIN"); stateTimeRef.current = 0; }
       } else if (burnerState === "LOW_PURGE_MIN") {
         if (stateTimeRef.current >= EP160.LOW_FIRE_MIN_SEC * 1000) {
+          // begin pilot trial for ignition (PTFI)
           setBurnerState("PTFI");
           setT5Spark(true); setT6Pilot(true); setT7Main(false);
           stateTimeRef.current = 0;
         }
       } else if (burnerState === "PTFI") {
+        // pilot trial: wait for flame or lockout
         if (stateTimeRef.current >= EP160.PTFI_SEC * 1000) {
           if (flameSignal >= 10) {
-            setT7Main(true);
+            setT7Main(true); // main flame on
             setBurnerState("MTFI");
             stateTimeRef.current = 0;
           } else {
+            // flame not proven → lockout
             setT5Spark(false); setT6Pilot(false); setT7Main(false);
             setBurnerState("LOCKOUT");
             setLockoutReason("PTFI FLAME FAIL");
@@ -379,6 +423,7 @@ useEffect(() => {
           }
         }
       } else if (burnerState === "MTFI") {
+        // main-trial-for-ignition: drop spark then pilot
         if (stateTimeRef.current >= EP160.MTFI_SPARK_OFF_SEC * 1000) setT5Spark(false);
         if (stateTimeRef.current >= EP160.MTFI_PILOT_OFF_SEC * 1000) {
           setT6Pilot(false);
@@ -386,15 +431,16 @@ useEffect(() => {
           stateTimeRef.current = 0;
         }
       } else if (burnerState === "RUN_AUTO") {
-        // EA-based blowout check
+        // running state: monitor EA and flame signal
         if (EA_now < IGNITABLE_EA.min || EA_now > IGNITABLE_EA.max) {
+          // EA out of range causes immediate flame blowout
           setT7Main(false);
           setBurnerState("POSTPURGE");
           setLockoutReason("FLAME BLOWOUT (EA out of range)");
           setLockoutPending(true);
           stateTimeRef.current = 0;
-        } else
-        if (flameSignal < 10) {
+        } else if (flameSignal < 10) {
+          // delay timer for flame failure
           flameOutTimerRef.current += dtms;
           if (flameOutTimerRef.current >= EP160.FFRT_SEC * 1000) {
             setT7Main(false);
@@ -406,6 +452,7 @@ useEffect(() => {
           flameOutTimerRef.current = 0;
         }
       } else if (burnerState === "POSTPURGE") {
+        // continue fan to clear gases, then either lockout or off
         if (stateTimeRef.current >= EP160.POST_PURGE_SEC * 1000) {
           if (lockoutPending) {
             setBurnerState("LOCKOUT");
@@ -418,7 +465,7 @@ useEffect(() => {
         }
       }
 
-      // Countdown for timed states
+      // Display remaining time for states that have a fixed duration
       let remaining = null;
       if (burnerState === "PREPURGE_HI") remaining = EP160.PURGE_HF_SEC - stateTimeRef.current / 1000;
       else if (burnerState === "LOW_PURGE_MIN") remaining = EP160.LOW_FIRE_MIN_SEC - stateTimeRef.current / 1000;
@@ -427,6 +474,7 @@ useEffect(() => {
       else if (burnerState === "POSTPURGE") remaining = EP160.POST_PURGE_SEC - stateTimeRef.current / 1000;
       setStateCountdown(remaining !== null ? Math.max(0, Math.ceil(remaining)) : null);
 
+      // Simulate flame-sensor response with a bit of noise for realism
       setFlameSignal((prev) => {
         if (!(burnerState === "PTFI" || burnerState === "MTFI" || burnerState === "RUN_AUTO")) {
           return 0;
@@ -447,12 +495,13 @@ useEffect(() => {
         return clamp(prev + (target - prev) * 0.25 + noise, 0, 80);
       });
 
+      // First-order lag to approximate stack temperature rise and fall
       setSimStackF((prev) => {
-        const dt = 0.1;
-        let tau = 1.5;
+        const dt = 0.1; // integration step seconds
+        let tau = 1.5; // time constant
         let target = ambientF;
         if (burnerState === "OFF" || burnerState === "DRIVE_HI" || burnerState === "PREPURGE_HI" || burnerState === "DRIVE_LOW" || burnerState === "LOW_PURGE_MIN" || burnerState === "POSTPURGE" || burnerState === "LOCKOUT") {
-          tau = 3; target = ambientF;
+          tau = 3; target = ambientF; // cool to ambient
         } else if (burnerState === "PTFI") {
           tau = 2.5; target = Math.max(ambientF + 40, setpointF - 80);
         } else if (burnerState === "MTFI") {
