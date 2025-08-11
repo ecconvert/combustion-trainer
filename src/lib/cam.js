@@ -1,4 +1,5 @@
 import { clamp, lerp } from "./math";
+import { OXYGEN_IN_AIR_FRACTION } from "./chemistry";
 
 export const EXCESS_AIR_PROFILES = {
   "Natural Gas": [0, 1.4, 1.35, 1.32, 1.29, 1.26, 1.24, 1.23, 1.22, 1.21, 1.2],

@@ -75,7 +75,7 @@ export function computeCombustion({ fuel, fuelFlow, airFlow, stackTempF, ambient
     underTemp: stackTempF < 180,
   };
 
-  const CO_airfree = COAirFree(CO_ppm, O2_pct);
+  const CO_airfree = coAirFree(CO_ppm, O2_pct);
 
   return {
     O2_pct: Number(O2_pct.toFixed(2)),
