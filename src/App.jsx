@@ -880,71 +880,19 @@ const rheostatRampRef = useRef(null);
                     <YAxis yAxisId="right" orientation="right" domain={[0, 600]} />
                     <Tooltip />
                     <Legend />
-                    {seriesVisibility.O2 && (
-                      <Line
-                        yAxisId="left"
-                        type="monotone"
-                        dataKey="O2"
-                        dot={false}
-                        name="O₂ %"
-                        strokeWidth={2}
-                        isAnimationActive={false}
-                      />
-                    )}
-                    {seriesVisibility.CO2 && (
-                      <Line
-                        yAxisId="left"
-                        type="monotone"
-                        dataKey="CO2"
-                        dot={false}
-                        name="CO₂ %"
-                        strokeWidth={2}
-                        isAnimationActive={false}
-                      />
-                    )}
-                    {seriesVisibility.CO && (
-                      <Line
-                        yAxisId="right"
-                        type="monotone"
-                        dataKey="CO"
-                        dot={false}
-                        name="CO ppm"
-                        strokeWidth={2}
-                        isAnimationActive={false}
-                      />
-                    )}
-                    {seriesVisibility.NOx && (
-                      <Line
-                        yAxisId="right"
-                        type="monotone"
-                        dataKey="NOx"
-                        dot={false}
-                        name="NOₓ ppm"
-                        strokeWidth={2}
-                        isAnimationActive={false}
-                      />
-                    )}
-                    {seriesVisibility.StackF && (
-                      <Line
-                        yAxisId="right"
-                        type="monotone"
-                        dataKey="StackF"
-                        dot={false}
-                        name="Stack °F"
-                        strokeWidth={2}
-                        isAnimationActive={false}
-                      />
-                    )}
-                    {seriesVisibility.Eff && (
-                      <Line
-                        yAxisId="left"
-                        type="monotone"
-                        dataKey="Eff"
-                        dot={false}
-                        name="Eff %"
-                        strokeWidth={2}
-                        isAnimationActive={false}
-                      />
+                    {seriesConfig.map((series) =>
+                      seriesVisibility[series.key] && (
+                        <Line
+                          key={series.key}
+                          yAxisId={series.yAxisId}
+                          type="monotone"
+                          dataKey={series.key}
+                          dot={false}
+                          name={series.name}
+                          strokeWidth={2}
+                          isAnimationActive={false}
+                        />
+                      )
                     )}
                   </LineChart>
                 </ResponsiveContainer>
