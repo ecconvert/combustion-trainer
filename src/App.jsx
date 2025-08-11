@@ -22,6 +22,10 @@ import { clamp, lerp, f2c, num } from "./lib/math";
 import { downloadCSV } from "./lib/csv";
 import { computeCombustion } from "./lib/chemistry";
 import { buildSafeCamMap } from "./lib/cam";
+import TechnicianDrawer from "./components/TechnicianDrawer";
+import SettingsModal from "./components/SettingsModal";
+import SeriesVisibility from "./components/SeriesVisibility";
+import { useUI } from "./uiStore.jsx";
 
 /**
  * Visual representation of a flame.
@@ -124,10 +128,12 @@ function Led({ on, label, color = "limegreen" }) {
 }
 
 export default function CombustionTrainer() {
+  const { state, setState, resetLayout } = useUI();
+  const unitSystem = state.config.units;
   // ----------------------- Fuel selection -----------------------
   const [fuelKey, setFuelKey] = useState("Natural Gas"); // currently selected fuel key
-  const [unitSystem, setUnitSystem] = useState("imperial"); // display units
   const fuel = FUELS[fuelKey]; // lookup fuel properties
+  const [settingsOpen, setSettingsOpen] = useState(false);
   // Helper booleans for conditional UI/logic
   const isOil = fuelKey === "Fuel Oil #2" || fuelKey === "Biodiesel";
   const isGas = !isOil;
@@ -729,10 +735,9 @@ const rheostatRampRef = useRef(null);
         <div className="max-w-7xl mx-auto flex items-center gap-4">
           <h1 className="text-2xl font-semibold">Combustion Trainer</h1>
           <div className="ml-auto flex items-center gap-3">
-            <select aria-label="unit system" className="border rounded-md px-2 py-1" value={unitSystem} onChange={(e) => setUnitSystem(e.target.value)}>
-              <option value="imperial">Imperial</option>
-              <option value="metric">Metric</option>
-            </select>
+            <button className="btn" onClick={() => setState((s) => ({ ...s, drawerOpen: true }))}>Technician</button>
+            <button className="btn" onClick={() => setSettingsOpen(true)} aria-label="Settings">⚙️</button>
+            <button className="btn" onClick={resetLayout}>Reset Layout</button>
             <button className="btn" onClick={() => downloadCSV("session.csv", history)}>Export Trend CSV</button>
             <button className="btn" onClick={() => downloadCSV("saved-readings.csv", saved)}>Export Saved Readings</button>
           </div>
@@ -740,6 +745,9 @@ const rheostatRampRef = useRef(null);
       </header>
 
       <main className="max-w-7xl mx-auto p-6 grid grid-cols-12 gap-4">
+        <section className="col-span-12">
+          <SeriesVisibility />
+        </section>
         {/* Left controls */}
         <section className="col-span-12 lg:col-span-3 space-y-4">
           <div className="card">
@@ -1275,6 +1283,8 @@ const rheostatRampRef = useRef(null);
       </main>
 
       <footer className="max-w-7xl mx-auto p-6 text-xs text-slate-500">Educational model. For classroom intuition only.</footer>
+      <TechnicianDrawer openSettings={() => setSettingsOpen(true)} />
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }

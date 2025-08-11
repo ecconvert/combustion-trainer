@@ -97,8 +97,16 @@ root
 ## Scripts
 
 - `npm run dev` — start dev server  
-- `npm run build` — production build  
+- `npm run build` — production build
 - `npm run preview` — preview the built app
+
+## Panels and customization
+
+- Collapse panels by clicking their headers; collapsed panels remain mounted so data continues updating.
+- Panels can be rearranged by dragging their headers. Layout is saved per breakpoint in localStorage under `uiLayout_v1`.
+- Open the **Technician** drawer from the top bar to access secondary panels such as the analyzer, ambient inputs, trends, and saved readings.
+- Open **Settings** from the gear icon in the top bar or from inside the Technician drawer. Choices for theme, units, sampling rate, and trend length persist to `app_config_v1`.
+- Use the **Reset Layout** button in the top bar to clear saved layout and restore defaults.
 
 ## Notes & limitations
 
