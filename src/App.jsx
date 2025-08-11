@@ -22,6 +22,9 @@ import { clamp, lerp, f2c, num } from "./lib/math";
 import { downloadCSV } from "./lib/csv";
 import { computeCombustion } from "./lib/chemistry";
 import { buildSafeCamMap } from "./lib/cam";
+import CollapsibleSection from './components/CollapsibleSection.jsx';
+import RightDrawer from './components/RightDrawer.jsx';
+import SeriesVisibility from './components/SeriesVisibility.jsx';
 
 /**
  * Visual representation of a flame.
@@ -742,8 +745,7 @@ const rheostatRampRef = useRef(null);
       <main className="max-w-7xl mx-auto p-6 grid grid-cols-12 gap-4">
         {/* Left controls */}
         <section className="col-span-12 lg:col-span-3 space-y-4">
-          <div className="card">
-            <div className="label">Fuel</div>
+          <CollapsibleSection id="fuel" title="Fuel">
             <select aria-label="fuel selector" className="w-full border rounded-md px-2 py-2 mt-1" value={fuelKey} onChange={(e) => setFuelKey(e.target.value)}>
               {Object.keys(FUELS).map((k) => (
                 <option key={k} value={k}>{k}</option>
@@ -751,11 +753,9 @@ const rheostatRampRef = useRef(null);
             </select>
             <div className="mt-2 text-sm text-slate-600">HHV: {FUELS[fuelKey].HHV.toLocaleString()} Btu/{FUELS[fuelKey].unit}</div>
             <div className="mt-1 text-xs text-slate-500">Targets: O₂ {fuel.targets.O2[0]} to {fuel.targets.O2[1]} percent, CO air-free ≤ {fuel.targets.COafMax} ppm</div>
-          </div>
+          </CollapsibleSection>
 
-
-          <div className="card">
-            <div className="label">Boiler Power</div>
+          <CollapsibleSection id="power" title="Boiler Power & Fire Rate">
             <div className="flex items-center gap-2 mt-2">
               <button className={`btn ${boilerOn ? 'btn-primary' : ''}`} onClick={() => setBoilerOn(true)}>On</button>
               <button className="btn" onClick={() => setBoilerOn(false)}>Off</button>
@@ -785,7 +785,7 @@ const rheostatRampRef = useRef(null);
                 </div>
               </div>
             )}
-          </div>
+          </CollapsibleSection>
 
           {tuningActive && (
             <div className="card">
@@ -1116,6 +1116,8 @@ const rheostatRampRef = useRef(null);
               </ResponsiveContainer>
             </div>
           </div>
+
+          <SeriesVisibility />
         </section>
 
         {/* Right readouts and saved table */}
@@ -1275,6 +1277,11 @@ const rheostatRampRef = useRef(null);
       </main>
 
       <footer className="max-w-7xl mx-auto p-6 text-xs text-slate-500">Educational model. For classroom intuition only.</footer>
+      <RightDrawer>
+        <CollapsibleSection id="drawer-analyzer" title="Analyzer">
+          <div className="text-sm">Analyzer controls placeholder</div>
+        </CollapsibleSection>
+      </RightDrawer>
     </div>
   );
 }
