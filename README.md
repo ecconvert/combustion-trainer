@@ -112,3 +112,10 @@ root
 - Persist cam maps per fuel in localStorage
 - Add draft input and effect on stack losses
 
+
+## Panels and customization
+
+Major panels can be collapsed from their headers and their open/closed state is remembered across reloads. The **Technician** button in the top bar opens a slide-in drawer for secondary panels, each kept mounted when collapsed.
+
+Open **Settings** from the gear icon in the top bar or the drawer to adjust theme, units, sampling rate and trend length. Settings persist in `app_config_v1`; layout data is saved under `uiLayout_v1` and cleared with **Reset Layout**.
+

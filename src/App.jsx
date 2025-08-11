@@ -22,6 +22,10 @@ import { clamp, lerp, f2c, num } from "./lib/math";
 import { downloadCSV } from "./lib/csv";
 import { computeCombustion } from "./lib/chemistry";
 import { buildSafeCamMap } from "./lib/cam";
+import { UIProvider, useUIStore } from "./uiStore";
+import TechnicianDrawer from "./components/TechnicianDrawer";
+import SettingsModal from "./components/SettingsModal";
+import SeriesVisibility from "./components/SeriesVisibility";
 
 /**
  * Visual representation of a flame.
@@ -123,7 +127,7 @@ function Led({ on, label, color = "limegreen" }) {
   );
 }
 
-export default function CombustionTrainer() {
+function CombustionTrainerInner() {
   // ----------------------- Fuel selection -----------------------
   const [fuelKey, setFuelKey] = useState("Natural Gas"); // currently selected fuel key
   const [unitSystem, setUnitSystem] = useState("imperial"); // display units
@@ -139,6 +143,7 @@ export default function CombustionTrainer() {
   const STABLE_EA = { min: 0.9, max: 1.5 }; // stable flame once running
 
   // ----------------------- Global state -----------------------
+  const { setDrawerOpen, resetLayout, setSettingsOpen } = useUIStore();
   const [boilerOn, setBoilerOn] = useState(true); // master power switch
   const [rheostat, setRheostat] = useState(0); // firing-rate input 0–100%
   const [minFuel, setMinFuel] = useState(2); // derived from regulator pressure
@@ -735,7 +740,10 @@ const rheostatRampRef = useRef(null);
             </select>
             <button className="btn" onClick={() => downloadCSV("session.csv", history)}>Export Trend CSV</button>
             <button className="btn" onClick={() => downloadCSV("saved-readings.csv", saved)}>Export Saved Readings</button>
-          </div>
+            <button className="btn" onClick={() => setDrawerOpen(true)}>Technician</button>
+            <button className="btn" onClick={() => setSettingsOpen(true)}>⚙️</button>
+            <button className="btn" onClick={resetLayout}>Reset Layout</button>
+</div>
         </div>
       </header>
 
@@ -1245,6 +1253,7 @@ const rheostatRampRef = useRef(null);
               </tbody>
             </table>
           </div>
+          <SeriesVisibility />
 
         </section>
 
@@ -1275,6 +1284,16 @@ const rheostatRampRef = useRef(null);
       </main>
 
       <footer className="max-w-7xl mx-auto p-6 text-xs text-slate-500">Educational model. For classroom intuition only.</footer>
+      <TechnicianDrawer />
+      <SettingsModal />
     </div>
+  );
+}
+
+export default function CombustionTrainer() {
+  return (
+    <UIProvider>
+      <CombustionTrainerInner />
+    </UIProvider>
   );
 }
