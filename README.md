@@ -26,6 +26,15 @@ npm run build
 npm run preview
 ```
 
+## Layout and Panels
+
+Panels in the interface can be collapsed to save space while staying mounted so live values continue updating.
+Each major panel is draggable; positions are persisted per breakpoint in `localStorage` under the key `uiLayout_v1`.
+A **Reset Layout** button clears the saved layout and restores the defaults.
+
+The right edge houses a technician drawer containing analyzer tools, trend displays and other secondary controls.
+On desktop the drawer occupies 25% width; on phones it slides over the full screen.
+
 ## What it simulates
 
 - **Fuel/Air mixing & excess air**  
