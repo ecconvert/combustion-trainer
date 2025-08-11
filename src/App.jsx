@@ -36,11 +36,6 @@ import { useUIState } from "./components/UIStateContext";
  * @param {boolean} [props.pilot=false] - Render a smaller pilot flame.
  */
 
-
-
-
-
-
 const seriesConfig = [
   { key: 'O2', name: 'O₂ %', yAxisId: 'left' },
   { key: 'CO2', name: 'CO₂ %', yAxisId: 'left' },
@@ -669,13 +664,13 @@ const row = {
   }, [disp, rheostat, fuelFlow, airFlow]);
   // Scenario presets (adds to previous ones)
   const handleScenarioChange = (e) => {
-  const v = e.target.value;
-  setScenarioSel(v);
-  if (v) {
-    applyScenario(v);
-    setScenarioSel("");
-  }
-};
+    const v = e.target.value;
+    setScenarioSel(v);
+    if (v) {
+      applyScenario(v);
+      setScenarioSel("");
+    }
+  };
   const applyScenario = (key) => {
     const s = {
       "Low air, hot stack": () => { setAirFlow(30); setFuelFlow(8); },
