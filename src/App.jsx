@@ -880,46 +880,80 @@ const rheostatRampRef = useRef(null);
                     <YAxis yAxisId="right" orientation="right" domain={[0, 600]} />
                     <Tooltip />
                     <Legend />
-                    <Line
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey="O2"
-                      dot={false}
-                      name="O₂ %"
-                      strokeWidth={2}
-                      isAnimationActive={false}
-                    />
-                    <Line
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey="CO2"
-                      dot={false}
-                      name="CO₂ %"
-                      strokeWidth={2}
-                      isAnimationActive={false}
-                    />
-                    <Line
-                      yAxisId="right"
-                      type="monotone"
-                      dataKey="StackF"
-                      dot={false}
-                      name="Stack °F"
-                      strokeWidth={2}
-                      isAnimationActive={false}
-                    />
-                    <Line
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey="Eff"
-                      dot={false}
-                      name="Eff %"
-                      strokeWidth={2}
-                      isAnimationActive={false}
-                    />
+                    {seriesVisibility.O2 && (
+                      <Line
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey="O2"
+                        dot={false}
+                        name="O₂ %"
+                        strokeWidth={2}
+                        isAnimationActive={false}
+                      />
+                    )}
+                    {seriesVisibility.CO2 && (
+                      <Line
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey="CO2"
+                        dot={false}
+                        name="CO₂ %"
+                        strokeWidth={2}
+                        isAnimationActive={false}
+                      />
+                    )}
+                    {seriesVisibility.CO && (
+                      <Line
+                        yAxisId="right"
+                        type="monotone"
+                        dataKey="CO"
+                        dot={false}
+                        name="CO ppm"
+                        strokeWidth={2}
+                        isAnimationActive={false}
+                      />
+                    )}
+                    {seriesVisibility.NOx && (
+                      <Line
+                        yAxisId="right"
+                        type="monotone"
+                        dataKey="NOx"
+                        dot={false}
+                        name="NOₓ ppm"
+                        strokeWidth={2}
+                        isAnimationActive={false}
+                      />
+                    )}
+                    {seriesVisibility.StackF && (
+                      <Line
+                        yAxisId="right"
+                        type="monotone"
+                        dataKey="StackF"
+                        dot={false}
+                        name="Stack °F"
+                        strokeWidth={2}
+                        isAnimationActive={false}
+                      />
+                    )}
+                    {seriesVisibility.Eff && (
+                      <Line
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey="Eff"
+                        dot={false}
+                        name="Eff %"
+                        strokeWidth={2}
+                        isAnimationActive={false}
+                      />
+                    )}
                   </LineChart>
                 </ResponsiveContainer>
               </div>
             </div>
+            <SeriesVisibility
+              visibility={seriesVisibility}
+              setVisibility={setSeriesVisibility}
+            />
             <div className="card">
               <div className="label">Clock the Boiler (Metering)</div>
               <div className="flex gap-2 mt-2">
