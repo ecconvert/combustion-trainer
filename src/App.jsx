@@ -148,6 +148,15 @@ export default function CombustionTrainer() {
   const [fuelFlow, setFuelFlow] = useState(5); // fuel flow (arbitrary mol/min scale)
   const [airFlow, setAirFlow] = useState(60); // combustion air flow (mol/min)
   const [ambientF, setAmbientF] = useState(70); // surrounding temperature
+  const [flowDisplay, setFlowDisplay] = useState("fuel"); // which flow to show
+
+  // UI collapse/visibility toggles
+  const [showProgrammer, setShowProgrammer] = useState(true);
+  const [showTrendGraph, setShowTrendGraph] = useState(false);
+  const [showTrendTable, setShowTrendTable] = useState(false);
+  const [showSaved, setShowSaved] = useState(false);
+  const [showClock, setShowClock] = useState(false);
+  const [showAmbient, setShowAmbient] = useState(false);
 
   // ----------------------- Burner simulator state machine -----------------------
   const [burnerState, setBurnerState] = useState("OFF"); // current programmer state
@@ -580,6 +589,7 @@ useEffect(() => {
   const insertProbe = () => { if (anState === "READY") { setProbeInFlue(true); setAnState("SAMPLING"); } };
   const holdAnalyzer = () => { if (anState === "SAMPLING") setAnState("HOLD"); };
   const resumeAnalyzer = () => { if (anState === "HOLD") setAnState("SAMPLING"); };
+  const powerOffAnalyzer = () => { setAnState("OFF"); setProbeInFlue(false); };
   const saveReading = () => {
     const row = {
       t: new Date().toLocaleTimeString(),
@@ -755,33 +765,38 @@ const rheostatRampRef = useRef(null);
 
 
           <div className="card">
-            <div className="label">Boiler Power</div>
+            <div className="label">Boiler Controls</div>
             <div className="flex items-center gap-2 mt-2">
               <button className={`btn ${boilerOn ? 'btn-primary' : ''}`} onClick={() => setBoilerOn(true)}>On</button>
               <button className="btn" onClick={() => setBoilerOn(false)}>Off</button>
+              <input
+                aria-label="firing rate"
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={rheostat}
+                onChange={(e) => { if (!canSetFiring) return; setRheostat(parseInt(e.target.value)); }}
+                className="flex-1"
+                disabled={!canSetFiring}
+              />
+              <div className="value w-14 text-right">{rheostat}%</div>
             </div>
-            <div className="label mt-4">Firing Rate (rheostat)</div>
-            <input
-              aria-label="firing rate"
-              type="range"
-              min={0}
-              max={100}
-              step={1}
-              value={rheostat}
-              onChange={(e) => { if (!canSetFiring) return; setRheostat(parseInt(e.target.value)); }}
-              className="w-full"
-              disabled={!canSetFiring}
-            />
-            <div className="value">{rheostat}%</div>
             {!tuningActive && (
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <div>
-                  <div className="label">Fuel Flow ({FUELS[fuelKey].unit}, scaled)</div>
-                  <div className="value">{fuelFlow.toFixed(2)}</div>
-                </div>
-                <div>
-                  <div className="label">Air Flow (cfm, scaled)</div>
-                  <div className="value">{Number(airFlow).toFixed(2)}</div>
+              <div className="mt-3">
+                <div className="label">Flows</div>
+                <select
+                  className="w-full border rounded-md px-2 py-1 mt-1"
+                  value={flowDisplay}
+                  onChange={(e) => setFlowDisplay(e.target.value)}
+                >
+                  <option value="fuel">Fuel</option>
+                  <option value="air">Air</option>
+                </select>
+                <div className="value mt-1">
+                  {flowDisplay === 'fuel'
+                    ? `${fuelFlow.toFixed(2)} ${FUELS[fuelKey].unit}`
+                    : `${Number(airFlow).toFixed(2)} cfm`}
                 </div>
               </div>
             )}
@@ -1044,37 +1059,8 @@ const rheostatRampRef = useRef(null);
                     <div className="value">{Number(airFlow).toFixed(2)}</div>
                   </>
                 )}
-
-                <div className="label mt-6">Ambient Temperature (°F)</div>
-                <input aria-label="ambient temperature" type="number" className="w-full border rounded-md px-2 py-1" value={ambientF} onChange={(e) => setAmbientF(parseFloat(e.target.value || 0))} />
               </div>
             </div>
-          </div>
-
-          {/* Analyzer dock */}
-          <div className="card mt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="label">Analyzer</div>
-                <div className="text-sm">State: {anState} {probeInFlue && <span className="pill bg-slate-100 ml-2">Probe in flue</span>}</div>
-              </div>
-              <div className="flex gap-2 items-center">
-                <Led on={anState !== "OFF"} label="Power" />
-                <Led on={anState === "ZERO"} label="Zero" color="#06b6d4" />
-                <Led on={anState === "SAMPLING"} label="Sampling" color="#84cc16" />
-                <Led on={anState === "HOLD"} label="Hold" color="#f59e0b" />
-              </div>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button className="btn" onClick={startAnalyzer}>Start</button>
-              <button className="btn" onClick={finishZero} disabled={anState !== "ZERO"}>Finish Zero</button>
-              <button className="btn" onClick={insertProbe} disabled={anState !== "READY"}>Insert Probe</button>
-              <button className="btn" onClick={() => setProbeInFlue(false)}>Remove Probe</button>
-              <button className="btn" onClick={holdAnalyzer} disabled={anState !== "SAMPLING"}>Hold</button>
-              <button className="btn" onClick={resumeAnalyzer} disabled={anState !== "HOLD"}>Resume</button>
-              <button className="btn-primary" onClick={saveReading} disabled={anState === "OFF"}>Save Reading</button>
-            </div>
-            <div className="mt-2 text-xs text-slate-500">Zero in room air to capture combustion air temperature. Then insert probe to sample.</div>
           </div>
 
           <div className="card mt-4">
@@ -1096,10 +1082,70 @@ const rheostatRampRef = useRef(null);
             </div>
             <div className="mt-2 text-xs text-slate-500">Prepurge {EP160.PURGE_HF_SEC}s → Low fire {EP160.LOW_FIRE_MIN_SEC}s → PTFI {EP160.PTFI_SEC}s → MTFI (spark off {EP160.MTFI_SPARK_OFF_SEC}s, pilot off {EP160.MTFI_PILOT_OFF_SEC}s) → Run → Post purge {EP160.POST_PURGE_SEC}s.</div>
           </div>
-          {/* Trend chart */}
-          <div className="card mt-4">
-            <div className="label">Trend (last {history.length} points)</div>
-            <div className="h-64">
+        </section>
+
+        {/* Right readouts and saved table */}
+        <section className="col-span-12 lg:col-span-3 space-y-4">
+          <div className="card">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="label">Analyzer</div>
+                <div className="text-sm">State: {anState} {probeInFlue && <span className="pill bg-slate-100 ml-2">Probe in flue</span>}</div>
+              </div>
+              <div className="flex gap-2 items-center">
+                <Led on={anState !== "OFF"} label="Power" />
+                <Led on={anState === "ZERO"} label="Zero" color="#06b6d4" />
+                <Led on={anState === "SAMPLING"} label="Sampling" color="#84cc16" />
+                <Led on={anState === "HOLD"} label="Hold" color="#f59e0b" />
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button className="btn" onClick={startAnalyzer}>Start</button>
+              <button className="btn" onClick={finishZero} disabled={anState !== "ZERO"}>Finish Zero</button>
+              <button className="btn" onClick={insertProbe} disabled={anState !== "READY"}>Insert Probe</button>
+              <button className="btn" onClick={() => setProbeInFlue(false)}>Remove Probe</button>
+              <button className="btn" onClick={holdAnalyzer} disabled={anState !== "SAMPLING"}>Hold</button>
+              <button className="btn" onClick={resumeAnalyzer} disabled={anState !== "HOLD"}>Resume</button>
+              <button className="btn" onClick={powerOffAnalyzer}>Power Off</button>
+              <button className="btn-primary" onClick={saveReading} disabled={anState === "OFF"}>Save Reading</button>
+            </div>
+            <div className="mt-2 text-xs text-slate-500">Zero in room air to capture combustion air temperature. Then insert probe to sample.</div>
+          </div>
+
+          <div className="card grid grid-cols-2 gap-3" role="group" aria-label="readouts">
+            <div><div className="label">O₂ (dry)</div><div className="value">{disp.O2.toFixed(2)}%</div></div>
+            <div><div className="label">CO₂ (dry)</div><div className="value">{disp.CO2.toFixed(2)}%</div></div>
+            <div><div className="label">CO</div><div className="value">{Math.round(disp.CO)} ppm</div></div>
+            <div><div className="label">CO air-free</div><div className="value">{Math.round(disp.COaf)} ppm</div></div>
+            <div><div className="label">NOₓ</div><div className="value">{Math.round(disp.NOx)} ppm</div></div>
+            <div><div className="label">Excess Air</div><div className="value">{((steady.excessAir - 1) * 100).toFixed(1)}%</div></div>
+            <div><div className="label">Efficiency</div><div className="value">{Number(disp.Eff).toFixed(1)}%</div></div>
+            <div><div className="label">Stack</div><div className="value">{Math.round(disp.StackF)} °F</div></div>
+
+            {/* Targets overlay */}
+            <div className="col-span-2 text-xs text-slate-500 mt-1">
+              Targets for {fuelKey}: O₂ {fuel.targets.O2[0]} to {fuel.targets.O2[1]} percent; CO AF ≤ {fuel.targets.COafMax} ppm; stack {fuel.targets.stackF[0]} to {fuel.targets.stackF[1]} °F.
+            </div>
+            <div className="col-span-2 mt-2">
+              <button className="label w-full text-left" onClick={() => setShowAmbient(!showAmbient)}>Ambient Temp</button>
+              {showAmbient && (
+                <input
+                  aria-label="ambient temperature"
+                  type="number"
+                  className="w-full border rounded-md px-2 py-1 mt-1"
+                  value={ambientF}
+                  onChange={(e) => setAmbientF(parseFloat(e.target.value || 0))}
+                />
+              )}
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="flex items-center justify-between">
+              <div className="label">Trend Graph</div>
+              <button className="btn btn-sm" onClick={() => setShowTrendGraph(!showTrendGraph)}>{showTrendGraph ? 'Hide' : 'Show'}</button>
+            </div>
+            <div className={`h-64 mt-2 ${showTrendGraph ? '' : 'hidden'}`}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={history} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" />
@@ -1116,161 +1162,125 @@ const rheostatRampRef = useRef(null);
               </ResponsiveContainer>
             </div>
           </div>
-        </section>
-
-        {/* Right readouts and saved table */}
-        <section className="col-span-12 lg:col-span-3 space-y-4">
-          <div className="card grid grid-cols-2 gap-3" role="group" aria-label="readouts">
-            <div><div className="label">O₂ (dry)</div><div className="value">{disp.O2.toFixed(2)}%</div></div>
-            <div><div className="label">CO₂ (dry)</div><div className="value">{disp.CO2.toFixed(2)}%</div></div>
-            <div><div className="label">CO</div><div className="value">{Math.round(disp.CO)} ppm</div></div>
-            <div><div className="label">CO air-free</div><div className="value">{Math.round(disp.COaf)} ppm</div></div>
-            <div><div className="label">NOₓ</div><div className="value">{Math.round(disp.NOx)} ppm</div></div>
-            <div><div className="label">Excess Air</div><div className="value">{((steady.excessAir - 1) * 100).toFixed(1)}%</div></div>
-            <div><div className="label">Efficiency</div><div className="value">{Number(disp.Eff).toFixed(1)}%</div></div>
-            <div><div className="label">Stack</div><div className="value">{Math.round(disp.StackF)} °F</div></div>
-
-            {/* Targets overlay */}
-            <div className="col-span-2 text-xs text-slate-500 mt-1">
-              Targets for {fuelKey}: O₂ {fuel.targets.O2[0]} to {fuel.targets.O2[1]} percent; CO AF ≤ {fuel.targets.COafMax} ppm; stack {fuel.targets.stackF[0]} to {fuel.targets.stackF[1]} °F.
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="label">Clock the Boiler (Metering)</div>
-            <div className="flex gap-2 mt-2">
-              <button
-                className={`btn ${meterTab === 'Gas' ? 'btn-primary' : ''}`}
-                onClick={() => setMeterTab('Gas')}
-              >
-                Gas Meter
-              </button>
-              <button
-                className={`btn ${meterTab === 'Oil' ? 'btn-primary' : ''}`}
-                onClick={() => setMeterTab('Oil')}
-              >
-                Oil Meter
-              </button>
-            </div>
-            {meterTab === 'Gas' ? (
-              <div className="mt-3 space-y-2">
-                <label className="text-sm">
-                  Dial size (ft³)
-                  <input
-                    type="number"
-                    list="dialSizes"
-                    className="w-full border rounded-md px-2 py-1 mt-1"
-                    value={gasDialSize}
-                    onChange={(e) => setGasDialSize(parseFloat(e.target.value || 0))}
-                  />
-                  <datalist id="dialSizes">
-                    <option value="0.25" />
-                    <option value="0.5" />
-                    <option value="1" />
-                    <option value="2" />
-                  </datalist>
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  <button className="btn btn-primary" onClick={startGasClock} disabled={gasRunning || !isGas}>Start</button>
-                  <button className="btn" onClick={lapGasClock} disabled title="Meter laps are generated automatically from current burner flow">Lap</button>
-                  <button className="btn" onClick={stopGasClock} disabled={!gasRunning}>Stop</button>
-                  <button className="btn" onClick={resetGasClock}>Reset</button>
-                  <button className="btn" onClick={exportGasClock} disabled={!gasLaps.length}>Export</button>
-                </div>
-                {!isGas && (
-                  <div className="text-xs text-slate-500 mt-1">
-                    Gas meter is only active for Natural Gas/Propane. Select a gas fuel to clock.
-                  </div>
-                )}
-                <div className="text-sm">
-                  Sim sec/rev (from burner): <span className="font-semibold">
-                    {gasMeterRevSec > 0 ? gasMeterRevSec.toFixed(1) : '—'}
-                  </span>
-                </div>
-                <div className="text-sm">Meter CFH (clocked avg): <span className="font-semibold">{gasCFH.toFixed(1)}</span></div>
-                <div className="text-sm">Burner CFH (model): <span className="font-semibold">{gasBurnerCFH.toFixed(1)}</span></div>
-                <div className="text-sm">Cam/Reg CFH (mapped): <span className="font-semibold">{gasCamCFH.toFixed(1)}</span></div>
-                <div className="text-sm">Input MBH (model): <span className="font-semibold">{gasMBH_model.toFixed(1)}</span></div>
-              </div>
-            ) : (
-              <div className="mt-3 space-y-2">
-                <div className="text-sm">Burner GPH (model): <span className="font-semibold">{oilBurnerGPH.toFixed(2)}</span></div>
-                <div className="text-sm">Cam/Reg GPH (mapped): <span className="font-semibold">{oilCamGPH.toFixed(2)}</span></div>
-                <div className="text-sm">Sec/gal at current flow: <span className="font-semibold">{oilSecPerGal > 0 ? oilSecPerGal.toFixed(0) : '—'}</span></div>
-                <div className="text-sm">Volume in 60s: <span className="font-semibold">{(oilBurnerGPH/60).toFixed(2)}</span> gal</div>
-                <div className="text-xs text-slate-500">Field estimate from nozzle/pressure (optional):</div>
-                <label className="text-sm">
-                  Nozzle GPH @100 psi
-                  <input
-                    type="number"
-                    className="w-full border rounded-md px-2 py-1 mt-1"
-                    value={nozzleGPH100}
-                    onChange={(e) => setNozzleGPH100(parseFloat(e.target.value || 0))}
-                  />
-                </label>
-                <label className="text-sm">
-                  Pump pressure (psi)
-                  <input
-                    type="number"
-                    className="w-full border rounded-md px-2 py-1 mt-1"
-                    value={oilPressure}
-                    onChange={(e) => setOilPressure(parseFloat(e.target.value || 0))}
-                  />
-                </label>
-                <div className="text-sm">Actual GPH: <span className="font-semibold">{oilGPH.toFixed(2)}</span></div>
-                <div className="text-sm">Input MBH: <span className="font-semibold">{oilMBH.toFixed(1)}</span></div>
-                <button className="btn mt-2" onClick={exportOilClock}>Export</button>
-              </div>
-            )}
-          </div>
 
           <div className="card overflow-x-auto">
-            <div className="label mb-2">Saved readings</div>
-            <table className="min-w-full text-xs">
-              <thead>
-                <tr className="text-left text-slate-500">
-                  {"t,Fuel,Rate,FuelFlow,AirFlow,O2,CO2,COaf,CO,NOx,StackF,Eff,EA,Mode".split(",").map((h) => (
+            <div className="flex items-center justify-between">
+              <div className="label">Trend Table</div>
+              <button className="btn btn-sm" onClick={() => setShowTrendTable(!showTrendTable)}>{showTrendTable ? 'Hide' : 'Show'}</button>
+            </div>
+            <div className={`${showTrendTable ? '' : 'hidden'} mt-2`}>
+              <table className="min-w-full text-xs">
+                <thead>
+                  <tr className="text-left text-slate-500">
+                    <th className="py-1 pr-3">t</th>
+                    <th className="py-1 pr-3">O2</th>
+                    <th className="py-1 pr-3">CO2</th>
+                    <th className="py-1 pr-3">StackF</th>
+                    <th className="py-1 pr-3">Eff</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.slice(-40).map((r, i) => (
+                    <tr key={i} className="border-t">
+                      <td className="py-1 pr-3 whitespace-nowrap">{r.ts}</td>
+                      <td className="py-1 pr-3 whitespace-nowrap">{r.O2?.toFixed?.(2)}</td>
+                      <td className="py-1 pr-3 whitespace-nowrap">{r.CO2?.toFixed?.(2)}</td>
+                      <td className="py-1 pr-3 whitespace-nowrap">{r.StackF?.toFixed?.(0)}</td>
+                      <td className="py-1 pr-3 whitespace-nowrap">{r.Eff?.toFixed?.(1)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+
+          <div className="card overflow-x-auto">
+            <div className="flex items-center justify-between mb-2">
+              <div className="label mb-0">Saved readings</div>
+              <button className="btn btn-sm" onClick={() => setShowSaved(!showSaved)}>{showSaved ? 'Hide' : 'Show'}</button>
+            </div>
+            <div className={`${showSaved ? '' : 'hidden'}`}>
+              <table className="min-w-full text-xs">
+                <thead>
+                  <tr className="text-left text-slate-500">
+                    {"t,Fuel,Rate,FuelFlow,AirFlow,O2,CO2,COaf,CO,NOx,StackF,Eff,EA,Mode".split(",").map((h) => (
   <th key={h} className="py-1 pr-3">{h}</th>
 ))}
-                </tr>
-              </thead>
-              <tbody>
-                {saved.slice(-40).map((r, i) => (
-                  <tr key={i} className="border-t">
-                    {Object.values(r).map((v, j) => (
-                      <td key={j} className="py-1 pr-3 whitespace-nowrap">{v}</td>
-                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {saved.slice(-40).map((r, i) => (
+                    <tr key={i} className="border-t">
+                      {Object.values(r).map((v, j) => (
+                        <td key={j} className="py-1 pr-3 whitespace-nowrap">{v}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-        </section>
-
-        {/* Data table */}
-        <section className="col-span-12">
-          <div className="card overflow-x-auto">
-            <div className="label mb-2">Trend table</div>
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-500">{"t,O2,CO2,CO,NOx,StackF,Eff".split(",").map((h) => (<th key={h} className="py-1 pr-4">{h}</th>))}</tr>
-              </thead>
-              <tbody>
-                {history.slice(-60).map((r, i) => (
-                  <tr key={i} className="border-t">
-                    <td className="py-1 pr-4 whitespace-nowrap">{r.t}</td>
-                    <td className="py-1 pr-4">{r.O2}</td>
-                    <td className="py-1 pr-4">{r.CO2}</td>
-                    <td className="py-1 pr-4">{r.CO}</td>
-                    <td className="py-1 pr-4">{r.NOx}</td>
-                    <td className="py-1 pr-4">{r.StackF}</td>
-                    <td className="py-1 pr-4">{r.Eff}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="card mt-4">
+            <div className="flex items-center justify-between">
+              <div className="label">Clock the Boiler (Metering)</div>
+              <button className="btn btn-sm" onClick={() => setShowClock(!showClock)}>{showClock ? 'Hide' : 'Show'}</button>
+            </div>
+            <div className={showClock ? '' : 'hidden'}>
+              <div className="flex gap-2 mt-2">
+                <button className={`btn ${meterTab === 'Gas' ? 'btn-primary' : ''}`} onClick={() => setMeterTab('Gas')}>Gas Meter</button>
+                <button className={`btn ${meterTab === 'Oil' ? 'btn-primary' : ''}`} onClick={() => setMeterTab('Oil')}>Oil Meter</button>
+              </div>
+              {meterTab === 'Gas' ? (
+                <div className="mt-3 space-y-2">
+                  <label className="text-sm">
+                    Dial size (ft³)
+                    <input type="number" list="dialSizes" className="w-full border rounded-md px-2 py-1 mt-1" value={gasDialSize} onChange={(e) => setGasDialSize(parseFloat(e.target.value || 0))} />
+                    <datalist id="dialSizes">
+                      <option value="0.25" />
+                      <option value="0.5" />
+                      <option value="1" />
+                      <option value="2" />
+                    </datalist>
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <button className="btn btn-primary" onClick={startGasClock} disabled={gasRunning || !isGas}>Start</button>
+                    <button className="btn" onClick={lapGasClock} disabled title="Meter laps are generated automatically from current burner flow">Lap</button>
+                    <button className="btn" onClick={stopGasClock} disabled={!gasRunning}>Stop</button>
+                    <button className="btn" onClick={resetGasClock}>Reset</button>
+                    <button className="btn" onClick={exportGasClock} disabled={!gasLaps.length}>Export</button>
+                  </div>
+                  {!isGas && (<div className="text-xs text-slate-500 mt-1">Gas meter is only active for Natural Gas/Propane. Select a gas fuel to clock.</div>)}
+                  <div className="text-sm">Sim sec/rev (from burner): <span className="font-semibold">{gasMeterRevSec > 0 ? gasMeterRevSec.toFixed(1) : '—'}</span></div>
+                  <div className="text-sm">Meter CFH (clocked avg): <span className="font-semibold">{gasCFH.toFixed(1)}</span></div>
+                  <div className="text-sm">Burner CFH (model): <span className="font-semibold">{gasBurnerCFH.toFixed(1)}</span></div>
+                  <div className="text-sm">Cam/Reg CFH (mapped): <span className="font-semibold">{gasCamCFH.toFixed(1)}</span></div>
+                  <div className="text-sm">Input MBH (model): <span className="font-semibold">{gasMBH_model.toFixed(1)}</span></div>
+                </div>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  <div className="text-sm">Burner GPH (model): <span className="font-semibold">{oilBurnerGPH.toFixed(2)}</span></div>
+                  <div className="text-sm">Cam/Reg GPH (mapped): <span className="font-semibold">{oilCamGPH.toFixed(2)}</span></div>
+                  <div className="text-sm">Sec/gal at current flow: <span className="font-semibold">{oilSecPerGal > 0 ? oilSecPerGal.toFixed(0) : '—'}</span></div>
+                  <div className="text-sm">Volume in 60s: <span className="font-semibold">{(oilBurnerGPH/60).toFixed(2)}</span> gal</div>
+                  <div className="text-xs text-slate-500">Field estimate from nozzle/pressure (optional):</div>
+                  <label className="text-sm">
+                    Nozzle GPH @100 psi
+                    <input type="number" className="w-full border rounded-md px-2 py-1 mt-1" value={nozzleGPH100} onChange={(e) => setNozzleGPH100(parseFloat(e.target.value || 0))} />
+                  </label>
+                  <label className="text-sm">
+                    Pump pressure (psi)
+                    <input type="number" className="w-full border rounded-md px-2 py-1 mt-1" value={oilPressure} onChange={(e) => setOilPressure(parseFloat(e.target.value || 0))} />
+                  </label>
+                  <div className="text-sm">Actual GPH: <span className="font-semibold">{oilGPH.toFixed(2)}</span></div>
+                  <div className="text-sm">Input MBH: <span className="font-semibold">{oilMBH.toFixed(1)}</span></div>
+                  <button className="btn mt-2" onClick={exportOilClock}>Export</button>
+                </div>
+              )}
+            </div>
           </div>
+
         </section>
       </main>
 
