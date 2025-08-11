@@ -663,6 +663,14 @@ const row = {
     setHistory((h) => [...h.slice(-300), row]);
   }, [disp, rheostat, fuelFlow, airFlow]);
   // Scenario presets (adds to previous ones)
+  const handleScenarioChange = (e) => {
+    const v = e.target.value;
+    setScenarioSel(v);
+    if (v) {
+      applyScenario(v);
+      setScenarioSel("");
+    }
+  };
   const applyScenario = (key) => {
     const s = {
       "Low air, hot stack": () => { setAirFlow(30); setFuelFlow(8); },
