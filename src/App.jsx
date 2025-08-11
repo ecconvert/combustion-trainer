@@ -28,6 +28,7 @@ import SeriesVisibility from "./components/SeriesVisibility";
 import { useUIState } from "./components/UIStateContext";
 import { loadConfig, saveConfig, getDefaultConfig } from "./lib/config";
 import SettingsMenu from "./components/SettingsMenu";
+import LinkageAnimator from "./components/LinkageAnimator";
 
 /**
  * Visual representation of a flame.
@@ -1306,6 +1307,8 @@ const rheostatRampRef = useRef(null);
               disabled={!canSetFiring}
             />
             <div className="value">{rheostat}%</div>
+
+            <LinkageAnimator fireRate={rheostat} speed={window.__linkageSpeed || 1} />
 
             <CollapsibleSection title="Fuel/Air Flows">
               {tuningActive ? (
