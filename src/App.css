@@ -1,3 +1,4 @@
+/* Styles specific to the demo Vite template root element. */
 #root {
   max-width: 1280px;
   margin: 0 auto;
@@ -5,6 +6,7 @@
   text-align: center;
 }
 
+/* Example logo animation styles retained from Vite scaffold */
 .logo {
   height: 6em;
   padding: 1.5em;
