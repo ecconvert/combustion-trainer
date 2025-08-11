@@ -26,36 +26,6 @@ npm run build
 npm run preview
 ```
 
-## New Features
-
-### Technician drawer
-Right-side drawer that houses analyzer controls, trends, saved readings and maintenance widgets. On mobile it covers the full screen.
-
-### Clock the boiler
-Compute fuel flow from a timed volume measurement. The derived flow feeds the analyzer simulation automatically.
-
-### Saved readings and CSV export
-Analyzer snapshots persist in `localStorage`. Export the log to CSV or clear it from the drawer.
-
-### Ambient live data toggle
-Stubbed provider reads temperature, pressure and humidity by ZIP code. No API key is required and the base URL is configurable.
-
-### Units and overrides
-Set global units (Imperial/Metric) and override per measurement where needed.
-
-### Dark theme
-Toggle dark mode from settings.
-
-### Calculations
-Fuel baselines used for stoichiometry:
-
-| Fuel          | HHV (BTU/unit) | AFR (mass) |
-| ------------- | ------------- | ---------- |
-| Natural Gas   | 1,036 / ft³   | 17.2       |
-| No.2 Oil      | 137,381 / gal | 14.6       |
-| Biodiesel     | 124,000 / gal | 12.5       |
-| Propane       | 91,452 / gal  | 15.5       |
-
 ## What it simulates
 
 - **Fuel/Air mixing & excess air**  
