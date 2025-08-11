@@ -23,6 +23,7 @@ export async function zipToAmbient(zip, baseUrl, zipGeoBaseUrl) {
   // Fetch current temperature, humidity, and pressure
   const url = `${baseUrl}?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,pressure_msl`;
   const weatherRes = await fetch(url);
+  if (!weatherRes.ok) throw new Error(`Failed to fetch weather data: ${weatherRes.statusText}`);
   const weather = await weatherRes.json();
   const cur = weather.current || {};
 
