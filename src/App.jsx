@@ -35,6 +35,16 @@ import { useUIState } from "./components/UIStateContext";
  * @param {number} props.intensity - 0–1 scale controlling size/brightness.
  * @param {boolean} [props.pilot=false] - Render a smaller pilot flame.
  */
+
+const seriesConfig = [
+  { key: 'O2', name: 'O₂ %', yAxisId: 'left' },
+  { key: 'CO2', name: 'CO₂ %', yAxisId: 'left' },
+  { key: 'CO', name: 'CO ppm', yAxisId: 'right' },
+  { key: 'NOx', name: 'NOₓ ppm', yAxisId: 'right' },
+  { key: 'StackF', name: 'Stack °F', yAxisId: 'right' },
+  { key: 'Eff', name: 'Eff %', yAxisId: 'left' },
+];
+
 function Flame({ phi, intensity, pilot = false }) {
   let color = "#48b3ff"; // lean -> blue
   if (phi > 1.05 && phi < 1.2) color = "#ff8c00"; // near stoich -> orange
