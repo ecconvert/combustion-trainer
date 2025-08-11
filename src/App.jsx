@@ -26,6 +26,8 @@ import CollapsibleSection from "./components/CollapsibleSection";
 import RightDrawer from "./components/RightDrawer";
 import SeriesVisibility from "./components/SeriesVisibility";
 import { useUIState } from "./components/UIStateContext";
+import { loadConfig, saveConfig, getDefaultConfig } from "./lib/config";
+import SettingsMenu from "./components/SettingsMenu";
 
 /**
  * Visual representation of a flame.
@@ -139,9 +141,30 @@ function Led({ on, label, color = "limegreen" }) {
 
 export default function CombustionTrainer() {
   const { drawerOpen, setDrawerOpen, seriesVisibility, setSeriesVisibility } = useUIState();
+  const [config, setConfig] = useState(loadConfig() || getDefaultConfig());
+  const unitSystem = config.units.system;
+  const [showSettings, setShowSettings] = useState(false);
+  const applyTheme = (theme) => {
+    const root = document.documentElement;
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const isDark = theme === 'dark' || (theme === 'system' && prefersDark);
+    root.classList.toggle('dark', isDark);
+  };
+  useEffect(() => {
+    applyTheme(config.general.theme);
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = () => applyTheme(config.general.theme);
+    media.addEventListener('change', handler);
+    return () => media.removeEventListener('change', handler);
+  }, [config.general.theme]);
+  const handleApply = (next) => {
+    setConfig(next);
+    saveConfig(next);
+    applyTheme(next.general.theme);
+    setShowSettings(false);
+  };
   // ----------------------- Fuel selection -----------------------
   const [fuelKey, setFuelKey] = useState("Natural Gas"); // currently selected fuel key
-  const [unitSystem, setUnitSystem] = useState("imperial"); // display units
   const fuel = FUELS[fuelKey]; // lookup fuel properties
   // Helper booleans for conditional UI/logic
   const isOil = fuelKey === "Fuel Oil #2" || fuelKey === "Biodiesel";
@@ -645,23 +668,34 @@ useEffect(() => {
 
   // Log history for trend chart
   const [history, setHistory] = useState([]);
+  const dispRef = useRef(disp);
+  const fuelFlowRef = useRef(fuelFlow);
+  const airFlowRef = useRef(airFlow);
+  const rheostatRef = useRef(rheostat);
+  useEffect(() => { dispRef.current = disp; }, [disp]);
+  useEffect(() => { fuelFlowRef.current = fuelFlow; }, [fuelFlow]);
+  useEffect(() => { airFlowRef.current = airFlow; }, [airFlow]);
+  useEffect(() => { rheostatRef.current = rheostat; }, [rheostat]);
   useEffect(() => {
-    const now = Date.now();
-const row = {
-  ts: now,
-  t: new Date(now).toLocaleTimeString(),
-  Rate: rheostat,
-  FuelFlow: Number(parseFloat(fuelFlow).toFixed(2)),
-  AirFlow: Number(parseFloat(airFlow).toFixed(2)),
-  O2: Number(disp.O2.toFixed(2)),
-  CO2: Number(disp.CO2.toFixed(2)),
-  CO: Math.round(disp.CO),
-  NOx: Math.round(disp.NOx),
-  StackF: Math.round(disp.StackF),
-  Eff: Number(Number(disp.Eff).toFixed(1)),
-  };
-    setHistory((h) => [...h.slice(-300), row]);
-  }, [disp, rheostat, fuelFlow, airFlow]);
+    const id = setInterval(() => {
+      const now = Date.now();
+      const row = {
+        ts: now,
+        t: new Date(now).toLocaleTimeString(),
+        Rate: rheostatRef.current,
+        FuelFlow: Number(parseFloat(fuelFlowRef.current).toFixed(2)),
+        AirFlow: Number(parseFloat(airFlowRef.current).toFixed(2)),
+        O2: Number(dispRef.current.O2.toFixed(2)),
+        CO2: Number(dispRef.current.CO2.toFixed(2)),
+        CO: Math.round(dispRef.current.CO),
+        NOx: Math.round(dispRef.current.NOx),
+        StackF: Math.round(dispRef.current.StackF),
+        Eff: Number(Number(dispRef.current.Eff).toFixed(1)),
+      };
+      setHistory((h) => [...h.slice(-config.general.trendLength), row]);
+    }, config.analyzer.samplingSec * 1000);
+    return () => clearInterval(id);
+  }, [config.analyzer.samplingSec, config.general.trendLength]);
   // Scenario presets (adds to previous ones)
   const handleScenarioChange = (e) => {
     const v = e.target.value;
@@ -749,6 +783,9 @@ const rheostatRampRef = useRef(null);
       `}</style>
         <RightDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)}>
           <div className="space-y-4">
+            <button className="btn" onClick={() => setShowSettings(true)}>
+              Settings
+            </button>
             <div className="card">
               <div className="label">Start Troubleshooting Scenarios</div>
               <select
@@ -1143,18 +1180,38 @@ const rheostatRampRef = useRef(null);
           </div>
         </RightDrawer>
 
+        <SettingsMenu
+          open={showSettings}
+          config={config}
+          onApply={handleApply}
+          onCancel={() => setShowSettings(false)}
+        />
+
 
       <header className="px-6 py-4 border-b bg-white sticky top-0 z-10">
         <div className="max-w-7xl mx-auto flex items-center gap-4">
           <h1 className="text-2xl font-semibold">Combustion Trainer</h1>
           <div className="ml-auto flex items-center gap-3">
-            <select aria-label="unit system" className="border rounded-md px-2 py-1" value={unitSystem} onChange={(e) => setUnitSystem(e.target.value)}>
-              <option value="imperial">Imperial</option>
-              <option value="metric">Metric</option>
-            </select>
             <button className="btn" onClick={() => downloadCSV("session.csv", history)}>Export Trend CSV</button>
-              <button className="btn" onClick={() => setDrawerOpen(true)}>Technician</button>
+            <button className="btn" onClick={() => setDrawerOpen(true)}>Technician</button>
             <button className="btn" onClick={() => downloadCSV("saved-readings.csv", saved)}>Export Saved Readings</button>
+            <button
+              className="btn"
+              aria-label="Settings"
+              onClick={() => setShowSettings(true)}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="w-5 h-5"
+              >
+                <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.09a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+            </button>
           </div>
         </div>
       </header>
