@@ -22,6 +22,10 @@ import { clamp, lerp, f2c, num } from "./lib/math";
 import { downloadCSV } from "./lib/csv";
 import { computeCombustion } from "./lib/chemistry";
 import { buildSafeCamMap } from "./lib/cam";
+import CollapsibleSection from "./components/CollapsibleSection";
+import RightDrawer from "./components/RightDrawer";
+import SeriesVisibility from "./components/SeriesVisibility";
+import { useUIState } from "./components/UIStateContext";
 
 /**
  * Visual representation of a flame.
@@ -124,6 +128,7 @@ function Led({ on, label, color = "limegreen" }) {
 }
 
 export default function CombustionTrainer() {
+  const { drawerOpen, setDrawerOpen, seriesVisibility, setSeriesVisibility } = useUIState();
   // ----------------------- Fuel selection -----------------------
   const [fuelKey, setFuelKey] = useState("Natural Gas"); // currently selected fuel key
   const [unitSystem, setUnitSystem] = useState("imperial"); // display units
@@ -724,6 +729,10 @@ const rheostatRampRef = useRef(null);
         .btn-primary { background: #0f172a; color: white; border-color: #0f172a; }
         .pill { padding: .25rem .5rem; border-radius: 9999px; font-size: .7rem; }
       `}</style>
+        <RightDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)}>
+          <p className="p-4 text-sm">Technician tools placeholder</p>
+        </RightDrawer>
+
 
       <header className="px-6 py-4 border-b bg-white sticky top-0 z-10">
         <div className="max-w-7xl mx-auto flex items-center gap-4">
@@ -734,6 +743,7 @@ const rheostatRampRef = useRef(null);
               <option value="metric">Metric</option>
             </select>
             <button className="btn" onClick={() => downloadCSV("session.csv", history)}>Export Trend CSV</button>
+              <button className="btn" onClick={() => setDrawerOpen(true)}>Technician</button>
             <button className="btn" onClick={() => downloadCSV("saved-readings.csv", saved)}>Export Saved Readings</button>
           </div>
         </div>
@@ -1052,10 +1062,10 @@ const rheostatRampRef = useRef(null);
           </div>
 
           {/* Analyzer dock */}
+          <CollapsibleSection title="Analyzer">
           <div className="card mt-4">
             <div className="flex items-center justify-between">
               <div>
-                <div className="label">Analyzer</div>
                 <div className="text-sm">State: {anState} {probeInFlue && <span className="pill bg-slate-100 ml-2">Probe in flue</span>}</div>
               </div>
               <div className="flex gap-2 items-center">
@@ -1076,6 +1086,7 @@ const rheostatRampRef = useRef(null);
             </div>
             <div className="mt-2 text-xs text-slate-500">Zero in room air to capture combustion air temperature. Then insert probe to sample.</div>
           </div>
+          </CollapsibleSection>
 
           <div className="card mt-4">
             <div className="flex items-center justify-between">
@@ -1271,6 +1282,9 @@ const rheostatRampRef = useRef(null);
               </tbody>
             </table>
           </div>
+        </section>
+        <section className="col-span-12">
+          <SeriesVisibility visibility={seriesVisibility} setVisibility={setSeriesVisibility} />
         </section>
       </main>
 
