@@ -14,7 +14,7 @@ function AirDrawerIndicator({
 }) {
   const [box, setBox] = React.useState({ left: 0, top: 0, width: 0, height: 0 });
   const [ring, setRing] = React.useState({ cx: 0, cy: 0, r: 60 });
-  const [angle, setAngle] = React.useState(angleLow + (angleHigh - angleLow) * (value / 100));
+  const [angle, setAngle] = React.useState(angleLow - ((angleLow - angleHigh) * (value / 100)));
 
   // Measure chamber and flame size
   React.useEffect(() => {
@@ -61,7 +61,7 @@ function AirDrawerIndicator({
     let raf;
     const start = performance.now();
     const a0 = angle;
-    const a1 = angleLow + (angleHigh - angleLow) * (value / 100);
+    const a1 = angleLow - ((angleLow - angleHigh) * (value / 100));
     const dur = 650 / Math.max(0.25, speed);
     const step = (t) => {
       const k = Math.min(1, (t - start) / dur);
@@ -148,5 +148,5 @@ function polarToCartesian(cx, cy, r, angleDeg) {
     y: cy + (r * Math.sin(angleRad))
   };
 }
-
+const [angle, setAngle] = React.useState(angleLow - ((angleLow - angleHigh) * (value / 100)));const a1 = angleLow + (angleHigh - angleLow) * (value / 100);const a1 = angleLow + (angleHigh - angleLow) * (value / 100);const a1 = angleLow + (angleHigh - angleLow) * (value / 100);const a1 = angleLow + (angleHigh - angleLow) * (value / 100);const a1 = angleLow + (angleHigh - angleLow) * (value / 100);const a1 = angleLow + (angleHigh - angleLow) * (value / 100);const a1 = angleLow + (angleHigh - angleLow) * (value / 100);const a1 = angleLow + (angleHigh - angleLow) * (value / 100);const a1 = angleLow + (angleHigh - angleLow) * (value / 100);const a1 = angleLow + (angleHigh - angleLow) * (value / 100);
 export default AirDrawerIndicator;
