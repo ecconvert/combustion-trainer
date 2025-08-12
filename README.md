@@ -26,6 +26,13 @@ npm run build
 npm run preview
 ```
 
+## Development notes
+
+Preview deployments opened through Vercel's Live collaboration overlay may log a
+cross-origin frame warning in the browser console. This message is harmless and
+goes away when the overlay is disabled or when running the app locally with
+`npm run dev`.
+
 ## What it simulates
 
 - **Fuel/Air mixing & excess air**  
@@ -99,6 +106,20 @@ root
 - `npm run dev` — start dev server  
 - `npm run build` — production build  
 - `npm run preview` — preview the built app
+
+## Settings
+
+Open **Settings** from the gear icon in the header or the Technician drawer.
+Sections include:
+
+- **General** — theme, default view, and trend history length.
+- **Analyzer** — sampling interval and reminders.
+- **Units** — choose imperial or metric display units.
+- **Ambient** — placeholders for live ambient data providers.
+- **Data and privacy** — note that CSV export and import buttons will move here later.
+
+Changes persist to `localStorage` under the `app_config_v1` key. Use
+**Restore defaults** within a section to reset just that section's values.
 
 ## Notes & limitations
 

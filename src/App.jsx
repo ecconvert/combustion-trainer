@@ -6,7 +6,18 @@
  * modules located in `src/lib` for math, chemistry calculations, cam
  * map generation and CSV export. Recharts is used for trend plotting.
  */
-import React, { useEffect, useMemo, useRef, useState } from "react";
+/* global process */
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useLayoutEffect as _useLayoutEffect,
+} from "react";
+import { Responsive, WidthProvider } from "react-grid-layout";
+import "react-grid-layout/css/styles.css";
+import "react-resizable/css/styles.css";
 import {
   LineChart,
   Line,
@@ -24,8 +35,15 @@ import { computeCombustion } from "./lib/chemistry";
 import { buildSafeCamMap } from "./lib/cam";
 import CollapsibleSection from "./components/CollapsibleSection";
 import RightDrawer from "./components/RightDrawer";
-import SeriesVisibility from "./components/SeriesVisibility";
 import { useUIState } from "./components/UIStateContext";
+import { loadConfig, saveConfig, getDefaultConfig } from "./lib/config";
+import SettingsMenu from "./components/SettingsMenu";
+import { panels, defaultZoneById, defaultLayouts as techDefaults } from "./panels";
+const ResponsiveGridLayout = WidthProvider(Responsive);
+
+const useIsomorphicLayoutEffect =
+  typeof window !== "undefined" ? _useLayoutEffect : useEffect;
+const isDev = typeof process !== "undefined" && process.env.NODE_ENV !== "production";
 
 /**
  * Visual representation of a flame.
@@ -35,6 +53,163 @@ import { useUIState } from "./components/UIStateContext";
  * @param {number} props.intensity - 0–1 scale controlling size/brightness.
  * @param {boolean} [props.pilot=false] - Render a smaller pilot flame.
  */
+
+const seriesConfig = [
+  { key: 'O2', name: 'O₂ %', yAxisId: 'left' },
+  { key: 'CO2', name: 'CO₂ %', yAxisId: 'left' },
+  { key: 'CO', name: 'CO ppm', yAxisId: 'right' },
+  { key: 'NOx', name: 'NOₓ ppm', yAxisId: 'right' },
+  { key: 'StackF', name: 'Stack °F', yAxisId: 'right' },
+  { key: 'Eff', name: 'Eff %', yAxisId: 'left' },
+];
+
+const RGL_LS_KEY = "ct_layouts_v2";
+const ZONES_KEY = "ct_zones_v1";
+const SAVED_KEY = "ct_saved_v1";
+
+const rglBreakpoints = { lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 };
+const rglCols        = { lg:   12,  md:  10,  sm:   8,  xs:   6,  xxs:  4 };
+
+const defaultLayouts = {
+  lg: [
+    { i: "viz",      x: 0, y: 0,  w: 7,  h: 26, minW: 4, minH: 12 },
+    { i: "controls", x: 0, y: 26, w: 7,  h: 20, minW: 4, minH: 10 },
+    { i: "readouts", x: 7, y: 0,  w: 5,  h: 12, minW: 3, minH:  6 },
+    { i: "trend",    x: 7, y: 12, w: 5,  h: 16, minW: 3, minH: 10 },
+    { i: "meter",    x: 7, y: 28, w: 5,  h: 12, minW: 3, minH:  8 },
+  ],
+  md: [
+    { i: "viz",      x: 0, y: 0,  w: 6,  h: 26 },
+    { i: "controls", x: 0, y: 26, w: 6,  h: 20 },
+    { i: "readouts", x: 6, y: 0,  w: 4,  h: 12 },
+    { i: "trend",    x: 6, y: 12, w: 4,  h: 16 },
+    { i: "meter",    x: 6, y: 28, w: 4,  h: 12 },
+  ],
+  sm: [
+    { i: "viz",      x: 0, y: 0,  w: 5,  h: 26 },
+    { i: "controls", x: 0, y: 26, w: 5,  h: 20 },
+    { i: "readouts", x: 5, y: 0,  w: 3,  h: 12 },
+    { i: "trend",    x: 5, y: 12, w: 3,  h: 16 },
+    { i: "meter",    x: 5, y: 28, w: 3,  h: 12 },
+  ],
+  xs: [
+    { i: "viz",      x: 0, y: 0,  w: 6, h: 24 },
+    { i: "controls", x: 0, y: 24, w: 6, h: 18 },
+    { i: "readouts", x: 0, y: 42, w: 6, h: 10 },
+    { i: "trend",    x: 0, y: 52, w: 6, h: 16 },
+    { i: "meter",    x: 0, y: 68, w: 6, h: 10 },
+  ],
+  xxs: [
+    { i: "viz",      x: 0, y: 0,  w: 4, h: 24 },
+    { i: "controls", x: 0, y: 24, w: 4, h: 18 },
+    { i: "readouts", x: 0, y: 42, w: 4, h: 10 },
+    { i: "trend",    x: 0, y: 52, w: 4, h: 16 },
+    { i: "meter",    x: 0, y: 68, w: 4, h: 10 },
+  ],
+};
+
+function fitToCols(items, cols) {
+  return items.map((it) => {
+    const w = Math.min(it.w ?? 1, cols);
+    const x = Math.min(it.x ?? 0, Math.max(0, cols - w));
+    return { ...it, w, x };
+  });
+}
+function normalizeLayouts(layouts) {
+  const out = {};
+  Object.entries(rglCols).forEach(([bp, cols]) => {
+    const arr = layouts?.[bp] ?? [];
+    out[bp] = fitToCols(arr, cols);
+  });
+  return out;
+}
+function loadLayouts() {
+  try {
+    const raw = localStorage.getItem(RGL_LS_KEY);
+    const parsed = raw ? JSON.parse(raw) : defaultLayouts;
+    return normalizeLayouts(parsed);
+  } catch (e) {
+    if (isDev) {
+      console.error("Failed to load layouts from localStorage:", e);
+    }
+    return normalizeLayouts(defaultLayouts);
+  }
+}
+
+function saveLayouts(layouts) {
+  try {
+    localStorage.setItem(RGL_LS_KEY, JSON.stringify(layouts));
+  } catch (e) {
+    if (isDev) {
+      console.error("Failed to save layouts to localStorage:", e);
+    }
+  }
+}
+
+function loadZones() {
+  try {
+    return JSON.parse(localStorage.getItem(ZONES_KEY)) || defaultZoneById;
+  } catch (e) {
+    if (isDev) {
+      console.error("Failed to load zones from localStorage:", e);
+    }
+    return defaultZoneById;
+  }
+}
+function saveZones(z) {
+  try {
+    localStorage.setItem(ZONES_KEY, JSON.stringify(z));
+  } catch (e) {
+    if (isDev) {
+      console.error("Failed to save zones to localStorage:", e);
+    }
+  }
+}
+
+const TECH_LS_KEY = "ct_tech_layouts_v1";
+function loadTechLayouts() {
+  try {
+    const raw = localStorage.getItem(TECH_LS_KEY);
+    const parsed = raw ? JSON.parse(raw) : techDefaults.techDrawer;
+    return normalizeLayouts(parsed);
+  } catch (e) {
+    if (isDev) {
+      console.error("Failed to load tech layouts from localStorage:", e);
+    }
+    return normalizeLayouts(techDefaults.techDrawer);
+  }
+}
+function saveTechLayouts(ls) {
+  try {
+    localStorage.setItem(TECH_LS_KEY, JSON.stringify(ls));
+  } catch (e) {
+    if (isDev) {
+      console.error("Failed to save tech layouts to localStorage:", e);
+    }
+  }
+}
+
+function loadSaved() {
+  try {
+    const raw = localStorage.getItem(SAVED_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    if (isDev) {
+      console.error("Failed to load saved readings:", e);
+    }
+    return [];
+  }
+}
+function persistSaved(next) {
+  try {
+    localStorage.setItem(SAVED_KEY, JSON.stringify(next));
+  } catch (e) {
+    if (isDev) {
+      console.error("Failed to persist saved readings:", e);
+    }
+  }
+}
+
 function Flame({ phi, intensity, pilot = false }) {
   let color = "#48b3ff"; // lean -> blue
   if (phi > 1.05 && phi < 1.2) color = "#ff8c00"; // near stoich -> orange
@@ -127,11 +302,157 @@ function Led({ on, label, color = "limegreen" }) {
   );
 }
 
+function PanelHeader({ title, right, dockAction }) {
+  return (
+    <div className="flex items-center justify-between mb-2">
+      <div className="label drag-handle cursor-move select-none">{title}</div>
+      <div className="flex items-center gap-2">
+        {right}
+        {dockAction}
+      </div>
+    </div>
+  );
+}
+
 export default function CombustionTrainer() {
   const { drawerOpen, setDrawerOpen, seriesVisibility, setSeriesVisibility } = useUIState();
+  const [config, setConfig] = useState(loadConfig() || getDefaultConfig());
+  const unitSystem = config.units.system;
+  const [showSettings, setShowSettings] = useState(false);
+  const [layouts, setLayouts] = useState(loadLayouts());
+
+  const [theme, setTheme] = useState(() => {
+    try {
+      return localStorage.getItem("ct_theme") || "system";
+    } catch (e) {
+      if (isDev) {
+        console.error("Failed to load theme from localStorage:", e);
+      }
+      return "system";
+    }
+  });
+
+  useIsomorphicLayoutEffect(() => {
+    applyTheme(theme);
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("ct_theme", theme);
+    } catch (e) {
+      if (isDev) {
+        console.error("Failed to save theme to localStorage:", e);
+      }
+    }
+    applyTheme(theme);
+  }, [theme]);
+
+
+  const handleLayoutChange = (_current, allLayouts) => {
+    setLayouts(allLayouts);
+    saveLayouts(allLayouts);
+  };
+
+  const handleResetLayouts = () => {
+    localStorage.removeItem(RGL_LS_KEY);
+    localStorage.removeItem("ct_layouts_v1");
+    setLayouts(normalizeLayouts(defaultLayouts));
+  };
+  const dock = useCallback((id, zone) => {
+    setZones((prev) => {
+      const next = { ...prev, [id]: zone };
+      saveZones(next);
+      return next;
+    });
+  }, []);
+  const onTechChange = (_cur, all) => {
+    setTechLayouts(all);
+    saveTechLayouts(all);
+  };
+  const [zones, setZones] = useState(loadZones());
+  const mainItems = useMemo(
+    () => Object.keys(panels).filter((id) => zones[id] === "main"),
+    [zones],
+  );
+  const techItems = useMemo(
+    () => Object.keys(panels).filter((id) => zones[id] === "techDrawer"),
+    [zones],
+  );
+  useEffect(() => {
+    try {
+      const v2 = localStorage.getItem(RGL_LS_KEY);
+      const v1 = localStorage.getItem("ct_layouts_v1");
+      if (!v2 && v1) {
+        const parsed = JSON.parse(v1);
+        const normalized = normalizeLayouts(parsed);
+        localStorage.setItem(RGL_LS_KEY, JSON.stringify(normalized));
+        localStorage.removeItem("ct_layouts_v1");
+      }
+    } catch (e) {
+      if (isDev) {
+        console.error("Failed to migrate old layouts:", e);
+      }
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      const zonesRaw = localStorage.getItem(ZONES_KEY);
+      const zonesObj = zonesRaw ? JSON.parse(zonesRaw) : null;
+      if (!zonesObj || zonesObj.saved == null) {
+        const next = { ...(zonesObj || {}), saved: "techDrawer" };
+        localStorage.setItem(ZONES_KEY, JSON.stringify(next));
+      }
+      const layoutsRaw = localStorage.getItem(RGL_LS_KEY);
+      if (layoutsRaw) {
+        const parsed = JSON.parse(layoutsRaw);
+        let changed = false;
+        Object.keys(parsed).forEach((bp) => {
+          const arr = parsed[bp];
+          const filtered = arr.filter((it) => it.i !== "saved");
+          if (filtered.length !== arr.length) {
+            parsed[bp] = filtered;
+            changed = true;
+          }
+        });
+        if (changed) {
+          localStorage.setItem(RGL_LS_KEY, JSON.stringify(parsed));
+        }
+      }
+    } catch (e) {
+      if (isDev) {
+        console.error("Failed to migrate saved panel:", e);
+      }
+    }
+  }, []);
+  const applyTheme = (theme) => {
+    const root = document.documentElement;
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const isDark = theme === 'dark' || (theme === 'system' && prefersDark);
+    root.classList.toggle('dark', isDark);
+  };
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = () => applyTheme(theme);
+    media.addEventListener('change', handler);
+    return () => media.removeEventListener('change', handler);
+  }, [theme]);
+  const handleApply = (next) => {
+    setConfig(next);
+    saveConfig(next);
+    setTheme(next.general.theme);
+    setShowSettings(false);
+  };
+  // Scenario selection state and handler
+  const [scenarioSel, setScenarioSel] = useState("");
+  const handleScenarioChange = useCallback((e) => {
+    const val = e.target.value;
+    setScenarioSel(val);
+    if (val === "" || val === "Reset") {
+      // reset scenario-specific overrides if implemented later
+    }
+  }, []);
   // ----------------------- Fuel selection -----------------------
   const [fuelKey, setFuelKey] = useState("Natural Gas"); // currently selected fuel key
-  const [unitSystem, setUnitSystem] = useState("imperial"); // display units
   const fuel = FUELS[fuelKey]; // lookup fuel properties
   // Helper booleans for conditional UI/logic
   const isOil = fuelKey === "Fuel Oil #2" || fuelKey === "Biodiesel";
@@ -161,9 +482,7 @@ export default function CombustionTrainer() {
   const stateTimeRef = useRef(0); // milliseconds elapsed in current state
 
   // ----------------------- Analyzer state machine -----------------------
-  const [anState, setAnState] = useState("OFF"); // OFF, ZERO, READY, SAMPLING, HOLD
-  const [probeInFlue, setProbeInFlue] = useState(false); // whether probe inserted
-  const [saved, setSaved] = useState([]); // logged analyzer readings
+  const [saved, setSaved] = useState(loadSaved); // logged analyzer readings
   const [t5Spark, setT5Spark] = useState(false); // output relay states for animation
   const [t6Pilot, setT6Pilot] = useState(false);
   const [t7Main, setT7Main] = useState(false);
@@ -172,7 +491,6 @@ export default function CombustionTrainer() {
   const flameOutTimerRef = useRef(0); // tracks flame failure detection time
   const [lockoutReason, setLockoutReason] = useState("");
   const [lockoutPending, setLockoutPending] = useState(false);
-  const [scenarioSel, setScenarioSel] = useState(""); // current troubleshooting scenario
 
   // ----------------------- Metering panel -----------------------
   const [meterTab, setMeterTab] = useState("Gas"); // which meter UI is visible
@@ -273,7 +591,9 @@ useEffect(() => {
   };
 
   // Tuning Mode
+
   const [tuningOn, setTuningOn] = useState(false);
+
   const [camMap, setCamMap] = useState({}); // { percent: { fuel, air } }
   const [defaultsLoaded, setDefaultsLoaded] = useState(false);
 
@@ -579,31 +899,6 @@ useEffect(() => {
     return () => clearInterval(id);
   }, []);
 
-  // Analyzer controls
-  const startAnalyzer = () => { setAnState("ZERO"); setProbeInFlue(false); };
-  const finishZero = () => { setAnState("READY"); };
-  const insertProbe = () => { if (anState === "READY") { setProbeInFlue(true); setAnState("SAMPLING"); } };
-  const holdAnalyzer = () => { if (anState === "SAMPLING") setAnState("HOLD"); };
-  const resumeAnalyzer = () => { if (anState === "HOLD") setAnState("SAMPLING"); };
-  const saveReading = () => {
-    const row = {
-      t: new Date().toLocaleTimeString(),
-      Fuel: fuelKey,
-      Rate: rheostat, // percent
-      FuelFlow: Number(parseFloat(fuelFlow).toFixed(2)),
-      AirFlow: Number(parseFloat(airFlow).toFixed(2)),
-      O2: Number(disp.O2.toFixed(2)),
-      CO2: Number(disp.CO2.toFixed(2)),
-      COaf: Math.round(disp.COaf),
-      CO: Math.round(disp.CO),
-      NOx: Math.round(disp.NOx),
-      StackF: Math.round(disp.StackF),
-      Eff: Number(Number(disp.Eff).toFixed(1)),
-      EA: steady.excessAir,
-      Mode: burnerState,
-    };
-    setSaved((s) => [...s, row]);
-  };
 
   const resetProgrammer = () => {
     setLockoutReason("");
@@ -635,35 +930,101 @@ useEffect(() => {
 
   // Log history for trend chart
   const [history, setHistory] = useState([]);
+  const dispRef = useRef(disp);
+  const fuelFlowRef = useRef(fuelFlow);
+  const airFlowRef = useRef(airFlow);
+  const rheostatRef = useRef(rheostat);
+  useEffect(() => { dispRef.current = disp; }, [disp]);
+  useEffect(() => { fuelFlowRef.current = fuelFlow; }, [fuelFlow]);
+  useEffect(() => { airFlowRef.current = airFlow; }, [airFlow]);
+  useEffect(() => { rheostatRef.current = rheostat; }, [rheostat]);
   useEffect(() => {
-    const now = Date.now();
-const row = {
-  ts: now,
-  t: new Date(now).toLocaleTimeString(),
-  Rate: rheostat,
-  FuelFlow: Number(parseFloat(fuelFlow).toFixed(2)),
-  AirFlow: Number(parseFloat(airFlow).toFixed(2)),
-  O2: Number(disp.O2.toFixed(2)),
-  CO2: Number(disp.CO2.toFixed(2)),
-  CO: Math.round(disp.CO),
-  NOx: Math.round(disp.NOx),
-  StackF: Math.round(disp.StackF),
-  Eff: Number(Number(disp.Eff).toFixed(1)),
-  };
-    setHistory((h) => [...h.slice(-300), row]);
-  }, [disp, rheostat, fuelFlow, airFlow]);
-  // Scenario presets (adds to previous ones)
-  const applyScenario = (key) => {
-    const s = {
-      "Low air, hot stack": () => { setAirFlow(30); setFuelFlow(8); },
-      "High draft, cold stack": () => { setAirFlow(140); setFuelFlow(4); },
-      "Dirty nozzles (incomplete)": () => { setFuelFlow(9); setAirFlow(50); },
-      "Biodiesel blend, medium stack": () => { setFuelKey("Biodiesel"); setFuelFlow(6); setAirFlow(90); },
-      Reset: () => { setFuelKey("Natural Gas"); setFuelFlow(5); setAirFlow(60); },
-    };
-    s[key]?.();
-  };
+    const id = setInterval(() => {
+      const now = Date.now();
+      const row = {
+        ts: now,
+        t: new Date(now).toLocaleTimeString(),
+        Rate: rheostatRef.current,
+        FuelFlow: Number(parseFloat(fuelFlowRef.current).toFixed(2)),
+        AirFlow: Number(parseFloat(airFlowRef.current).toFixed(2)),
+        O2: Number(dispRef.current.O2.toFixed(2)),
+        CO2: Number(dispRef.current.CO2.toFixed(2)),
+        CO: Math.round(dispRef.current.CO),
+        NOx: Math.round(dispRef.current.NOx),
+        StackF: Math.round(dispRef.current.StackF),
+        Eff: Number(Number(dispRef.current.Eff).toFixed(1)),
+      };
+      setHistory((h) => [...h.slice(-config.general.trendLength), row]);
+    }, config.analyzer.samplingSec * 1000);
+    return () => clearInterval(id);
+  }, [config.analyzer.samplingSec, config.general.trendLength]);
 
+  const saveReading = useCallback((snapshot) => {
+    const row = { id: crypto.randomUUID(), t: Date.now(), ...snapshot };
+    setSaved((prev) => {
+      const next = [row, ...prev];
+      persistSaved(next);
+      return next;
+    });
+  }, []);
+
+  const exportSavedReadings = useCallback(() => {
+    if (!saved.length) return;
+    const headers = [
+      "id",
+      "t",
+      "fuel",
+      "setFire",
+      "airFlow",
+      "fuelFlow",
+      "stackF",
+      "O2",
+      "CO2",
+      "COppm",
+      "NOxppm",
+      "excessAir",
+      "efficiency",
+      "notes",
+    ];
+    const lines = [headers.join(",")].concat(
+      saved.map((r) =>
+        [
+          r.id,
+          new Date(r.t).toISOString(),
+          r.fuel ?? "",
+          r.setFire ?? "",
+          r.airFlow ?? "",
+          r.fuelFlow ?? "",
+          r.stackF ?? "",
+          r.O2 ?? "",
+          r.CO2 ?? "",
+          r.COppm ?? "",
+          r.NOxppm ?? "",
+          r.excessAir ?? "",
+          r.efficiency ?? "",
+          JSON.stringify(r.notes ?? ""),
+        ].join(","),
+      ),
+    );
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "saved_readings.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [saved]);
+  // Analyzer simple state machine
+  const [anState, setAnState] = useState("OFF");
+  const [probeInFlue, setProbeInFlue] = useState(false);
+  const startAnalyzer = () => setAnState("ZERO");
+  const finishZero = () => setAnState("READY");
+  const insertProbe = () => {
+    setProbeInFlue(true);
+    setAnState("SAMPLING");
+  };
+  const holdAnalyzer = () => setAnState("HOLD");
+  const resumeAnalyzer = () => setAnState("SAMPLING");
   // Tuning assistant
   const tuningActive = tuningOn;
 
@@ -730,282 +1091,194 @@ const rheostatRampRef = useRef(null);
         .pill { padding: .25rem .5rem; border-radius: 9999px; font-size: .7rem; }
       `}</style>
         <RightDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)}>
-          <p className="p-4 text-sm">Technician tools placeholder</p>
+
+          <div className="space-y-4">
+            <button className="btn" onClick={() => setShowSettings(true)}>
+              Settings
+            </button>
+            <div className="card">
+              <div className="label">Start Troubleshooting Scenarios</div>
+              <select
+                aria-label="troubleshooting scenarios"
+                className="w-full border rounded-md px-2 py-2 mt-2"
+                value={scenarioSel}
+                onChange={handleScenarioChange}
+              >
+                <option value="">Start Troubleshooting Scenarios</option>
+                {[
+                  "Low air, hot stack",
+                  "High draft, cold stack",
+                  "Dirty nozzles (incomplete)",
+                  "Biodiesel blend, medium stack",
+                  "Reset",
+                ].map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="card">
+              <div className="label">Tuning Mode</div>
+              <div className="flex gap-2 mt-2">
+                <button
+                  className={`btn ${!tuningOn ? "btn-primary" : ""}`}
+                  onClick={() => setTuningOn(false)}
+                >
+                  Off
+                </button>
+                <button
+                  className={`btn ${tuningOn ? "btn-primary" : ""}`}
+                  onClick={() => setTuningOn(true)}
+                >
+                  On
+                </button>
+              </div>
+              <div className="text-xs text-slate-500 mt-2">
+                When ON, adjust fuel and air together and step the cam in 10%
+                intervals.
+              </div>
+            </div>
+            <CollapsibleSection title="Analyzer">
+              <div className="card">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm">
+                      State: {anState}{" "}
+                      {probeInFlue && (
+                        <span className="pill bg-slate-100 ml-2">
+                          Probe in flue
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <Led on={anState !== "OFF"} label="Power" />
+                    <Led on={anState === "ZERO"} label="Zero" color="#06b6d4" />
+                    <Led
+                      on={anState === "SAMPLING"}
+                      label="Sampling"
+                      color="#84cc16"
+                    />
+                    <Led
+                      on={anState === "HOLD"}
+                      label="Hold"
+                      color="#f59e0b"
+                    />
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button className="btn" onClick={startAnalyzer}>
+                    Start
+                  </button>
+                  <button
+                    className="btn"
+                    onClick={finishZero}
+                    disabled={anState !== "ZERO"}
+                  >
+                    Finish Zero
+                  </button>
+                  <button
+                    className="btn"
+                    onClick={insertProbe}
+                    disabled={anState !== "READY"}
+                  >
+                    Insert Probe
+                  </button>
+                  <button
+                    className="btn"
+                    onClick={() => setProbeInFlue(false)}
+                  >
+                    Remove Probe
+                  </button>
+                  <button
+                    className="btn"
+                    onClick={holdAnalyzer}
+                    disabled={anState !== "SAMPLING"}
+                  >
+                    Hold
+                  </button>
+                  <button
+                    className="btn"
+                    onClick={resumeAnalyzer}
+                    disabled={anState !== "HOLD"}
+                  >
+                    Resume
+                  </button>
+                  <button
+                    className="btn-primary"
+                    data-testid="btn-save-reading"
+                    onClick={saveReading}
+                    disabled={anState === "OFF"}
+                  >
+                    Save Reading
+                  </button>
+                </div>
+                <div className="mt-2 text-xs text-slate-500">
+                  Zero in room air to capture combustion air temperature. Then
+                  insert probe to sample.
+                </div>
+              </div>
+            </CollapsibleSection>
+          </div>
         </RightDrawer>
+
+        <SettingsMenu
+          open={showSettings}
+          config={config}
+          onApply={handleApply}
+          onCancel={() => setShowSettings(false)}
+        />
 
 
       <header className="px-6 py-4 border-b bg-white sticky top-0 z-10">
         <div className="max-w-7xl mx-auto flex items-center gap-4">
           <h1 className="text-2xl font-semibold">Combustion Trainer</h1>
           <div className="ml-auto flex items-center gap-3">
-            <select aria-label="unit system" className="border rounded-md px-2 py-1" value={unitSystem} onChange={(e) => setUnitSystem(e.target.value)}>
-              <option value="imperial">Imperial</option>
-              <option value="metric">Metric</option>
-            </select>
             <button className="btn" onClick={() => downloadCSV("session.csv", history)}>Export Trend CSV</button>
-              <button className="btn" onClick={() => setDrawerOpen(true)}>Technician</button>
-            <button className="btn" onClick={() => downloadCSV("saved-readings.csv", saved)}>Export Saved Readings</button>
+            <button className="btn" onClick={() => setDrawerOpen(true)}>Technician</button>
+            <button className="btn" onClick={exportSavedReadings}>Export Saved Readings</button>
+            <button className="btn" data-testid="btn-theme-toggle" onClick={() => setTheme(theme === "dark" ? "system" : "dark")}>
+              Toggle Theme
+            </button>
+            <button className="btn" data-testid="btn-reset-layout" onClick={handleResetLayouts}>Reset Layout</button>
+
+            <button
+              className="btn"
+              aria-label="Settings"
+              onClick={() => setShowSettings(true)}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="w-5 h-5"
+              >
+                <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.09a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+            </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto p-6 grid grid-cols-12 gap-4">
-        {/* Left controls */}
-        <section className="col-span-12 lg:col-span-3 space-y-4">
-          <div className="card">
-            <div className="label">Fuel</div>
-            <select aria-label="fuel selector" className="w-full border rounded-md px-2 py-2 mt-1" value={fuelKey} onChange={(e) => setFuelKey(e.target.value)}>
-              {Object.keys(FUELS).map((k) => (
-                <option key={k} value={k}>{k}</option>
-              ))}
-            </select>
-            <div className="mt-2 text-sm text-slate-600">HHV: {FUELS[fuelKey].HHV.toLocaleString()} Btu/{FUELS[fuelKey].unit}</div>
-            <div className="mt-1 text-xs text-slate-500">Targets: O₂ {fuel.targets.O2[0]} to {fuel.targets.O2[1]} percent, CO air-free ≤ {fuel.targets.COafMax} ppm</div>
-          </div>
-
-
-          <div className="card">
-            <div className="label">Boiler Power</div>
-            <div className="flex items-center gap-2 mt-2">
-              <button className={`btn ${boilerOn ? 'btn-primary' : ''}`} onClick={() => setBoilerOn(true)}>On</button>
-              <button className="btn" onClick={() => setBoilerOn(false)}>Off</button>
-            </div>
-            <div className="label mt-4">Firing Rate (rheostat)</div>
-            <input
-              aria-label="firing rate"
-              type="range"
-              min={0}
-              max={100}
-              step={1}
-              value={rheostat}
-              onChange={(e) => { if (!canSetFiring) return; setRheostat(parseInt(e.target.value)); }}
-              className="w-full"
-              disabled={!canSetFiring}
-            />
-            <div className="value">{rheostat}%</div>
-            {!tuningActive && (
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <div>
-                  <div className="label">Fuel Flow ({FUELS[fuelKey].unit}, scaled)</div>
-                  <div className="value">{fuelFlow.toFixed(2)}</div>
-                </div>
-                <div>
-                  <div className="label">Air Flow (cfm, scaled)</div>
-                  <div className="value">{Number(airFlow).toFixed(2)}</div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {tuningActive && (
-            <div className="card">
-              <div className="label">Tuning Controls (Fuel & Air)</div>
-              <div className="mt-2 grid grid-cols-1 gap-4">
-                <div>
-                  <div className="label">Fuel Flow ({FUELS[fuelKey].unit}, scaled)</div>
-                  <input aria-label="tuning fuel flow" type="range" min={minFuel} max={maxFuel} step={0.1} value={fuelFlow} onChange={(e) => setFuelFlow(parseFloat(e.target.value))} className="w-full" />
-                  <div className="value">{fuelFlow.toFixed(2)}</div>
-                </div>
-                <div>
-                  <div className="label">Air Flow (cfm, scaled)</div>
-                  <input aria-label="tuning air flow" type="range" min={0} max={200} step={1} value={airFlow} onChange={(e) => setAirFlow(parseFloat(e.target.value))} className="w-full" />
-                  <div className="value">{Number(airFlow).toFixed(2)}</div>
-                </div>
-              </div>
-              <div className="mt-3">
-                <div className="label">Camshaft Intervals</div>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {[0,10,20,30,40,50,60,70,80,90,100].map((p) => (
-                    <button
-                      key={p}
-                      className={`btn ${rheostat === p ? 'btn-primary' : ''}`}
-                      disabled={!canSetFiring}
-                      onClick={() => {
-                        if (!canSetFiring) return;
-                        setRheostat(p);
-                        applyCamIfSaved(p);
-                      }}
-                    >
-                      {p}%
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-3 flex items-center gap-2">
-                  <button
-                    className="btn btn-primary"
-                    disabled={!canSetFiring}
-                    onClick={setCamAtCurrent}
-                    title="Save current fuel and air at this cam position"
-                  >
-                    Set {currentCam}%
-                  </button>
-                  <button
-                    className="btn"
-                    disabled={!camMap[currentCam]}
-                    onClick={clearCamAtCurrent}
-                    title="Clear saved point at this cam position"
-                  >
-                    Clear {currentCam}%
-                  </button>
-                  <button
-                    className="btn"
-                    onClick={applySafeDefaults}
-                    title="Load safe default cam map (available anytime)"
-                  >
-                    Set tuning to safe defaults
-                  </button>
-                  {camMap[currentCam] && (
-                    <span className="pill bg-green-100">Saved: F {camMap[currentCam].fuel} / A {camMap[currentCam].air}</span>
-                  )}
-                  {defaultsLoaded && (
-                    <span className="pill bg-blue-100">Safe defaults loaded</span>
-                  )}
-                </div>
-                <div className="mt-2 text-xs text-slate-500">
-                  Saved cam points: {Object.keys(camMap).length ? Object.keys(camMap).sort((a,b)=>a-b).join(', ') : 'none'}
-                </div>
-                <details className="mt-4">
-                <summary className="label cursor-pointer">Advanced inputs</summary>
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                  <label className="text-sm col-span-2">
-                    Air Flow
-                    <input
-                      type="number"
-                      className="w-full border rounded-md px-2 py-1 mt-1"
-                      value={airFlow}
-                      onChange={(e) => setAirFlow(parseFloat(e.target.value || 0))}
-                    />
-                  </label>
-                  <label className="text-sm col-span-2">
-                    Fuel Flow
-                    <input
-                      type="number"
-                      className="w-full border rounded-md px-2 py-1 mt-1"
-                      value={fuelFlow}
-                      onChange={(e) => setFuelFlow(parseFloat(e.target.value || 0))}
-                    />
-                  </label>
-                </div>
-              </details>
-              <details className="mt-3">
-                <summary className="label cursor-pointer">Regulators</summary>
-                {!isOil ? (
-                  <div className="grid grid-cols-2 gap-2 mt-2">
-                    <label className="text-sm col-span-2">
-                      Manifold pressure (in. w.c.)
-                      <input
-                        type="number"
-                        className="w-full border rounded-md px-2 py-1 mt-1"
-                        value={regPress}
-                        onChange={(e) => setRegPress(parseFloat(e.target.value || 0))}
-                      />
-                    </label>
-                    <div className="text-xs text-slate-500 col-span-2 mt-1">
-                      Typical appliance manifold: NG ~3.5 in. w.c., LP ~10–11 in. w.c. Adjusting pressure raises input roughly with the square root of pressure.
-                    </div>
-                    <div className="text-xs text-slate-500 col-span-2">
-                      Derived Min/Max fuel: {minFuel.toFixed(2)} / {maxFuel.toFixed(2)} (scaled)
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-2 mt-2">
-                    <label className="text-sm col-span-2">
-                      Pump pressure (psi)
-                      <input
-                        type="number"
-                        className="w-full border rounded-md px-2 py-1 mt-1"
-                        value={regPress}
-                        onChange={(e) => setRegPress(parseFloat(e.target.value || 0))}
-                      />
-                    </label>
-                    <div className="text-xs text-slate-500 col-span-2 mt-1">
-                      Oil nozzles are rated at 100 psi and flow scales ~√pressure. Higher pressure also improves atomization but watch for overfire.
-                    </div>
-                    <div className="text-xs text-slate-500 col-span-2">
-                      Derived Min/Max fuel: {minFuel.toFixed(2)} / {maxFuel.toFixed(2)} (scaled)
-                    </div>
-                  </div>
-                )}
-              </details>
-<div className="flex items-center gap-2 mt-2">
-  <button
-    className="btn"
-    disabled={!canSetFiring}
-    onClick={() => {
-      if (!canSetFiring) return;
-      setRheostat((v) => {
-        const next = clamp(Math.round(v / 10) * 10 - 10, 0, 100);
-        applyCamIfSaved(next);
-        return next;
-      });
-    }}
-  >
-    -10%
-  </button>
-  <div className="value">{rheostat}%</div>
-  <button
-    className="btn"
-    disabled={!canSetFiring}
-    onClick={() => {
-      if (!canSetFiring) return;
-      setRheostat((v) => {
-        const next = clamp(Math.round(v / 10) * 10 + 10, 0, 100);
-        applyCamIfSaved(next);
-        return next;
-      });
-    }}
-  >
-    +10%
-  </button>
-</div>              </div>
-            </div>
-          )}
-
-<div className="card">
-  <div className="label">Start Troubleshooting Scenarios</div>
-  <select
-    aria-label="troubleshooting scenarios"
-    className="w-full border rounded-md px-2 py-2 mt-2"
-    value={scenarioSel}
-    onChange={(e) => {
-      const v = e.target.value;
-      setScenarioSel(v);
-      if (v) {
-        applyScenario(v);
-        setScenarioSel("");
-      }
-    }}
-  >
-    <option value="">Start Troubleshooting Scenarios</option>
-    {[
-      "Low air, hot stack",
-      "High draft, cold stack",
-      "Dirty nozzles (incomplete)",
-      "Biodiesel blend, medium stack",
-      "Reset",
-    ].map((s) => (
-      <option key={s} value={s}>{s}</option>
-    ))}
-  </select>
-</div>
-
-          <div className="card">
-
-            
-            <div className="label">Tuning Mode</div>
-            <div className="flex gap-2 mt-2">
-              <button className={`btn ${!tuningOn ? 'btn-primary' : ''}`} onClick={() => setTuningOn(false)}>Off</button>
-              <button className={`btn ${tuningOn ? 'btn-primary' : ''}`} onClick={() => setTuningOn(true)}>On</button>
-            </div>
-            <div className="text-xs text-slate-500 mt-2">
-              When ON, adjust fuel and air together and step the cam in 10% intervals.
-            </div>
-          </div>
-        </section>
-
-        {/* Middle: boiler visualization */}
-        <section className="col-span-12 lg:col-span-6">
-          <div className="card">
+      <main className="max-w-7xl mx-auto p-6">
+        <ResponsiveGridLayout
+          data-testid="grid-main"
+          className="layout"
+          breakpoints={rglBreakpoints}
+          cols={rglCols}
+          layouts={layouts}
+          onLayoutChange={handleLayoutChange}
+          rowHeight={10}
+          margin={[16, 16]}
+          draggableHandle=".drag-handle"
+          compactType="vertical"
+        >
+          <div key="viz" data-testid="panel-viz" className="card overflow-hidden">
+            <PanelHeader title="Boiler Visualization" />
             <div className="flex items-center justify-between">
               <div>
                 <div className="label">Stack Temperature</div>
@@ -1014,7 +1287,6 @@ const rheostatRampRef = useRef(null);
               </div>
               <div className="text-sm text-slate-600">Flame Test {steady.flameTempF} °F</div>
             </div>
-
             <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="md:col-span-2">
                 <div aria-label="combustion chamber" className="relative h-72 rounded-3xl border bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden">
@@ -1045,8 +1317,6 @@ const rheostatRampRef = useRef(null);
                   </div>
                 </div>
               </div>
-
-              {/* Right-side chamber controls */}
               <div className="space-y-4">
                 {!tuningActive && (
                   <>
@@ -1054,63 +1324,278 @@ const rheostatRampRef = useRef(null);
                     <div className="value">{Number(airFlow).toFixed(2)}</div>
                   </>
                 )}
-
                 <div className="label mt-6">Ambient Temperature (°F)</div>
                 <input aria-label="ambient temperature" type="number" className="w-full border rounded-md px-2 py-1" value={ambientF} onChange={(e) => setAmbientF(parseFloat(e.target.value || 0))} />
               </div>
             </div>
           </div>
-
-          {/* Analyzer dock */}
-          <CollapsibleSection title="Analyzer">
-          <div className="card mt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm">State: {anState} {probeInFlue && <span className="pill bg-slate-100 ml-2">Probe in flue</span>}</div>
-              </div>
-              <div className="flex gap-2 items-center">
-                <Led on={anState !== "OFF"} label="Power" />
-                <Led on={anState === "ZERO"} label="Zero" color="#06b6d4" />
-                <Led on={anState === "SAMPLING"} label="Sampling" color="#84cc16" />
-                <Led on={anState === "HOLD"} label="Hold" color="#f59e0b" />
-              </div>
+          <div key="controls" data-testid="panel-controls" className="card overflow-hidden">
+            <PanelHeader title="Boiler Control Panel" />
+            <CollapsibleSection title="Fuel Selector">
+              <select aria-label="fuel selector" className="w-full border rounded-md px-2 py-2 mt-1" value={fuelKey} onChange={(e) => setFuelKey(e.target.value)}>
+                {Object.keys(FUELS).map((k) => (
+                  <option key={k} value={k}>{k}</option>
+                ))}
+              </select>
+              <div className="mt-2 text-sm text-slate-600">HHV: {FUELS[fuelKey].HHV.toLocaleString()} Btu/{FUELS[fuelKey].unit}</div>
+              <div className="mt-1 text-xs text-slate-500">Targets: O₂ {fuel.targets.O2[0]} to {fuel.targets.O2[1]} percent, COair-free ≤ {fuel.targets.COafMax} ppm</div>
+            </CollapsibleSection>
+            <div className="label mt-4">Boiler Power</div>
+            <div className="flex items-center gap-2 mt-2">
+              <button className={`btn ${boilerOn ? 'btn-primary' : ''}`} onClick={() => setBoilerOn(true)}>On</button>
+              <button className="btn" onClick={() => setBoilerOn(false)}>Off</button>
             </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button className="btn" onClick={startAnalyzer}>Start</button>
-              <button className="btn" onClick={finishZero} disabled={anState !== "ZERO"}>Finish Zero</button>
-              <button className="btn" onClick={insertProbe} disabled={anState !== "READY"}>Insert Probe</button>
-              <button className="btn" onClick={() => setProbeInFlue(false)}>Remove Probe</button>
-              <button className="btn" onClick={holdAnalyzer} disabled={anState !== "SAMPLING"}>Hold</button>
-              <button className="btn" onClick={resumeAnalyzer} disabled={anState !== "HOLD"}>Resume</button>
-              <button className="btn-primary" onClick={saveReading} disabled={anState === "OFF"}>Save Reading</button>
+            <div className="label mt-4">Firing Rate (rheostat)</div>
+            <input
+              aria-label="firing rate"
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={rheostat}
+              onChange={(e) => { if (!canSetFiring) return; setRheostat(parseInt(e.target.value)); }}
+              className="w-full"
+              disabled={!canSetFiring}
+            />
+            <div className="value">{rheostat}%</div>
+            <CollapsibleSection title="Fuel/Air Flows">
+              {tuningActive ? (
+                <div>
+                  <div className="mt-2 grid grid-cols-1 gap-4">
+                    <div>
+                      <div className="label">Fuel Flow ({FUELS[fuelKey].unit}, scaled)</div>
+                      <input aria-label="tuning fuel flow" type="range" min={minFuel} max={maxFuel} step={0.1} value={fuelFlow} onChange={(e) => setFuelFlow(parseFloat(e.target.value))} className="w-full" />
+                      <div className="value">{fuelFlow.toFixed(2)}</div>
+                    </div>
+                    <div>
+                      <div className="label">Air Flow (cfm, scaled)</div>
+                      <input aria-label="tuning air flow" type="range" min={0} max={200} step={1} value={airFlow} onChange={(e) => setAirFlow(parseFloat(e.target.value))} className="w-full" />
+                      <div className="value">{Number(airFlow).toFixed(2)}</div>
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <div className="label">Camshaft Intervals</div>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {[0,10,20,30,40,50,60,70,80,90,100].map((p) => (
+                        <button
+                          key={p}
+                          className={`btn ${rheostat === p ? 'btn-primary' : ''}`}
+                          disabled={!canSetFiring}
+                          onClick={() => {
+                            if (!canSetFiring) return;
+                            setRheostat(p);
+                            applyCamIfSaved(p);
+                          }}
+                        >
+                          {p}%
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-3 flex items-center gap-2">
+                      <button
+                        className="btn btn-primary"
+                        disabled={!canSetFiring}
+                        onClick={setCamAtCurrent}
+                        title="Save current fuel and air at this cam position"
+                      >
+                        Set {currentCam}%
+                      </button>
+                      <button
+                        className="btn"
+                        disabled={!camMap[currentCam]}
+                        onClick={clearCamAtCurrent}
+                        title="Clear saved point at this cam position"
+                      >
+                        Clear {currentCam}%
+                      </button>
+                      <button
+                        className="btn"
+                        onClick={applySafeDefaults}
+                        title="Load safe default cam map (available anytime)"
+                      >
+                        Set tuning to safe defaults
+                      </button>
+                      {camMap[currentCam] && (
+                        <span className="pill bg-green-100">Saved: F {camMap[currentCam].fuel} / A {camMap[currentCam].air}</span>
+                      )}
+                      {defaultsLoaded && (
+                        <span className="pill bg-blue-100">Safe defaults loaded</span>
+                      )}
+                    </div>
+                    <div className="mt-2 text-xs text-slate-500">
+                      Saved cam points: {Object.keys(camMap).length ? Object.keys(camMap).sort((a,b)=>a-b).join(', ') : 'none'}
+                    </div>
+                    <details className="mt-4">
+                      <summary className="label cursor-pointer">Advanced inputs</summary>
+                      <div className="grid grid-cols-2 gap-2 mt-2">
+                        <label className="text-sm col-span-2">
+                          Air Flow
+                          <input
+                            type="number"
+                            className="w-full border rounded-md px-2 py-1 mt-1"
+                            value={airFlow}
+                            onChange={(e) => setAirFlow(parseFloat(e.target.value || 0))}
+                          />
+                        </label>
+                        <label className="text-sm col-span-2">
+                          Fuel Flow
+                          <input
+                            type="number"
+                            className="w-full border rounded-md px-2 py-1 mt-1"
+                            value={fuelFlow}
+                            onChange={(e) => setFuelFlow(parseFloat(e.target.value || 0))}
+                          />
+                        </label>
+                      </div>
+                    </details>
+                    <details className="mt-3">
+                      <summary className="label cursor-pointer">Regulators</summary>
+                      {!isOil ? (
+                        <div className="grid grid-cols-2 gap-2 mt-2">
+                          <label className="text-sm col-span-2">
+                            Manifold pressure (in. w.c.)
+                            <input
+                              type="number"
+                              className="w-full border rounded-md px-2 py-1 mt-1"
+                              value={regPress}
+                              onChange={(e) => setRegPress(parseFloat(e.target.value || 0))}
+                            />
+                          </label>
+                          <div className="text-xs text-slate-500 col-span-2 mt-1">
+                            Typical appliance manifold: NG ~3.5 in. w.c., LP ~10–11 in. w.c. Adjusting pressure raises input roughly with the square root of pressure.
+                          </div>
+                          <div className="text-xs text-slate-500 col-span-2">
+                            Derived Min/Max fuel: {minFuel.toFixed(2)} / {maxFuel.toFixed(2)} (scaled)
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2 mt-2">
+                          <label className="text-sm col-span-2">
+                            Pump pressure (psi)
+                            <input
+                              type="number"
+                              className="w-full border rounded-md px-2 py-1 mt-1"
+                              value={regPress}
+                              onChange={(e) => setRegPress(parseFloat(e.target.value || 0))}
+                            />
+                          </label>
+                          <div className="text-xs text-slate-500 col-span-2 mt-1">
+                            Oil nozzles are rated at 100 psi and flow scales ~√pressure. Higher pressure also improves atomization but watch for overfire.
+                          </div>
+                          <div className="text-xs text-slate-500 col-span-2">
+                            Derived Min/Max fuel: {minFuel.toFixed(2)} / {maxFuel.toFixed(2)} (scaled)
+                          </div>
+                        </div>
+                      )}
+                    </details>
+                    <div className="flex items-center gap-2 mt-2">
+                      <button
+                        className="btn"
+                        disabled={!canSetFiring}
+                        onClick={() => {
+                          if (!canSetFiring) return;
+                          setRheostat((v) => {
+                            const next = clamp(Math.round(v / 10) * 10 - 10, 0, 100);
+                            applyCamIfSaved(next);
+                            return next;
+                          });
+                        }}
+                      >
+                        -10%
+                      </button>
+                      <div className="value">{rheostat}%</div>
+                      <button
+                        className="btn"
+                        disabled={!canSetFiring}
+                        onClick={() => {
+                          if (!canSetFiring) return;
+                          setRheostat((v) => {
+                            const next = clamp(Math.round(v / 10) * 10 + 10, 0, 100);
+                            applyCamIfSaved(next);
+                            return next;
+                          });
+                        }}
+                      >
+                        +10%
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="label">Fuel Flow ({FUELS[fuelKey].unit}, scaled)</div>
+                    <div className="value">{fuelFlow.toFixed(2)}</div>
+                  </div>
+                  <div>
+                    <div className="label">Air Flow (cfm, scaled)</div>
+                    <div className="value">{Number(airFlow).toFixed(2)}</div>
+                  </div>
+                </div>
+              )}
+            </CollapsibleSection>
+            <div className="mt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="label">Programmer (EP160)</div>
+                  <div className="text-sm">State: {burnerState} {stateCountdown !== null && (<span className="pill bg-slate-100 ml-2">{stateCountdown}s left</span>)} {burnerState === "LOCKOUT" && (<span className="pill bg-red-100 ml-2">Lockout: {lockoutReason}</span>)}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Led on={t5Spark} label="T5 Spark" color="#06b6d4" />
+                  <Led on={t6Pilot} label="T6 Pilot" color="#f59e0b" />
+                  <Led on={t7Main} label="T7 Main" color="#84cc16" />
+                </div>
+              </div>
+              <div className="mt-2 flex items-center gap-4">
+                <div className="text-sm">Flame Signal: <span className="font-semibold">{Math.round(flameSignal)}</span> (10 min, 20–80 normal)</div>
+                <button className="btn" onClick={advanceStep}>Advance simulation</button>
+                {burnerState === "LOCKOUT" && (<button className="btn btn-primary" onClick={resetProgrammer}>Reset Programmer</button>)}
+              </div>
+              <div className="mt-2 text-xs text-slate-500">Prepurge {EP160.PURGE_HF_SEC}s → Low fire {EP160.LOW_FIRE_MIN_SEC}s → PTFI {EP160.PTFI_SEC}s → MTFI (spark off {EP160.MTFI_SPARK_OFF_SEC}s, pilot off {EP160.MTFI_PILOT_OFF_SEC}s) → Run → Post purge {EP160.POST_PURGE_SEC}s.</div>
             </div>
-            <div className="mt-2 text-xs text-slate-500">Zero in room air to capture combustion air temperature. Then insert probe to sample.</div>
           </div>
-          </CollapsibleSection>
-
-          <div className="card mt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="label">Programmer (EP160)</div>
-                <div className="text-sm">State: {burnerState} {stateCountdown !== null && (<span className="pill bg-slate-100 ml-2">{stateCountdown}s left</span>)} {burnerState === "LOCKOUT" && (<span className="pill bg-red-100 ml-2">Lockout: {lockoutReason}</span>)}</div>
+          <div key="readouts" data-testid="panel-readouts" className="card">
+            <PanelHeader title="Readouts" />
+            <div className="grid grid-cols-2 gap-3" role="group" aria-label="readouts">
+              <div><div className="label">O₂ (dry)</div><div className="value">{disp.O2.toFixed(2)}%</div></div>
+              <div><div className="label">CO₂ (dry)</div><div className="value">{disp.CO2.toFixed(2)}%</div></div>
+              <div><div className="label">CO</div><div className="value">{Math.round(disp.CO)} ppm</div></div>
+              <div><div className="label">CO air-free</div><div className="value">{Math.round(disp.COaf)} ppm</div></div>
+              <div><div className="label">NOₓ</div><div className="value">{Math.round(disp.NOx)} ppm</div></div>
+              <div><div className="label">Excess Air</div><div className="value">{((steady.excessAir - 1) * 100).toFixed(1)}%</div></div>
+              <div><div className="label">Efficiency</div><div className="value">{Number(disp.Eff).toFixed(1)}%</div></div>
+              <div><div className="label">Stack</div><div className="value">{Math.round(disp.StackF)} °F</div></div>
+              <div className="col-span-2 text-xs text-slate-500 mt-1">
+                Targets for {fuelKey}: O₂ {fuel.targets.O2[0]} to {fuel.targets.O2[1]} percent; CO AF ≤ {fuel.targets.COafMax} ppm; stack {fuel.targets.stackF[0]} to {fuel.targets.stackF[1]} °F.
               </div>
-              <div className="flex items-center gap-2">
-                <Led on={t5Spark} label="T5 Spark" color="#06b6d4" />
-                <Led on={t6Pilot} label="T6 Pilot" color="#f59e0b" />
-                <Led on={t7Main} label="T7 Main" color="#84cc16" />
+              <div className="col-span-2 mt-2">
+                <button
+                  className="btn"
+                  data-testid="btn-save-reading"
+                  onClick={() =>
+                    saveReading({
+                      fuel: fuelKey,
+                      setFire: rheostat,
+                      airFlow: Number(Number(airFlow).toFixed(2)),
+                      fuelFlow: Number(Number(fuelFlow).toFixed(2)),
+                      stackF: Math.round(disp.StackF),
+                      O2: Number(disp.O2.toFixed(2)),
+                      CO2: Number(disp.CO2.toFixed(2)),
+                      COppm: Math.round(disp.CO),
+                      NOxppm: Math.round(disp.NOx),
+                      excessAir: Number(((steady.excessAir - 1) * 100).toFixed(1)),
+                      efficiency: Number(Number(disp.Eff).toFixed(1)),
+                    })
+                  }
+                >
+                  Save Reading
+                </button>
               </div>
             </div>
-            <div className="mt-2 flex items-center gap-4">
-              <div className="text-sm">Flame Signal: <span className="font-semibold">{Math.round(flameSignal)}</span> (10 min, 20–80 normal)</div>
-              <button className="btn" onClick={advanceStep}>Advance simulation</button>
-              {burnerState === "LOCKOUT" && (<button className="btn btn-primary" onClick={resetProgrammer}>Reset Programmer</button>)}
-            </div>
-            <div className="mt-2 text-xs text-slate-500">Prepurge {EP160.PURGE_HF_SEC}s → Low fire {EP160.LOW_FIRE_MIN_SEC}s → PTFI {EP160.PTFI_SEC}s → MTFI (spark off {EP160.MTFI_SPARK_OFF_SEC}s, pilot off {EP160.MTFI_PILOT_OFF_SEC}s) → Run → Post purge {EP160.POST_PURGE_SEC}s.</div>
           </div>
-          {/* Trend chart */}
-          <div className="card mt-4">
-            <div className="label">Trend (last {history.length} points)</div>
-            <div className="h-64">
+          <div key="trend" className="card overflow-hidden flex flex-col">
+            <PanelHeader title="Trend" />
+            <div className="flex-1 min-h-0">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={history} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" />
@@ -1119,60 +1604,54 @@ const rheostatRampRef = useRef(null);
                   <YAxis yAxisId="right" orientation="right" domain={[0, 600]} />
                   <Tooltip />
                   <Legend />
-                  <Line yAxisId="left" type="monotone" dataKey="O2" dot={false} name="O₂ %" strokeWidth={2} isAnimationActive={false} />
-                  <Line yAxisId="left" type="monotone" dataKey="CO2" dot={false} name="CO₂ %" strokeWidth={2} isAnimationActive={false} />
-                  <Line yAxisId="right" type="monotone" dataKey="StackF" dot={false} name="Stack °F" strokeWidth={2} isAnimationActive={false} />
-                  <Line yAxisId="left" type="monotone" dataKey="Eff" dot={false} name="Eff %" strokeWidth={2} isAnimationActive={false} />
+                  {seriesConfig.map((series) =>
+                    seriesVisibility[series.key] && (
+                      <Line
+                        key={series.key}
+                        yAxisId={series.yAxisId}
+                        type="monotone"
+                        dataKey={series.key}
+                        dot={false}
+                        name={series.name}
+                        strokeWidth={2}
+                        isAnimationActive={false}
+                      />
+                    )
+                  )}
                 </LineChart>
               </ResponsiveContainer>
+
             </div>
           </div>
-        </section>
-
-        {/* Right readouts and saved table */}
-        <section className="col-span-12 lg:col-span-3 space-y-4">
-          <div className="card grid grid-cols-2 gap-3" role="group" aria-label="readouts">
-            <div><div className="label">O₂ (dry)</div><div className="value">{disp.O2.toFixed(2)}%</div></div>
-            <div><div className="label">CO₂ (dry)</div><div className="value">{disp.CO2.toFixed(2)}%</div></div>
-            <div><div className="label">CO</div><div className="value">{Math.round(disp.CO)} ppm</div></div>
-            <div><div className="label">CO air-free</div><div className="value">{Math.round(disp.COaf)} ppm</div></div>
-            <div><div className="label">NOₓ</div><div className="value">{Math.round(disp.NOx)} ppm</div></div>
-            <div><div className="label">Excess Air</div><div className="value">{((steady.excessAir - 1) * 100).toFixed(1)}%</div></div>
-            <div><div className="label">Efficiency</div><div className="value">{Number(disp.Eff).toFixed(1)}%</div></div>
-            <div><div className="label">Stack</div><div className="value">{Math.round(disp.StackF)} °F</div></div>
-
-            {/* Targets overlay */}
-            <div className="col-span-2 text-xs text-slate-500 mt-1">
-              Targets for {fuelKey}: O₂ {fuel.targets.O2[0]} to {fuel.targets.O2[1]} percent; CO AF ≤ {fuel.targets.COafMax} ppm; stack {fuel.targets.stackF[0]} to {fuel.targets.stackF[1]} °F.
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="label">Clock the Boiler (Metering)</div>
+          <div key="meter" data-testid="panel-meter" className="card overflow-hidden">
+            <PanelHeader title="Clock the Boiler (Metering)" />
             <div className="flex gap-2 mt-2">
               <button
-                className={`btn ${meterTab === 'Gas' ? 'btn-primary' : ''}`}
-                onClick={() => setMeterTab('Gas')}
+                className={`btn ${meterTab === "Gas" ? "btn-primary" : ""}`}
+                onClick={() => setMeterTab("Gas")}
               >
                 Gas Meter
               </button>
               <button
-                className={`btn ${meterTab === 'Oil' ? 'btn-primary' : ''}`}
-                onClick={() => setMeterTab('Oil')}
+                className={`btn ${meterTab === "Oil" ? "btn-primary" : ""}`}
+                onClick={() => setMeterTab("Oil")}
               >
                 Oil Meter
               </button>
             </div>
-            {meterTab === 'Gas' ? (
+            {meterTab === "Gas" ? (
               <div className="mt-3 space-y-2">
                 <label className="text-sm">
                   Dial size (ft³)
                   <input
+                    data-testid="meter-input"
                     type="number"
                     list="dialSizes"
                     className="w-full border rounded-md px-2 py-1 mt-1"
                     value={gasDialSize}
-                    onChange={(e) => setGasDialSize(parseFloat(e.target.value || 0))}
+                    onChange={(e) =>
+                      setGasDialSize(parseFloat(e.target.value || 0))
+                    }
                   />
                   <datalist id="dialSizes">
                     <option value="0.25" />
@@ -1182,41 +1661,111 @@ const rheostatRampRef = useRef(null);
                   </datalist>
                 </label>
                 <div className="flex flex-wrap gap-2">
-                  <button className="btn btn-primary" onClick={startGasClock} disabled={gasRunning || !isGas}>Start</button>
-                  <button className="btn" onClick={lapGasClock} disabled title="Meter laps are generated automatically from current burner flow">Lap</button>
-                  <button className="btn" onClick={stopGasClock} disabled={!gasRunning}>Stop</button>
-                  <button className="btn" onClick={resetGasClock}>Reset</button>
-                  <button className="btn" onClick={exportGasClock} disabled={!gasLaps.length}>Export</button>
+                  <button
+                    className="btn btn-primary"
+                    onClick={startGasClock}
+                    disabled={gasRunning || !isGas}
+                  >
+                    Start
+                  </button>
+                  <button
+                    className="btn"
+                    onClick={lapGasClock}
+                    disabled
+                    title="Meter laps are generated automatically from current burner flow"
+                  >
+                    Lap
+                  </button>
+                  <button
+                    className="btn"
+                    onClick={stopGasClock}
+                    disabled={!gasRunning}
+                  >
+                    Stop
+                  </button>
+                  <button className="btn" onClick={resetGasClock}>
+                    Reset
+                  </button>
+                  <button
+                    className="btn"
+                    onClick={exportGasClock}
+                    disabled={!gasLaps.length}
+                  >
+                    Export
+                  </button>
                 </div>
                 {!isGas && (
                   <div className="text-xs text-slate-500 mt-1">
-                    Gas meter is only active for Natural Gas/Propane. Select a gas fuel to clock.
+                    Gas meter is only active for Natural Gas/Propane. Select a
+                    gas fuel to clock.
                   </div>
                 )}
                 <div className="text-sm">
-                  Sim sec/rev (from burner): <span className="font-semibold">
-                    {gasMeterRevSec > 0 ? gasMeterRevSec.toFixed(1) : '—'}
+                  Sim sec/rev (from burner):{" "}
+                  <span className="font-semibold">
+                    {gasMeterRevSec > 0 ? gasMeterRevSec.toFixed(1) : "—"}
                   </span>
                 </div>
-                <div className="text-sm">Meter CFH (clocked avg): <span className="font-semibold">{gasCFH.toFixed(1)}</span></div>
-                <div className="text-sm">Burner CFH (model): <span className="font-semibold">{gasBurnerCFH.toFixed(1)}</span></div>
-                <div className="text-sm">Cam/Reg CFH (mapped): <span className="font-semibold">{gasCamCFH.toFixed(1)}</span></div>
-                <div className="text-sm">Input MBH (model): <span className="font-semibold">{gasMBH_model.toFixed(1)}</span></div>
+                <div className="text-sm">
+                  Meter CFH (clocked avg):{" "}
+                  <span className="font-semibold" data-testid="meter-output">{gasCFH.toFixed(1)}</span>
+                </div>
+                <div className="text-sm">
+                  Burner CFH (model):{" "}
+                  <span className="font-semibold">
+                    {gasBurnerCFH.toFixed(1)}
+                  </span>
+                </div>
+                <div className="text-sm">
+                  Cam/Reg CFH (mapped):{" "}
+                  <span className="font-semibold">
+                    {gasCamCFH.toFixed(1)}
+                  </span>
+                </div>
+                <div className="text-sm">
+                  Input MBH (model):{" "}
+                  <span className="font-semibold">
+                    {gasMBH_model.toFixed(1)}
+                  </span>
+                </div>
               </div>
             ) : (
               <div className="mt-3 space-y-2">
-                <div className="text-sm">Burner GPH (model): <span className="font-semibold">{oilBurnerGPH.toFixed(2)}</span></div>
-                <div className="text-sm">Cam/Reg GPH (mapped): <span className="font-semibold">{oilCamGPH.toFixed(2)}</span></div>
-                <div className="text-sm">Sec/gal at current flow: <span className="font-semibold">{oilSecPerGal > 0 ? oilSecPerGal.toFixed(0) : '—'}</span></div>
-                <div className="text-sm">Volume in 60s: <span className="font-semibold">{(oilBurnerGPH/60).toFixed(2)}</span> gal</div>
-                <div className="text-xs text-slate-500">Field estimate from nozzle/pressure (optional):</div>
+                <div className="text-sm">
+                  Burner GPH (model):{" "}
+                  <span className="font-semibold">
+                    {oilBurnerGPH.toFixed(2)}
+                  </span>
+                </div>
+                <div className="text-sm">
+                  Cam/Reg GPH (mapped):{" "}
+                  <span className="font-semibold">{oilCamGPH.toFixed(2)}</span>
+                </div>
+                <div className="text-sm">
+                  Sec/gal at current flow:{" "}
+                  <span className="font-semibold">
+                    {oilSecPerGal > 0 ? oilSecPerGal.toFixed(0) : "—"}
+                  </span>
+                </div>
+                <div className="text-sm">
+                  Volume in 60s:{" "}
+                  <span className="font-semibold">
+                    {(oilBurnerGPH / 60).toFixed(2)}
+                  </span>{" "}
+                  gal
+                </div>
+                <div className="text-xs text-slate-500">
+                  Field estimate from nozzle/pressure (optional):
+                </div>
                 <label className="text-sm">
                   Nozzle GPH @100 psi
                   <input
                     type="number"
                     className="w-full border rounded-md px-2 py-1 mt-1"
                     value={nozzleGPH100}
-                    onChange={(e) => setNozzleGPH100(parseFloat(e.target.value || 0))}
+                    onChange={(e) =>
+                      setNozzleGPH100(parseFloat(e.target.value || 0))
+                    }
                   />
                 </label>
                 <label className="text-sm">
@@ -1225,67 +1774,48 @@ const rheostatRampRef = useRef(null);
                     type="number"
                     className="w-full border rounded-md px-2 py-1 mt-1"
                     value={oilPressure}
-                    onChange={(e) => setOilPressure(parseFloat(e.target.value || 0))}
+                    onChange={(e) =>
+                      setOilPressure(parseFloat(e.target.value || 0))
+                    }
                   />
                 </label>
-                <div className="text-sm">Actual GPH: <span className="font-semibold">{oilGPH.toFixed(2)}</span></div>
-                <div className="text-sm">Input MBH: <span className="font-semibold">{oilMBH.toFixed(1)}</span></div>
-                <button className="btn mt-2" onClick={exportOilClock}>Export</button>
+                <div className="text-sm">
+                  Actual GPH:{" "}
+                  <span className="font-semibold">{oilGPH.toFixed(2)}</span>
+                </div>
+                <div className="text-sm">
+                  Input MBH:{" "}
+                  <span className="font-semibold">{oilMBH.toFixed(1)}</span>
+                </div>
+                <button className="btn mt-2" onClick={exportOilClock}>
+                  Export
+                </button>
               </div>
             )}
           </div>
+          {mainItems.map((id) => {
+              const Panel = panels[id].Component;
+              return (
+                <div key={id} className="card overflow-hidden" data-grid={{ w: 3, h: 10 }}>
+                  <PanelHeader
+                    title={panels[id].title}
+                    dockAction={
+                      <button className="btn" onClick={() => dock(id, "techDrawer")}> 
+                        Move to Tech
+                      </button>
+                    }
+                  />
+                  <Panel
+                    visibility={seriesVisibility}
+                    setVisibility={setSeriesVisibility}
+                    saved={saved}
+                    exportSavedReadings={exportSavedReadings}
+                  />
+                </div>
+              );
+            })}
 
-          <div className="card overflow-x-auto">
-            <div className="label mb-2">Saved readings</div>
-            <table className="min-w-full text-xs">
-              <thead>
-                <tr className="text-left text-slate-500">
-                  {"t,Fuel,Rate,FuelFlow,AirFlow,O2,CO2,COaf,CO,NOx,StackF,Eff,EA,Mode".split(",").map((h) => (
-  <th key={h} className="py-1 pr-3">{h}</th>
-))}
-                </tr>
-              </thead>
-              <tbody>
-                {saved.slice(-40).map((r, i) => (
-                  <tr key={i} className="border-t">
-                    {Object.values(r).map((v, j) => (
-                      <td key={j} className="py-1 pr-3 whitespace-nowrap">{v}</td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-        </section>
-
-        {/* Data table */}
-        <section className="col-span-12">
-          <div className="card overflow-x-auto">
-            <div className="label mb-2">Trend table</div>
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-500">{"t,O2,CO2,CO,NOx,StackF,Eff".split(",").map((h) => (<th key={h} className="py-1 pr-4">{h}</th>))}</tr>
-              </thead>
-              <tbody>
-                {history.slice(-60).map((r, i) => (
-                  <tr key={i} className="border-t">
-                    <td className="py-1 pr-4 whitespace-nowrap">{r.t}</td>
-                    <td className="py-1 pr-4">{r.O2}</td>
-                    <td className="py-1 pr-4">{r.CO2}</td>
-                    <td className="py-1 pr-4">{r.CO}</td>
-                    <td className="py-1 pr-4">{r.NOx}</td>
-                    <td className="py-1 pr-4">{r.StackF}</td>
-                    <td className="py-1 pr-4">{r.Eff}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-        <section className="col-span-12">
-          <SeriesVisibility visibility={seriesVisibility} setVisibility={setSeriesVisibility} />
-        </section>
+        </ResponsiveGridLayout>
       </main>
 
       <footer className="max-w-7xl mx-auto p-6 text-xs text-slate-500">Educational model. For classroom intuition only.</footer>
