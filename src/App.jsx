@@ -39,6 +39,7 @@ import { useUIState } from "./components/UIStateContext";
 import { loadConfig, saveConfig, getDefaultConfig } from "./lib/config";
 import SettingsMenu from "./components/SettingsMenu";
 import AirDrawerIndicator from "./components/AirDrawerIndicator";
+import GridAutoSizer from "./components/GridAutoSizer";
 import { panels, defaultZoneById, defaultLayouts as techDefaults } from "./panels";
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -354,6 +355,21 @@ export default function CombustionTrainer() {
     setLayouts(allLayouts);
     saveLayouts(allLayouts);
   };
+  // helper to set height for a panel in current breakpoint layout
+  const setItemRows = useCallback((key, rows) => {
+    setLayouts((prev) => {
+      const bp = Object.keys(rglBreakpoints).find((b) => window.innerWidth >= rglBreakpoints[b]);
+      if (!bp) return prev;
+      const copy = { ...prev, [bp]: [...(prev[bp] || [])] };
+      const idx = copy[bp].findIndex((it) => it.i === key);
+      if (idx === -1) return prev;
+      const cur = copy[bp][idx];
+      if (cur.h === rows) return prev;
+      copy[bp][idx] = { ...cur, h: rows };
+      saveLayouts(copy);
+      return copy;
+    });
+  }, []);
 
   const handleResetLayouts = () => {
     localStorage.removeItem(RGL_LS_KEY);
@@ -1312,7 +1328,7 @@ const rheostatRampRef = useRef(null);
           draggableHandle=".drag-handle"
           compactType="vertical"
         >
-          <div key="viz" data-testid="panel-viz" className="card overflow-hidden">
+          <GridAutoSizer key="viz" id="viz" className="card overflow-hidden" onRows={(r) => setItemRows("viz", r)} rowHeight={10} data-testid="panel-viz">
             <PanelHeader title="Boiler Visualization" />
             <div className="flex items-center justify-between">
               <div>
@@ -1405,8 +1421,8 @@ const rheostatRampRef = useRef(null);
               </div>
               <div className="mt-2 text-xs text-slate-500">Prepurge {EP160.PURGE_HF_SEC}s → Low fire {EP160.LOW_FIRE_MIN_SEC}s → PTFI {EP160.PTFI_SEC}s → MTFI (spark off {EP160.MTFI_SPARK_OFF_SEC}s, pilot off {EP160.MTFI_PILOT_OFF_SEC}s) → Run → Post purge {EP160.POST_PURGE_SEC}s.</div>
             </div>
-          </div>
-          <div key="controls" data-testid="panel-controls" className="card overflow-hidden">
+          </GridAutoSizer>
+          <GridAutoSizer key="controls" id="controls" data-testid="panel-controls" className="card overflow-hidden" onRows={(r) => setItemRows("controls", r)} rowHeight={10}>
             <PanelHeader title="Boiler Control Panel" />
             <CollapsibleSection title="Fuel Selector">
               <select aria-label="fuel selector" className="w-full border rounded-md px-2 py-2 mt-1" value={fuelKey} onChange={(e) => setFuelKey(e.target.value)}>
@@ -1612,8 +1628,8 @@ const rheostatRampRef = useRef(null);
               )}
             </CollapsibleSection>
             {/* Programmer moved to visualization section */}
-          </div>
-          <div key="readouts" data-testid="panel-readouts" className="card">
+          </GridAutoSizer>
+          <GridAutoSizer key="readouts" id="readouts" data-testid="panel-readouts" className="card" onRows={(r) => setItemRows("readouts", r)} rowHeight={10}>
             <PanelHeader title="Readouts" />
             <div className="grid grid-cols-2 gap-3" role="group" aria-label="readouts">
               <div><div className="label">O₂ (dry)</div><div className="value">{disp.O2.toFixed(2)}%</div></div>
@@ -1651,8 +1667,8 @@ const rheostatRampRef = useRef(null);
                 </button>
               </div>
             </div>
-          </div>
-          <div key="trend" className="card overflow-hidden flex flex-col">
+          </GridAutoSizer>
+          <GridAutoSizer key="trend" id="trend" className="card overflow-hidden flex flex-col" onRows={(r) => setItemRows("trend", r)} rowHeight={10}>
             <PanelHeader title="Trend" />
             <div className="flex-1 min-h-0">
               <ResponsiveContainer width="100%" height="100%">
@@ -1681,8 +1697,8 @@ const rheostatRampRef = useRef(null);
               </ResponsiveContainer>
 
             </div>
-          </div>
-          <div key="meter" data-testid="panel-meter" className="card overflow-hidden">
+          </GridAutoSizer>
+          <GridAutoSizer key="meter" id="meter" data-testid="panel-meter" className="card overflow-hidden" onRows={(r) => setItemRows("meter", r)} rowHeight={10}>
             <PanelHeader title="Clock the Boiler (Metering)" />
             <div className="flex gap-2 mt-2">
               <button
@@ -1851,28 +1867,35 @@ const rheostatRampRef = useRef(null);
                 </button>
               </div>
             )}
-          </div>
+          </GridAutoSizer>
           {mainItems.map((id) => {
-              const Panel = panels[id].Component;
-              return (
-                <div key={id} className="card overflow-hidden" data-grid={{ w: 3, h: 10 }}>
-                  <PanelHeader
-                    title={panels[id].title}
-                    dockAction={
-                      <button className="btn" onClick={() => dock(id, "techDrawer")}> 
-                        Move to Tech
-                      </button>
-                    }
-                  />
-                  <Panel
-                    visibility={seriesVisibility}
-                    setVisibility={setSeriesVisibility}
-                    saved={saved}
-                    exportSavedReadings={exportSavedReadings}
-                  />
-                </div>
-              );
-            })}
+            const Panel = panels[id].Component;
+            return (
+              <GridAutoSizer
+                key={id}
+                id={id}
+                className="card overflow-hidden"
+                onRows={(r) => setItemRows(id, r)}
+                rowHeight={10}
+                data-grid={{ w: 3, h: 10 }}
+              >
+                <PanelHeader
+                  title={panels[id].title}
+                  dockAction={
+                    <button className="btn" onClick={() => dock(id, "techDrawer")}>
+                      Move to Tech
+                    </button>
+                  }
+                />
+                <Panel
+                  visibility={seriesVisibility}
+                  setVisibility={setSeriesVisibility}
+                  saved={saved}
+                  exportSavedReadings={exportSavedReadings}
+                />
+              </GridAutoSizer>
+            );
+          })}
 
         </ResponsiveGridLayout>
       </main>
