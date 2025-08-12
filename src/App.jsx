@@ -6,7 +6,15 @@
  * modules located in `src/lib` for math, chemistry calculations, cam
  * map generation and CSV export. Recharts is used for trend plotting.
  */
-import React, { useEffect, useMemo, useRef, useState, useLayoutEffect } from "react";
+/* global process */
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useLayoutEffect as _useLayoutEffect,
+} from "react";
 import { Responsive, WidthProvider } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -27,12 +35,15 @@ import { computeCombustion } from "./lib/chemistry";
 import { buildSafeCamMap } from "./lib/cam";
 import CollapsibleSection from "./components/CollapsibleSection";
 import RightDrawer from "./components/RightDrawer";
-import SeriesVisibility from "./components/SeriesVisibility";
 import { useUIState } from "./components/UIStateContext";
 import { loadConfig, saveConfig, getDefaultConfig } from "./lib/config";
 import SettingsMenu from "./components/SettingsMenu";
-import { resetAllLayouts } from "./layout/store";
+import { panels, defaultZoneById, defaultLayouts as techDefaults } from "./panels";
 const ResponsiveGridLayout = WidthProvider(Responsive);
+
+const useIsomorphicLayoutEffect =
+  typeof window !== "undefined" ? _useLayoutEffect : useEffect;
+const isDev = typeof process !== "undefined" && process.env.NODE_ENV !== "production";
 
 /**
  * Visual representation of a flame.
@@ -52,40 +63,150 @@ const seriesConfig = [
   { key: 'Eff', name: 'Eff %', yAxisId: 'left' },
 ];
 
-const RGL_LS_KEY = "ct_layouts_v1";
+const RGL_LS_KEY = "ct_layouts_v2";
+const ZONES_KEY = "ct_zones_v1";
+const SAVED_KEY = "ct_saved_v1";
 
 const rglBreakpoints = { lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 };
-const rglCols        = { lg:   12, md:  10, sm:   8, xs:   6, xxs:  4 };
+const rglCols        = { lg:   12,  md:  10,  sm:   8,  xs:   6,  xxs:  4 };
 
 const defaultLayouts = {
   lg: [
-    { i: "viz",      x: 0, y: 0,  w: 7, h: 26, minW: 4, minH: 12 },
-    { i: "controls", x: 0, y: 26, w: 7, h: 20, minW: 4, minH: 10 },
-    { i: "readouts", x: 7, y: 0,  w: 5, h: 12, minW: 3, minH: 6  },
-    { i: "trend",    x: 7, y: 12, w: 5, h: 16, minW: 3, minH: 10 },
-    { i: "meter",    x: 7, y: 28, w: 5, h: 12, minW: 3, minH: 8  },
-    { i: "saved",    x: 0, y: 46, w:12, h: 16, minW: 6, minH: 10 },
+    { i: "viz",      x: 0, y: 0,  w: 7,  h: 26, minW: 4, minH: 12 },
+    { i: "controls", x: 0, y: 26, w: 7,  h: 20, minW: 4, minH: 10 },
+    { i: "readouts", x: 7, y: 0,  w: 5,  h: 12, minW: 3, minH:  6 },
+    { i: "trend",    x: 7, y: 12, w: 5,  h: 16, minW: 3, minH: 10 },
+    { i: "meter",    x: 7, y: 28, w: 5,  h: 12, minW: 3, minH:  8 },
+  ],
+  md: [
+    { i: "viz",      x: 0, y: 0,  w: 6,  h: 26 },
+    { i: "controls", x: 0, y: 26, w: 6,  h: 20 },
+    { i: "readouts", x: 6, y: 0,  w: 4,  h: 12 },
+    { i: "trend",    x: 6, y: 12, w: 4,  h: 16 },
+    { i: "meter",    x: 6, y: 28, w: 4,  h: 12 },
+  ],
+  sm: [
+    { i: "viz",      x: 0, y: 0,  w: 5,  h: 26 },
+    { i: "controls", x: 0, y: 26, w: 5,  h: 20 },
+    { i: "readouts", x: 5, y: 0,  w: 3,  h: 12 },
+    { i: "trend",    x: 5, y: 12, w: 3,  h: 16 },
+    { i: "meter",    x: 5, y: 28, w: 3,  h: 12 },
+  ],
+  xs: [
+    { i: "viz",      x: 0, y: 0,  w: 6, h: 24 },
+    { i: "controls", x: 0, y: 24, w: 6, h: 18 },
+    { i: "readouts", x: 0, y: 42, w: 6, h: 10 },
+    { i: "trend",    x: 0, y: 52, w: 6, h: 16 },
+    { i: "meter",    x: 0, y: 68, w: 6, h: 10 },
+  ],
+  xxs: [
+    { i: "viz",      x: 0, y: 0,  w: 4, h: 24 },
+    { i: "controls", x: 0, y: 24, w: 4, h: 18 },
+    { i: "readouts", x: 0, y: 42, w: 4, h: 10 },
+    { i: "trend",    x: 0, y: 52, w: 4, h: 16 },
+    { i: "meter",    x: 0, y: 68, w: 4, h: 10 },
   ],
 };
-defaultLayouts.md = defaultLayouts.lg;
-defaultLayouts.sm = defaultLayouts.lg;
-defaultLayouts.xs = defaultLayouts.lg;
-defaultLayouts.xxs = defaultLayouts.lg;
 
+function fitToCols(items, cols) {
+  return items.map((it) => {
+    const w = Math.min(it.w ?? 1, cols);
+    const x = Math.min(it.x ?? 0, Math.max(0, cols - w));
+    return { ...it, w, x };
+  });
+}
+function normalizeLayouts(layouts) {
+  const out = {};
+  Object.entries(rglCols).forEach(([bp, cols]) => {
+    const arr = layouts?.[bp] ?? [];
+    out[bp] = fitToCols(arr, cols);
+  });
+  return out;
+}
 function loadLayouts() {
   try {
     const raw = localStorage.getItem(RGL_LS_KEY);
-    return raw ? JSON.parse(raw) : defaultLayouts;
-  } catch {
-    return defaultLayouts;
+    const parsed = raw ? JSON.parse(raw) : defaultLayouts;
+    return normalizeLayouts(parsed);
+  } catch (e) {
+    if (isDev) {
+      console.error("Failed to load layouts from localStorage:", e);
+    }
+    return normalizeLayouts(defaultLayouts);
   }
 }
 
 function saveLayouts(layouts) {
   try {
     localStorage.setItem(RGL_LS_KEY, JSON.stringify(layouts));
-  } catch {
-    /* ignore */
+  } catch (e) {
+    if (isDev) {
+      console.error("Failed to save layouts to localStorage:", e);
+    }
+  }
+}
+
+function loadZones() {
+  try {
+    return JSON.parse(localStorage.getItem(ZONES_KEY)) || defaultZoneById;
+  } catch (e) {
+    if (isDev) {
+      console.error("Failed to load zones from localStorage:", e);
+    }
+    return defaultZoneById;
+  }
+}
+function saveZones(z) {
+  try {
+    localStorage.setItem(ZONES_KEY, JSON.stringify(z));
+  } catch (e) {
+    if (isDev) {
+      console.error("Failed to save zones to localStorage:", e);
+    }
+  }
+}
+
+const TECH_LS_KEY = "ct_tech_layouts_v1";
+function loadTechLayouts() {
+  try {
+    const raw = localStorage.getItem(TECH_LS_KEY);
+    const parsed = raw ? JSON.parse(raw) : techDefaults.techDrawer;
+    return normalizeLayouts(parsed);
+  } catch (e) {
+    if (isDev) {
+      console.error("Failed to load tech layouts from localStorage:", e);
+    }
+    return normalizeLayouts(techDefaults.techDrawer);
+  }
+}
+function saveTechLayouts(ls) {
+  try {
+    localStorage.setItem(TECH_LS_KEY, JSON.stringify(ls));
+  } catch (e) {
+    if (isDev) {
+      console.error("Failed to save tech layouts to localStorage:", e);
+    }
+  }
+}
+
+function loadSaved() {
+  try {
+    const raw = localStorage.getItem(SAVED_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    if (isDev) {
+      console.error("Failed to load saved readings:", e);
+    }
+    return [];
+  }
+}
+function persistSaved(next) {
+  try {
+    localStorage.setItem(SAVED_KEY, JSON.stringify(next));
+  } catch (e) {
+    if (isDev) {
+      console.error("Failed to persist saved readings:", e);
+    }
   }
 }
 
@@ -181,11 +302,14 @@ function Led({ on, label, color = "limegreen" }) {
   );
 }
 
-function PanelHeader({ title, right }) {
+function PanelHeader({ title, right, dockAction }) {
   return (
     <div className="flex items-center justify-between mb-2">
       <div className="label drag-handle cursor-move select-none">{title}</div>
-      {right || null}
+      <div className="flex items-center gap-2">
+        {right}
+        {dockAction}
+      </div>
     </div>
   );
 }
@@ -196,16 +320,33 @@ export default function CombustionTrainer() {
   const unitSystem = config.units.system;
   const [showSettings, setShowSettings] = useState(false);
   const [layouts, setLayouts] = useState(loadLayouts());
-  const [theme, setTheme] = useState(() => localStorage.getItem("ct_theme") || "system");
 
-  useLayoutEffect(() => {
+  const [theme, setTheme] = useState(() => {
+    try {
+      return localStorage.getItem("ct_theme") || "system";
+    } catch (e) {
+      if (isDev) {
+        console.error("Failed to load theme from localStorage:", e);
+      }
+      return "system";
+    }
+  });
+
+  useIsomorphicLayoutEffect(() => {
     applyTheme(theme);
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("ct_theme", theme);
+    try {
+      localStorage.setItem("ct_theme", theme);
+    } catch (e) {
+      if (isDev) {
+        console.error("Failed to save theme to localStorage:", e);
+      }
+    }
     applyTheme(theme);
   }, [theme]);
+
 
   const handleLayoutChange = (_current, allLayouts) => {
     setLayouts(allLayouts);
@@ -214,9 +355,75 @@ export default function CombustionTrainer() {
 
   const handleResetLayouts = () => {
     localStorage.removeItem(RGL_LS_KEY);
-    setLayouts(defaultLayouts);
-    try { resetAllLayouts(); } catch { /* ignore */ }
+    localStorage.removeItem("ct_layouts_v1");
+    setLayouts(normalizeLayouts(defaultLayouts));
   };
+  const dock = useCallback((id, zone) => {
+    setZones((prev) => {
+      const next = { ...prev, [id]: zone };
+      saveZones(next);
+      return next;
+    });
+  }, []);
+  const onTechChange = (_cur, all) => {
+    setTechLayouts(all);
+    saveTechLayouts(all);
+  };
+  const [zones, setZones] = useState(loadZones());
+  const mainItems = useMemo(
+    () => Object.keys(panels).filter((id) => zones[id] === "main"),
+    [zones],
+  );
+  const techItems = useMemo(
+    () => Object.keys(panels).filter((id) => zones[id] === "techDrawer"),
+    [zones],
+  );
+  useEffect(() => {
+    try {
+      const v2 = localStorage.getItem(RGL_LS_KEY);
+      const v1 = localStorage.getItem("ct_layouts_v1");
+      if (!v2 && v1) {
+        const parsed = JSON.parse(v1);
+        const normalized = normalizeLayouts(parsed);
+        localStorage.setItem(RGL_LS_KEY, JSON.stringify(normalized));
+        localStorage.removeItem("ct_layouts_v1");
+      }
+    } catch (e) {
+      if (isDev) {
+        console.error("Failed to migrate old layouts:", e);
+      }
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      const zonesRaw = localStorage.getItem(ZONES_KEY);
+      const zonesObj = zonesRaw ? JSON.parse(zonesRaw) : null;
+      if (!zonesObj || zonesObj.saved == null) {
+        const next = { ...(zonesObj || {}), saved: "techDrawer" };
+        localStorage.setItem(ZONES_KEY, JSON.stringify(next));
+      }
+      const layoutsRaw = localStorage.getItem(RGL_LS_KEY);
+      if (layoutsRaw) {
+        const parsed = JSON.parse(layoutsRaw);
+        let changed = false;
+        Object.keys(parsed).forEach((bp) => {
+          const arr = parsed[bp];
+          const filtered = arr.filter((it) => it.i !== "saved");
+          if (filtered.length !== arr.length) {
+            parsed[bp] = filtered;
+            changed = true;
+          }
+        });
+        if (changed) {
+          localStorage.setItem(RGL_LS_KEY, JSON.stringify(parsed));
+        }
+      }
+    } catch (e) {
+      if (isDev) {
+        console.error("Failed to migrate saved panel:", e);
+      }
+    }
+  }, []);
   const applyTheme = (theme) => {
     const root = document.documentElement;
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -235,6 +442,15 @@ export default function CombustionTrainer() {
     setTheme(next.general.theme);
     setShowSettings(false);
   };
+  // Scenario selection state and handler
+  const [scenarioSel, setScenarioSel] = useState("");
+  const handleScenarioChange = useCallback((e) => {
+    const val = e.target.value;
+    setScenarioSel(val);
+    if (val === "" || val === "Reset") {
+      // reset scenario-specific overrides if implemented later
+    }
+  }, []);
   // ----------------------- Fuel selection -----------------------
   const [fuelKey, setFuelKey] = useState("Natural Gas"); // currently selected fuel key
   const fuel = FUELS[fuelKey]; // lookup fuel properties
@@ -266,9 +482,7 @@ export default function CombustionTrainer() {
   const stateTimeRef = useRef(0); // milliseconds elapsed in current state
 
   // ----------------------- Analyzer state machine -----------------------
-  const [anState, setAnState] = useState("OFF"); // OFF, ZERO, READY, SAMPLING, HOLD
-  const [probeInFlue, setProbeInFlue] = useState(false); // whether probe inserted
-  const [saved, setSaved] = useState([]); // logged analyzer readings
+  const [saved, setSaved] = useState(loadSaved); // logged analyzer readings
   const [t5Spark, setT5Spark] = useState(false); // output relay states for animation
   const [t6Pilot, setT6Pilot] = useState(false);
   const [t7Main, setT7Main] = useState(false);
@@ -277,7 +491,6 @@ export default function CombustionTrainer() {
   const flameOutTimerRef = useRef(0); // tracks flame failure detection time
   const [lockoutReason, setLockoutReason] = useState("");
   const [lockoutPending, setLockoutPending] = useState(false);
-  const [scenarioSel, setScenarioSel] = useState(""); // current troubleshooting scenario
 
   // ----------------------- Metering panel -----------------------
   const [meterTab, setMeterTab] = useState("Gas"); // which meter UI is visible
@@ -378,7 +591,9 @@ useEffect(() => {
   };
 
   // Tuning Mode
+
   const [tuningOn, setTuningOn] = useState(false);
+
   const [camMap, setCamMap] = useState({}); // { percent: { fuel, air } }
   const [defaultsLoaded, setDefaultsLoaded] = useState(false);
 
@@ -684,31 +899,6 @@ useEffect(() => {
     return () => clearInterval(id);
   }, []);
 
-  // Analyzer controls
-  const startAnalyzer = () => { setAnState("ZERO"); setProbeInFlue(false); };
-  const finishZero = () => { setAnState("READY"); };
-  const insertProbe = () => { if (anState === "READY") { setProbeInFlue(true); setAnState("SAMPLING"); } };
-  const holdAnalyzer = () => { if (anState === "SAMPLING") setAnState("HOLD"); };
-  const resumeAnalyzer = () => { if (anState === "HOLD") setAnState("SAMPLING"); };
-  const saveReading = () => {
-    const row = {
-      t: new Date().toLocaleTimeString(),
-      Fuel: fuelKey,
-      Rate: rheostat, // percent
-      FuelFlow: Number(parseFloat(fuelFlow).toFixed(2)),
-      AirFlow: Number(parseFloat(airFlow).toFixed(2)),
-      O2: Number(disp.O2.toFixed(2)),
-      CO2: Number(disp.CO2.toFixed(2)),
-      COaf: Math.round(disp.COaf),
-      CO: Math.round(disp.CO),
-      NOx: Math.round(disp.NOx),
-      StackF: Math.round(disp.StackF),
-      Eff: Number(Number(disp.Eff).toFixed(1)),
-      EA: steady.excessAir,
-      Mode: burnerState,
-    };
-    setSaved((s) => [...s, row]);
-  };
 
   const resetProgrammer = () => {
     setLockoutReason("");
@@ -768,26 +958,73 @@ useEffect(() => {
     }, config.analyzer.samplingSec * 1000);
     return () => clearInterval(id);
   }, [config.analyzer.samplingSec, config.general.trendLength]);
-  // Scenario presets (adds to previous ones)
-  const handleScenarioChange = (e) => {
-    const v = e.target.value;
-    setScenarioSel(v);
-    if (v) {
-      applyScenario(v);
-      setScenarioSel("");
-    }
-  };
-  const applyScenario = (key) => {
-    const s = {
-      "Low air, hot stack": () => { setAirFlow(30); setFuelFlow(8); },
-      "High draft, cold stack": () => { setAirFlow(140); setFuelFlow(4); },
-      "Dirty nozzles (incomplete)": () => { setFuelFlow(9); setAirFlow(50); },
-      "Biodiesel blend, medium stack": () => { setFuelKey("Biodiesel"); setFuelFlow(6); setAirFlow(90); },
-      Reset: () => { setFuelKey("Natural Gas"); setFuelFlow(5); setAirFlow(60); },
-    };
-    s[key]?.();
-  };
 
+  const saveReading = useCallback((snapshot) => {
+    const row = { id: crypto.randomUUID(), t: Date.now(), ...snapshot };
+    setSaved((prev) => {
+      const next = [row, ...prev];
+      persistSaved(next);
+      return next;
+    });
+  }, []);
+
+  const exportSavedReadings = useCallback(() => {
+    if (!saved.length) return;
+    const headers = [
+      "id",
+      "t",
+      "fuel",
+      "setFire",
+      "airFlow",
+      "fuelFlow",
+      "stackF",
+      "O2",
+      "CO2",
+      "COppm",
+      "NOxppm",
+      "excessAir",
+      "efficiency",
+      "notes",
+    ];
+    const lines = [headers.join(",")].concat(
+      saved.map((r) =>
+        [
+          r.id,
+          new Date(r.t).toISOString(),
+          r.fuel ?? "",
+          r.setFire ?? "",
+          r.airFlow ?? "",
+          r.fuelFlow ?? "",
+          r.stackF ?? "",
+          r.O2 ?? "",
+          r.CO2 ?? "",
+          r.COppm ?? "",
+          r.NOxppm ?? "",
+          r.excessAir ?? "",
+          r.efficiency ?? "",
+          JSON.stringify(r.notes ?? ""),
+        ].join(","),
+      ),
+    );
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "saved_readings.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [saved]);
+  // Analyzer simple state machine
+  const [anState, setAnState] = useState("OFF");
+  const [probeInFlue, setProbeInFlue] = useState(false);
+  const startAnalyzer = () => setAnState("ZERO");
+  const finishZero = () => setAnState("READY");
+  const insertProbe = () => {
+    setProbeInFlue(true);
+    setAnState("SAMPLING");
+  };
+  const holdAnalyzer = () => setAnState("HOLD");
+  const resumeAnalyzer = () => setAnState("SAMPLING");
   // Tuning assistant
   const tuningActive = tuningOn;
 
@@ -854,6 +1091,7 @@ const rheostatRampRef = useRef(null);
         .pill { padding: .25rem .5rem; border-radius: 9999px; font-size: .7rem; }
       `}</style>
         <RightDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)}>
+
           <div className="space-y-4">
             <button className="btn" onClick={() => setShowSettings(true)}>
               Settings
@@ -998,10 +1236,13 @@ const rheostatRampRef = useRef(null);
           <h1 className="text-2xl font-semibold">Combustion Trainer</h1>
           <div className="ml-auto flex items-center gap-3">
             <button className="btn" onClick={() => downloadCSV("session.csv", history)}>Export Trend CSV</button>
-            <button className="btn" data-testid="btn-tech-open" onClick={() => setDrawerOpen(true)}>Technician</button>
-            <button className="btn" onClick={() => downloadCSV("saved-readings.csv", saved)}>Export Saved Readings</button>
+            <button className="btn" onClick={() => setDrawerOpen(true)}>Technician</button>
+            <button className="btn" onClick={exportSavedReadings}>Export Saved Readings</button>
+            <button className="btn" data-testid="btn-theme-toggle" onClick={() => setTheme(theme === "dark" ? "system" : "dark")}>
+              Toggle Theme
+            </button>
             <button className="btn" data-testid="btn-reset-layout" onClick={handleResetLayouts}>Reset Layout</button>
-            <button className="btn" data-testid="btn-theme-toggle" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>Toggle Theme</button>
+
             <button
               className="btn"
               aria-label="Settings"
@@ -1327,38 +1568,59 @@ const rheostatRampRef = useRef(null);
               <div className="col-span-2 text-xs text-slate-500 mt-1">
                 Targets for {fuelKey}: O₂ {fuel.targets.O2[0]} to {fuel.targets.O2[1]} percent; CO AF ≤ {fuel.targets.COafMax} ppm; stack {fuel.targets.stackF[0]} to {fuel.targets.stackF[1]} °F.
               </div>
+              <div className="col-span-2 mt-2">
+                <button
+                  className="btn"
+                  data-testid="btn-save-reading"
+                  onClick={() =>
+                    saveReading({
+                      fuel: fuelKey,
+                      setFire: rheostat,
+                      airFlow: Number(Number(airFlow).toFixed(2)),
+                      fuelFlow: Number(Number(fuelFlow).toFixed(2)),
+                      stackF: Math.round(disp.StackF),
+                      O2: Number(disp.O2.toFixed(2)),
+                      CO2: Number(disp.CO2.toFixed(2)),
+                      COppm: Math.round(disp.CO),
+                      NOxppm: Math.round(disp.NOx),
+                      excessAir: Number(((steady.excessAir - 1) * 100).toFixed(1)),
+                      efficiency: Number(Number(disp.Eff).toFixed(1)),
+                    })
+                  }
+                >
+                  Save Reading
+                </button>
+              </div>
             </div>
           </div>
-          <div key="trend" data-testid="panel-trend" className="card overflow-hidden">
+          <div key="trend" className="card overflow-hidden flex flex-col">
             <PanelHeader title="Trend" />
-            <div style={{ height: "calc(100% - 40px)" }} className="flex flex-col">
-              <div className="flex-1" data-testid="trend-chart">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={history} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="ts" type="number" domain={["dataMin", "dataMax"]} hide />
-                    <YAxis yAxisId="left" domain={[0, 100]} />
-                    <YAxis yAxisId="right" orientation="right" domain={[0, 600]} />
-                    <Tooltip />
-                    <Legend />
-                    {seriesConfig.map((series) =>
-                      seriesVisibility[series.key] && (
-                        <Line
-                          key={series.key}
-                          yAxisId={series.yAxisId}
-                          type="monotone"
-                          dataKey={series.key}
-                          dot={false}
-                          name={series.name}
-                          strokeWidth={2}
-                          isAnimationActive={false}
-                        />
-                      )
-                    )}
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-              <SeriesVisibility visibility={seriesVisibility} setVisibility={setSeriesVisibility} />
+            <div className="flex-1 min-h-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={history} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="ts" type="number" domain={["dataMin", "dataMax"]} hide />
+                  <YAxis yAxisId="left" domain={[0, 100]} />
+                  <YAxis yAxisId="right" orientation="right" domain={[0, 600]} />
+                  <Tooltip />
+                  <Legend />
+                  {seriesConfig.map((series) =>
+                    seriesVisibility[series.key] && (
+                      <Line
+                        key={series.key}
+                        yAxisId={series.yAxisId}
+                        type="monotone"
+                        dataKey={series.key}
+                        dot={false}
+                        name={series.name}
+                        strokeWidth={2}
+                        isAnimationActive={false}
+                      />
+                    )
+                  )}
+                </LineChart>
+              </ResponsiveContainer>
+
             </div>
           </div>
           <div key="meter" data-testid="panel-meter" className="card overflow-hidden">
@@ -1531,58 +1793,28 @@ const rheostatRampRef = useRef(null);
               </div>
             )}
           </div>
-          <div key="saved" data-testid="panel-saved" className="card overflow-x-auto">
-            <PanelHeader title="Saved readings" />
-            <table className="min-w-full text-xs">
-              <thead>
-                <tr className="text-left text-slate-500">
-                  {"t,Fuel,Rate,FuelFlow,AirFlow,O2,CO2,COaf,CO,NOx,StackF,Eff,EA,Mode"
-                    .split(",")
-                    .map((h) => (
-                      <th key={h} className="py-1 pr-3">
-                        {h}
-                      </th>
-                    ))}
-                </tr>
-              </thead>
-              <tbody>
-                {saved.slice(-40).map((r, i) => (
-                  <tr key={i} className="border-t">
-                    {Object.values(r).map((v, j) => (
-                      <td key={j} className="py-1 pr-3 whitespace-nowrap">
-                        {v}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="label mb-2 mt-4">Trend table</div>
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-500">
-                  {"t,O2,CO2,CO,NOx,StackF,Eff".split(",").map((h) => (
-                    <th key={h} className="py-1 pr-4">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {history.slice(-60).map((r) => (
-                  <tr key={r.ts} className="border-t">
-                    <td className="py-1 pr-4 whitespace-nowrap">{r.t}</td>
-                    <td className="py-1 pr-4">{r.O2}</td>
-                    <td className="py-1 pr-4">{r.CO2}</td>
-                    <td className="py-1 pr-4">{r.CO}</td>
-                    <td className="py-1 pr-4">{r.NOx}</td>
-                    <td className="py-1 pr-4">{r.StackF}</td>
-                    <td className="py-1 pr-4">{r.Eff}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {mainItems.map((id) => {
+              const Panel = panels[id].Component;
+              return (
+                <div key={id} className="card overflow-hidden" data-grid={{ w: 3, h: 10 }}>
+                  <PanelHeader
+                    title={panels[id].title}
+                    dockAction={
+                      <button className="btn" onClick={() => dock(id, "techDrawer")}> 
+                        Move to Tech
+                      </button>
+                    }
+                  />
+                  <Panel
+                    visibility={seriesVisibility}
+                    setVisibility={setSeriesVisibility}
+                    saved={saved}
+                    exportSavedReadings={exportSavedReadings}
+                  />
+                </div>
+              );
+            })}
+
         </ResponsiveGridLayout>
       </main>
 
