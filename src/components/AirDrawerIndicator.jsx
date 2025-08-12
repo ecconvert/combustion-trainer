@@ -9,8 +9,12 @@ function AirDrawerIndicator({
   flameSelector = "[data-flame-root]", // optional CSS selector for the flame node
   speed = 1,             // 0.5, 1, 2 animation speed
   scale = 1.18,          // size relative to measured flame
-  angleLow = 180,        // 7 o'clock (degrees, clockwise from 12)
-  angleHigh = 300,       // 11 o'clock (degrees, clockwise from 12)
+  // Needle sweep angles (degrees, clockwise from 12)
+  angleLow = 180,
+  angleHigh = 300,
+  // Arc display angles (kept independent from needle)
+  arcAngleLow = 220,
+  arcAngleHigh = 330,
   flipDirection = false,
   needleWidth = 0.06,
   dotSize = 0.06,
@@ -128,11 +132,11 @@ function AirDrawerIndicator({
       style={{ position: "absolute", left, top, pointerEvents: "none", zIndex: 2 }}
     >
       {/* background ring */}
-      <circle cx={cx} cy={cy} r={ring.r * 0.95} fill="rgba(255,255,255,0.45)" stroke="#cbd5e1" strokeWidth={Math.max(1, ring.r * 0.03)} />
-      {/* arc from 7 to 11 o'clock for visual cue */}
+      <circle cx={cx} cy={cy} r={ring.r * 0.95} fill="var(--viz-ring-fill)" stroke="var(--viz-ring-stroke)" strokeWidth={Math.max(1, ring.r * 0.03)} />
+      {/* fixed arc for visual cue (independent of needle angles) */}
       <path
-        d={describeArc(cx, cy, ring.r * 0.82, angleLow + arcOffset, angleHigh + arcOffset)}
-        stroke="#334155"
+        d={describeArc(cx, cy, ring.r * 0.82, arcAngleLow + arcOffset, arcAngleHigh + arcOffset)}
+        stroke="var(--viz-arc)"
         strokeWidth={Math.max(2, ring.r * 0.07)}
         fill="none"
         opacity={0.7}
@@ -140,13 +144,13 @@ function AirDrawerIndicator({
       {/* pointer/needle */}
       <polygon
         points={`${tipX},${tipY} ${baseX1},${baseY1} ${baseX2},${baseY2}`}
-        fill="#1e293b"
+        fill="var(--viz-needle)"
         stroke="#fff"
         strokeWidth={Math.max(1, ring.r * 0.02)}
         style={{ filter: "drop-shadow(0 0 2px #fff8)" }}
       />
       {/* hub */}
-      <circle cx={cx} cy={cy} r={hubRadius} fill="#334155" stroke="#fff" strokeWidth={Math.max(1, ring.r * 0.02)} />
+      <circle cx={cx} cy={cy} r={hubRadius} fill="var(--viz-arc)" stroke="#fff" strokeWidth={Math.max(1, ring.r * 0.02)} />
     </svg>
   );
 }

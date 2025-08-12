@@ -39,6 +39,7 @@ import { useUIState } from "./components/UIStateContext";
 import { loadConfig, saveConfig, getDefaultConfig } from "./lib/config";
 import SettingsMenu from "./components/SettingsMenu";
 import AirDrawerIndicator from "./components/AirDrawerIndicator";
+import GridAutoSizer from "./components/GridAutoSizer";
 import { panels, defaultZoneById, defaultLayouts as techDefaults } from "./panels";
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -318,11 +319,12 @@ function PanelHeader({ title, right, dockAction }) {
 export default function CombustionTrainer() {
   const { drawerOpen, setDrawerOpen, seriesVisibility, setSeriesVisibility } = useUIState();
   const [config, setConfig] = useState(getDefaultConfig());
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [previewConfig, setPreviewConfig] = useState(config);
+  // Settings modal visibility
   const unitSystem = config.units.system;
   const [showSettings, setShowSettings] = useState(false);
   const [layouts, setLayouts] = useState(loadLayouts());
+  const [autoSizeLock, setAutoSizeLock] = useState(false);
+  const lastRowsRef = useRef({});
 
   const [theme, setTheme] = useState(() => {
     try {
@@ -355,6 +357,29 @@ export default function CombustionTrainer() {
     setLayouts(allLayouts);
     saveLayouts(allLayouts);
   };
+  // helper to set height for a panel in current breakpoint layout
+  const setItemRows = useCallback((key, rows) => {
+    if (autoSizeLock) return; // avoid feedback loop while dragging/resizing
+    if (lastRowsRef.current[key] === rows) return;
+    lastRowsRef.current[key] = rows;
+    setLayouts((prev) => {
+      const width = typeof window !== 'undefined' ? window.innerWidth : 1920;
+      // choose the largest breakpoint less than or equal to width
+      const sorted = Object.entries(rglBreakpoints).sort((a,b) => b[1] - a[1]);
+      const match = sorted.find(([, px]) => width >= px);
+      const bp = match ? match[0] : 'xxs';
+      const arr = prev[bp] || [];
+      const idx = arr.findIndex((it) => it.i === key);
+      if (idx === -1) return prev;
+      const cur = arr[idx];
+      if (cur.h === rows) return prev;
+      const nextArr = [...arr];
+      nextArr[idx] = { ...cur, h: rows };
+      const copy = { ...prev, [bp]: nextArr };
+      saveLayouts(copy);
+      return copy;
+    });
+  }, [autoSizeLock]);
 
   const handleResetLayouts = () => {
     localStorage.removeItem(RGL_LS_KEY);
@@ -427,12 +452,34 @@ export default function CombustionTrainer() {
       }
     }
   }, []);
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const applyTheme = (theme) => {
-    const root = document.documentElement;
+    const html = document.documentElement;
+    const body = document.body;
+    const rootEl = document.getElementById('root');
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     const isDark = theme === 'dark' || (theme === 'system' && prefersDark);
-    root.classList.toggle('dark', isDark);
+    // Keep all potential ancestors in sync so Tailwind's dark: variant cannot get stuck
+    [html, body, rootEl].forEach((el) => el && el.classList.toggle('dark', isDark));
+    // Ensure native form controls (select, inputs) follow current theme
+    html.style.setProperty('color-scheme', isDark ? 'dark' : 'light');
+    setIsDarkMode(isDark);
   };
+  // Extract CSS variables to drive 3rd-party components (e.g., charts)
+  const themeVars = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return { background: '#f8fafc', foreground: '#0f172a', card: '#ffffff', border: '#e2e8f0', muted: '#64748b' };
+    }
+    const s = getComputedStyle(document.documentElement);
+    const read = (name, fallback) => (s.getPropertyValue(name) || '').trim() || fallback;
+    return {
+      background: read('--background', '#f8fafc'),
+      foreground: read('--foreground', '#0f172a'),
+      card: read('--card', '#ffffff'),
+      border: read('--border', '#e2e8f0'),
+      muted: read('--muted', '#64748b'),
+    };
+  }, [isDarkMode]);
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     const handler = () => applyTheme(theme);
@@ -445,6 +492,7 @@ export default function CombustionTrainer() {
     setTheme(next.general.theme);
     setShowSettings(false);
   };
+  const handleCancel = () => setShowSettings(false);
   // Scenario selection state and handler
   const [scenarioSel, setScenarioSel] = useState("");
   const handleScenarioChange = useCallback((e) => {
@@ -462,7 +510,7 @@ export default function CombustionTrainer() {
   const isGas = !isOil;
 
   // Programmer timing constants derived from a common Fireye EP-160 sequence
-  const EP160 = { PURGE_HF_SEC: 30, LOW_FIRE_MIN_SEC: 30, PTFI_SEC: 10, MTFI_SPARK_OFF_SEC: 10, MTFI_PILOT_OFF_SEC: 15, POST_PURGE_SEC: 15, FFRT_SEC: 4 };
+  const EP160 = { PURGE_HF_SEC: 30, LOW_FIRE_MIN_SEC: 30, LOW_FIRE_DRIVE_SEC: 5, PTFI_SEC: 10, MTFI_SPARK_OFF_SEC: 10, MTFI_PILOT_OFF_SEC: 15, POST_PURGE_SEC: 15, FFRT_SEC: 4 };
   // Ranges for air/fuel ratio expressed as excess air (EA)
   const IGNITABLE_EA = { min: 0.85, max: 1.6 }; // flame can light within this EA window
   const STABLE_EA = { min: 0.9, max: 1.5 }; // stable flame once running
@@ -728,7 +776,7 @@ useEffect(() => {
         if (stateTimeRef.current >= EP160.PURGE_HF_SEC * 1000) { setBurnerState("DRIVE_LOW"); stateTimeRef.current = 0; }
       } else if (burnerState === "DRIVE_LOW") {
         // move to low-fire for minimum purge
-        if (stateTimeRef.current >= 1000) { setBurnerState("LOW_PURGE_MIN"); stateTimeRef.current = 0; }
+        if (stateTimeRef.current >= EP160.LOW_FIRE_DRIVE_SEC * 1000) { setBurnerState("LOW_PURGE_MIN"); stateTimeRef.current = 0; }
       } else if (burnerState === "LOW_PURGE_MIN") {
         if (stateTimeRef.current >= EP160.LOW_FIRE_MIN_SEC * 1000) {
           // begin pilot trial for ignition (PTFI)
@@ -796,7 +844,8 @@ useEffect(() => {
 
       // Display remaining time for states that have a fixed duration
       let remaining = null;
-      if (burnerState === "PREPURGE_HI") remaining = EP160.PURGE_HF_SEC - stateTimeRef.current / 1000;
+  if (burnerState === "PREPURGE_HI") remaining = EP160.PURGE_HF_SEC - stateTimeRef.current / 1000;
+  else if (burnerState === "DRIVE_LOW") remaining = EP160.LOW_FIRE_DRIVE_SEC - stateTimeRef.current / 1000;
       else if (burnerState === "LOW_PURGE_MIN") remaining = EP160.LOW_FIRE_MIN_SEC - stateTimeRef.current / 1000;
       else if (burnerState === "PTFI") remaining = EP160.PTFI_SEC - stateTimeRef.current / 1000;
       else if (burnerState === "MTFI") remaining = EP160.MTFI_PILOT_OFF_SEC - stateTimeRef.current / 1000;
@@ -1047,6 +1096,14 @@ const showSpark = burnerState === "PTFI" && t5Spark;
 const canSetFiring = burnerState === "RUN_AUTO";
 const rheostatRampRef = useRef(null);
 
+  // Display fire rate for the gauge/indicator based on programmer state
+  const displayFireRate = useMemo(() => {
+    if (burnerState === "PREPURGE_HI" || burnerState === "DRIVE_HI") return 100;
+    if (burnerState === "LOW_PURGE_MIN" || burnerState === "DRIVE_LOW") return 0;
+    if (burnerState === "OFF" || burnerState === "POSTPURGE" || burnerState === "LOCKOUT") return 0;
+    return rheostat; // RUN_AUTO, PTFI, MTFI follow current setpoint
+  }, [burnerState, rheostat]);
+
   // Smoothly ramp rheostat to 0 when shutting down (power off, postpurge, or lockout)
   useEffect(() => {
     const shouldRampDown = (!boilerOn) || burnerState === "POSTPURGE" || burnerState === "LOCKOUT" || burnerState === "OFF";
@@ -1080,19 +1137,37 @@ const rheostatRampRef = useRef(null);
       }
     };
   }, [burnerState, boilerOn, rheostat]);
+  // Force slider position to follow programmer during purge states
+  useEffect(() => {
+    if (burnerState === "PREPURGE_HI" || burnerState === "DRIVE_HI") {
+      setRheostat(100);
+    } else if (burnerState === "LOW_PURGE_MIN" || burnerState === "DRIVE_LOW") {
+      setRheostat(0);
+    }
+  }, [burnerState]);
   
   return (
-    <div className="min-h-screen w-full bg-slate-50 text-slate-900">
-      <style>{`
+  <div className="min-h-screen w-full bg-background text-foreground">
+  <style>{`
         @keyframes flicker { from { transform: scale(1) translateY(0px); opacity: 0.9; } to { transform: scale(1.04) translateY(-2px); opacity: 1; } }
         @keyframes spark { from { transform: translateY(2px) scale(0.9); opacity: .7; } to { transform: translateY(-2px) scale(1.1); opacity: 1; } }
         @keyframes smoke { from { transform: translateY(0) scale(0.8); opacity: .6; } to { transform: translateY(-30px) scale(1.4); opacity: 0; } }
-        .card { background: white; border-radius: 1rem; box-shadow: 0 6px 16px rgba(15,23,42,0.08); padding: 1rem; }
-        .label { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: #64748b; }
+  .card { background: var(--card); border-radius: 1rem; box-shadow: 0 6px 16px rgba(15,23,42,0.08); padding: 1rem; }
+  .label { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
         .value { font-size: 1.1rem; font-weight: 600; }
-        .btn { padding: .5rem .75rem; border-radius: .75rem; border: 1px solid #cbd5e1; background: white; }
-        .btn-primary { background: #0f172a; color: white; border-color: #0f172a; }
+  .btn { padding: .5rem .75rem; border-radius: .75rem; border: 1px solid var(--border); background: var(--card); color: var(--foreground); }
+  .btn:hover { filter: brightness(1.02); }
+  .btn:active { filter: brightness(0.98); }
+  .btn-primary { background: #2563eb; color: #ffffff; border-color: transparent; }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-primary:active { background: rgba(29,78,216,0.9); }
         .pill { padding: .25rem .5rem; border-radius: 9999px; font-size: .7rem; }
+  /* Digital programmer styling */
+  .digital-panel { background: linear-gradient(180deg, #bff5bf 0%, #8fe18f 100%); border: 1px solid #065f46; border-radius: 0.75rem; padding: 0.75rem 1rem; box-shadow: 0 0 18px rgba(16,185,129,0.25), inset 0 0 8px rgba(255,255,255,0.6); }
+  .digital-text { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; letter-spacing: 0.02em; color: #052e05; text-shadow: 0 0 3px rgba(16,185,129,0.5); }
+  .digital-readout { font-size: 1.05rem; font-weight: 700; padding: 0.15rem 0.4rem; background: rgba(255,255,255,0.45); border-radius: 0.375rem; border: 1px dashed rgba(6,95,70,0.35); }
+  /* Ensure chamber top cap follows theme (tokens defined in src/index.css) */
+  .chamber-cap { background-color: var(--viz-ring-stroke); }
       `}</style>
         <RightDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)}>
 
@@ -1100,6 +1175,16 @@ const rheostatRampRef = useRef(null);
             <button className="btn" onClick={() => setShowSettings(true)}>
               Settings
             </button>
+            <div className="card">
+              <div className="label">Ambient Temperature (°F)</div>
+              <input
+                aria-label="ambient temperature"
+                type="number"
+                className="w-full border rounded-md px-2 py-1 mt-2 dark:bg-slate-800 dark:border-slate-600"
+                value={ambientF}
+                onChange={(e) => setAmbientF(parseFloat(e.target.value || 0))}
+              />
+            </div>
             <div className="card">
               <div className="label">Start Troubleshooting Scenarios</div>
               <select
@@ -1228,21 +1313,26 @@ const rheostatRampRef = useRef(null);
         </RightDrawer>
 
         <SettingsMenu
-          open={settingsOpen}
-          config={previewConfig}
+          open={showSettings}
+          config={config}
           onApply={handleApply}
           onCancel={handleCancel}
+          onChange={(next) => {
+            // Live preview: update config in-memory and theme immediately
+            setConfig(next);
+            if (next?.general?.theme) applyTheme(next.general.theme);
+          }}
         />
 
 
-      <header className="px-6 py-4 border-b bg-white sticky top-0 z-10">
+  <header className="px-6 py-4 border-b bg-card border-border sticky top-0 z-10">
         <div className="max-w-7xl mx-auto flex items-center gap-4">
           <h1 className="text-2xl font-semibold">Combustion Trainer</h1>
           <div className="ml-auto flex items-center gap-3">
             <button className="btn" onClick={() => downloadCSV("session.csv", history)}>Export Trend CSV</button>
             <button className="btn" onClick={() => setDrawerOpen(true)}>Technician</button>
             <button className="btn" onClick={exportSavedReadings}>Export Saved Readings</button>
-            <button className="btn" data-testid="btn-theme-toggle" onClick={() => setTheme(theme === "dark" ? "system" : "dark")}>
+            <button className="btn" data-testid="btn-theme-toggle" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
               Toggle Theme
             </button>
             <button className="btn" data-testid="btn-reset-layout" onClick={handleResetLayouts}>Reset Layout</button>
@@ -1276,12 +1366,16 @@ const rheostatRampRef = useRef(null);
           cols={rglCols}
           layouts={layouts}
           onLayoutChange={handleLayoutChange}
+          onDragStart={() => setAutoSizeLock(true)}
+          onDragStop={() => setAutoSizeLock(false)}
+          onResizeStart={() => setAutoSizeLock(true)}
+          onResizeStop={() => setAutoSizeLock(false)}
           rowHeight={10}
           margin={[16, 16]}
           draggableHandle=".drag-handle"
           compactType="vertical"
         >
-          <div key="viz" data-testid="panel-viz" className="card overflow-hidden">
+          <GridAutoSizer key="viz" id="viz" className="card overflow-hidden" onRows={(r) => setItemRows("viz", r)} rowHeight={10} data-testid="panel-viz">
             <PanelHeader title="Boiler Visualization" />
             <div className="flex items-center justify-between">
               <div>
@@ -1296,10 +1390,10 @@ const rheostatRampRef = useRef(null);
                 <div
                   ref={chamberRef}
                   aria-label="combustion chamber"
-                  className="relative h-72 rounded-3xl border bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden"
+                  className="relative h-72 rounded-3xl border border-slate-300 bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden dark:from-slate-800 dark:to-slate-700 dark:border-slate-700"
                 >
-                  <div className="absolute inset-6 rounded-full border-2 border-slate-300" />
-                  <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-24 h-8 bg-slate-400 rounded-t-2xl" />
+                  <div className="absolute inset-6 rounded-full border-2 border-slate-300 dark:border-slate-600" />
+                  <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-24 h-8 chamber-cap rounded-t-2xl dark:bg-slate-600" />
                   <div className="absolute inset-0">
                     {(showMainFlame || showPilotFlame) && (
                       <div data-flame-root className="absolute inset-0">
@@ -1324,22 +1418,26 @@ const rheostatRampRef = useRef(null);
                   </div>
                   {/* Adjust scale or offsetRatio to tweak placement relative to the flame */}
                   <AirDrawerIndicator
-                    value={config.gauge.gaugeFireRate}
+                    key={isDarkMode ? 'dark' : 'light'}
+                    theme={isDarkMode ? 'dark' : 'light'}
+                    value={displayFireRate}
                     chamberRef={chamberRef}
-                    angleLow={config.gauge.gaugeAngleLow}
-                    angleHigh={config.gauge.gaugeAngleHigh}
-                    scale={config.gauge.gaugeScale}
-                    speed={config.gauge.gaugeSpeed}
-                    flipDirection={config.gauge.gaugeFlipDirection}
-                    needleWidth={config.gauge.gaugeNeedleWidth}
-                    dotSize={config.gauge.gaugeDotSize}
-                    needleInner={config.gauge.needleInner}
-                    arcOffset={config.gauge.arcOffset}
+                    angleLow={config.gauge.gaugeAngleLow ?? 180}
+                    angleHigh={config.gauge.gaugeAngleHigh ?? 300}
+                    arcAngleLow={config.gauge.arcAngleLow ?? 220}
+                    arcAngleHigh={config.gauge.arcAngleHigh ?? 330}
+                    scale={config.gauge.gaugeScale ?? 1.18}
+                    speed={ config.gauge.gaugeSpeed ?? 1}
+                    flipDirection={config.gauge.gaugeFlipDirection ?? false}
+                    needleWidth={config.gauge.gaugeNeedleWidth ?? 0.06}
+                    dotSize={config.gauge.gaugeDotSize ?? 0.06}
+                    needleInner={config.gauge.needleInner ?? 0}
+                    arcOffset={config.gauge.arcOffset ?? 0}
                   />
                   <div className="absolute bottom-3 right-3 space-y-1 text-xs">
-                    {steady.warnings.soot && (<div className="px-2 py-1 rounded bg-yellow-100 text-yellow-900">Soot risk</div>)}
-                    {steady.warnings.overTemp && (<div className="px-2 py-1 rounded bg-red-100 text-red-800">Over-temp</div>)}
-                    {steady.warnings.underTemp && (<div className="px-2 py-1 rounded bg-blue-100 text-blue-900">Condensate risk</div>)}
+                    {steady.warnings.soot && (<div className="px-2 py-1 rounded bg-yellow-100 text-yellow-900 dark:bg-yellow-500/20 dark:text-yellow-200 dark:border dark:border-yellow-700/40">Soot risk</div>)}
+                    {steady.warnings.overTemp && (<div className="px-2 py-1 rounded bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-200 dark:border dark:border-red-700/40">Over-temp</div>)}
+                    {steady.warnings.underTemp && (<div className="px-2 py-1 rounded bg-blue-100 text-blue-900 dark:bg-blue-500/20 dark:text-blue-200 dark:border dark:border-blue-700/40">Condensate risk</div>)}
                   </div>
                 </div>
               </div>
@@ -1350,20 +1448,51 @@ const rheostatRampRef = useRef(null);
                     <div className="value">{Number(airFlow).toFixed(2)}</div>
                   </>
                 )}
-                <div className="label mt-6">Ambient Temperature (°F)</div>
-                <input aria-label="ambient temperature" type="number" className="w-full border rounded-md px-2 py-1" value={ambientF} onChange={(e) => setAmbientF(parseFloat(e.target.value || 0))} />
               </div>
             </div>
-          </div>
-          <div key="controls" data-testid="panel-controls" className="card overflow-hidden">
+            {/* Programmer moved directly below visualization */}
+            <div className="mt-6 digital-panel">
+              <div className="flex items-center justify-between digital-text">
+                <div>
+                  <div className="label" style={{ color: "#064e3b" }}>Programmer (EP160)</div>
+                  <div className="text-sm">
+                    State: <span className="digital-readout">{burnerState}</span>
+                    {stateCountdown !== null && (
+                      <span className="pill ml-2" style={{ background: "rgba(255,255,255,0.6)", color: "#065f46", border: "1px solid rgba(6,95,70,0.35)" }}>{stateCountdown}s left</span>
+                    )}
+                    {burnerState === "LOCKOUT" && (
+                      <span className="pill ml-2" style={{ background: "#fee2e2", color: "#991b1b", border: "1px solid rgba(185,28,28,0.25)" }}>Lockout: {lockoutReason}</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Led on={t5Spark} label="T5 Spark" color="#f59e0b" />
+                  <Led on={t6Pilot} label="T6 Pilot" color="#fb923c" />
+                  <Led on={t7Main} label="T7 Main" color="#3b82f6" />
+                </div>
+              </div>
+              <div className="mt-2 flex items-center gap-4 digital-text">
+                <div className="text-sm">Flame Signal: <span className="digital-readout">{Math.round(flameSignal)}</span> <span className="opacity-75">(10 min, 20–80 normal)</span></div>
+                <button className="btn" onClick={advanceStep}>Advance</button>
+                {burnerState === "LOCKOUT" && (<button className="btn btn-primary" onClick={resetProgrammer}>Reset</button>)}
+              </div>
+              <div className="mt-2 text-xs digital-text" style={{ opacity: 0.8 }}>Prepurge {EP160.PURGE_HF_SEC}s → Low fire {EP160.LOW_FIRE_MIN_SEC}s → PTFI {EP160.PTFI_SEC}s → MTFI (spark off {EP160.MTFI_SPARK_OFF_SEC}s, pilot off {EP160.MTFI_PILOT_OFF_SEC}s) → Run → Post purge {EP160.POST_PURGE_SEC}s.</div>
+            </div>
+          </GridAutoSizer>
+          <GridAutoSizer key="controls" id="controls" data-testid="panel-controls" className="card overflow-hidden" onRows={(r) => setItemRows("controls", r)} rowHeight={10}>
             <PanelHeader title="Boiler Control Panel" />
             <CollapsibleSection title="Fuel Selector">
-              <select aria-label="fuel selector" className="w-full border rounded-md px-2 py-2 mt-1" value={fuelKey} onChange={(e) => setFuelKey(e.target.value)}>
+              <select
+                aria-label="fuel selector"
+                className="w-full rounded-md px-2 py-2 mt-1 bg-card text-foreground border border-border dark:bg-slate-800 dark:border-slate-600 transition-colors"
+                value={fuelKey}
+                onChange={(e) => setFuelKey(e.target.value)}
+              >
                 {Object.keys(FUELS).map((k) => (
                   <option key={k} value={k}>{k}</option>
                 ))}
               </select>
-              <div className="mt-2 text-sm text-slate-600">HHV: {FUELS[fuelKey].HHV.toLocaleString()} Btu/{FUELS[fuelKey].unit}</div>
+              <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">HHV: {FUELS[fuelKey].HHV.toLocaleString()} Btu/{FUELS[fuelKey].unit}</div>
               <div className="mt-1 text-xs text-slate-500">Targets: O₂ {fuel.targets.O2[0]} to {fuel.targets.O2[1]} percent, COair-free ≤ {fuel.targets.COafMax} ppm</div>
             </CollapsibleSection>
             <div className="label mt-4">Boiler Power</div>
@@ -1560,27 +1689,9 @@ const rheostatRampRef = useRef(null);
                 </div>
               )}
             </CollapsibleSection>
-            <div className="mt-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="label">Programmer (EP160)</div>
-                  <div className="text-sm">State: {burnerState} {stateCountdown !== null && (<span className="pill bg-slate-100 ml-2">{stateCountdown}s left</span>)} {burnerState === "LOCKOUT" && (<span className="pill bg-red-100 ml-2">Lockout: {lockoutReason}</span>)}</div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Led on={t5Spark} label="T5 Spark" color="#06b6d4" />
-                  <Led on={t6Pilot} label="T6 Pilot" color="#f59e0b" />
-                  <Led on={t7Main} label="T7 Main" color="#84cc16" />
-                </div>
-              </div>
-              <div className="mt-2 flex items-center gap-4">
-                <div className="text-sm">Flame Signal: <span className="font-semibold">{Math.round(flameSignal)}</span> (10 min, 20–80 normal)</div>
-                <button className="btn" onClick={advanceStep}>Advance simulation</button>
-                {burnerState === "LOCKOUT" && (<button className="btn btn-primary" onClick={resetProgrammer}>Reset Programmer</button>)}
-              </div>
-              <div className="mt-2 text-xs text-slate-500">Prepurge {EP160.PURGE_HF_SEC}s → Low fire {EP160.LOW_FIRE_MIN_SEC}s → PTFI {EP160.PTFI_SEC}s → MTFI (spark off {EP160.MTFI_SPARK_OFF_SEC}s, pilot off {EP160.MTFI_PILOT_OFF_SEC}s) → Run → Post purge {EP160.POST_PURGE_SEC}s.</div>
-            </div>
-          </div>
-          <div key="readouts" data-testid="panel-readouts" className="card">
+            {/* Programmer moved to visualization section */}
+          </GridAutoSizer>
+          <GridAutoSizer key="readouts" id="readouts" data-testid="panel-readouts" className="card" onRows={(r) => setItemRows("readouts", r)} rowHeight={10}>
             <PanelHeader title="Readouts" />
             <div className="grid grid-cols-2 gap-3" role="group" aria-label="readouts">
               <div><div className="label">O₂ (dry)</div><div className="value">{disp.O2.toFixed(2)}%</div></div>
@@ -1618,18 +1729,18 @@ const rheostatRampRef = useRef(null);
                 </button>
               </div>
             </div>
-          </div>
-          <div key="trend" className="card overflow-hidden flex flex-col">
+          </GridAutoSizer>
+          <GridAutoSizer key="trend" id="trend" className="card overflow-hidden flex flex-col" onRows={(r) => setItemRows("trend", r)} rowHeight={10}>
             <PanelHeader title="Trend" />
             <div className="flex-1 min-h-0">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={history} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="ts" type="number" domain={["dataMin", "dataMax"]} hide />
-                  <YAxis yAxisId="left" domain={[0, 100]} />
-                  <YAxis yAxisId="right" orientation="right" domain={[0, 600]} />
-                  <Tooltip />
-                  <Legend />
+                  <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? "rgba(148,163,184,0.25)" : themeVars.border} />
+                  <XAxis dataKey="ts" type="number" domain={["dataMin", "dataMax"]} hide stroke={themeVars.muted} tick={{ fill: themeVars.muted }} />
+                  <YAxis yAxisId="left" domain={[0, 100]} stroke={themeVars.muted} tick={{ fill: themeVars.muted }} />
+                  <YAxis yAxisId="right" orientation="right" domain={[0, 600]} stroke={themeVars.muted} tick={{ fill: themeVars.muted }} />
+                  <Tooltip contentStyle={{ background: themeVars.card, border: `1px solid ${themeVars.border}`, color: themeVars.foreground }} labelStyle={{ color: themeVars.foreground }} />
+                  <Legend wrapperStyle={{ color: themeVars.foreground }} />
                   {seriesConfig.map((series) =>
                     seriesVisibility[series.key] && (
                       <Line
@@ -1648,8 +1759,8 @@ const rheostatRampRef = useRef(null);
               </ResponsiveContainer>
 
             </div>
-          </div>
-          <div key="meter" data-testid="panel-meter" className="card overflow-hidden">
+          </GridAutoSizer>
+          <GridAutoSizer key="meter" id="meter" data-testid="panel-meter" className="card overflow-hidden" onRows={(r) => setItemRows("meter", r)} rowHeight={10}>
             <PanelHeader title="Clock the Boiler (Metering)" />
             <div className="flex gap-2 mt-2">
               <button
@@ -1818,28 +1929,35 @@ const rheostatRampRef = useRef(null);
                 </button>
               </div>
             )}
-          </div>
+          </GridAutoSizer>
           {mainItems.map((id) => {
-              const Panel = panels[id].Component;
-              return (
-                <div key={id} className="card overflow-hidden" data-grid={{ w: 3, h: 10 }}>
-                  <PanelHeader
-                    title={panels[id].title}
-                    dockAction={
-                      <button className="btn" onClick={() => dock(id, "techDrawer")}> 
-                        Move to Tech
-                      </button>
-                    }
-                  />
-                  <Panel
-                    visibility={seriesVisibility}
-                    setVisibility={setSeriesVisibility}
-                    saved={saved}
-                    exportSavedReadings={exportSavedReadings}
-                  />
-                </div>
-              );
-            })}
+            const Panel = panels[id].Component;
+            return (
+              <GridAutoSizer
+                key={id}
+                id={id}
+                className="card overflow-hidden"
+                onRows={(r) => setItemRows(id, r)}
+                rowHeight={10}
+                data-grid={{ w: 3, h: 10 }}
+              >
+                <PanelHeader
+                  title={panels[id].title}
+                  dockAction={
+                    <button className="btn" onClick={() => dock(id, "techDrawer")}>
+                      Move to Tech
+                    </button>
+                  }
+                />
+                <Panel
+                  visibility={seriesVisibility}
+                  setVisibility={setSeriesVisibility}
+                  saved={saved}
+                  exportSavedReadings={exportSavedReadings}
+                />
+              </GridAutoSizer>
+            );
+          })}
 
         </ResponsiveGridLayout>
       </main>
