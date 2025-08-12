@@ -1047,6 +1047,14 @@ const showSpark = burnerState === "PTFI" && t5Spark;
 const canSetFiring = burnerState === "RUN_AUTO";
 const rheostatRampRef = useRef(null);
 
+  // Display fire rate for the gauge/indicator based on programmer state
+  const displayFireRate = useMemo(() => {
+    if (burnerState === "PREPURGE_HI" || burnerState === "DRIVE_HI") return 100;
+    if (burnerState === "LOW_PURGE_MIN" || burnerState === "DRIVE_LOW") return 0;
+    if (burnerState === "OFF" || burnerState === "POSTPURGE" || burnerState === "LOCKOUT") return 0;
+    return rheostat; // RUN_AUTO, PTFI, MTFI follow current setpoint
+  }, [burnerState, rheostat]);
+
   // Smoothly ramp rheostat to 0 when shutting down (power off, postpurge, or lockout)
   useEffect(() => {
     const shouldRampDown = (!boilerOn) || burnerState === "POSTPURGE" || burnerState === "LOCKOUT" || burnerState === "OFF";
@@ -1080,6 +1088,14 @@ const rheostatRampRef = useRef(null);
       }
     };
   }, [burnerState, boilerOn, rheostat]);
+  // Force slider position to follow programmer during purge states
+  useEffect(() => {
+    if (burnerState === "PREPURGE_HI" || burnerState === "DRIVE_HI") {
+      setRheostat(100);
+    } else if (burnerState === "LOW_PURGE_MIN" || burnerState === "DRIVE_LOW") {
+      setRheostat(0);
+    }
+  }, [burnerState]);
   
   return (
     <div className="min-h-screen w-full bg-slate-50 text-slate-900">
@@ -1329,17 +1345,19 @@ const rheostatRampRef = useRef(null);
                   </div>
                   {/* Adjust scale or offsetRatio to tweak placement relative to the flame */}
                   <AirDrawerIndicator
-                    value={config.gauge.gaugeFireRate}
+                    value={displayFireRate}
                     chamberRef={chamberRef}
-                    angleLow={config.gauge.gaugeAngleLow}
-                    angleHigh={config.gauge.gaugeAngleHigh}
-                    scale={config.gauge.gaugeScale}
-                    speed={config.gauge.gaugeSpeed}
-                    flipDirection={config.gauge.gaugeFlipDirection}
-                    needleWidth={config.gauge.gaugeNeedleWidth}
-                    dotSize={config.gauge.gaugeDotSize}
-                    needleInner={config.gauge.needleInner}
-                    arcOffset={config.gauge.arcOffset}
+                    angleLow={config.gauge.gaugeAngleLow ?? 180}
+                    angleHigh={config.gauge.gaugeAngleHigh ?? 300}
+                    arcAngleLow={config.gauge.arcAngleLow ?? 220}
+                    arcAngleHigh={config.gauge.arcAngleHigh ?? 330}
+                    scale={config.gauge.gaugeScale ?? 1.18}
+                    speed={config.gauge.gaugeSpeed ?? 1}
+                    flipDirection={config.gauge.gaugeFlipDirection ?? false}
+                    needleWidth={config.gauge.gaugeNeedleWidth ?? 0.06}
+                    dotSize={config.gauge.gaugeDotSize ?? 0.06}
+                    needleInner={config.gauge.needleInner ?? 0}
+                    arcOffset={config.gauge.arcOffset ?? 0}
                   />
                   <div className="absolute bottom-3 right-3 space-y-1 text-xs">
                     {steady.warnings.soot && (<div className="px-2 py-1 rounded bg-yellow-100 text-yellow-900">Soot risk</div>)}

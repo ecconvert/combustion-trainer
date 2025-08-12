@@ -9,8 +9,12 @@ function AirDrawerIndicator({
   flameSelector = "[data-flame-root]", // optional CSS selector for the flame node
   speed = 1,             // 0.5, 1, 2 animation speed
   scale = 1.18,          // size relative to measured flame
-  angleLow = 180,        // 7 o'clock (degrees, clockwise from 12)
-  angleHigh = 300,       // 11 o'clock (degrees, clockwise from 12)
+  // Needle sweep angles (degrees, clockwise from 12)
+  angleLow = 180,
+  angleHigh = 300,
+  // Arc display angles (kept independent from needle)
+  arcAngleLow = 220,
+  arcAngleHigh = 330,
   flipDirection = false,
   needleWidth = 0.06,
   dotSize = 0.06,
@@ -129,9 +133,9 @@ function AirDrawerIndicator({
     >
       {/* background ring */}
       <circle cx={cx} cy={cy} r={ring.r * 0.95} fill="rgba(255,255,255,0.45)" stroke="#cbd5e1" strokeWidth={Math.max(1, ring.r * 0.03)} />
-      {/* arc from 7 to 11 o'clock for visual cue */}
+      {/* fixed arc for visual cue (independent of needle angles) */}
       <path
-        d={describeArc(cx, cy, ring.r * 0.82, angleLow + arcOffset, angleHigh + arcOffset)}
+        d={describeArc(cx, cy, ring.r * 0.82, arcAngleLow + arcOffset, arcAngleHigh + arcOffset)}
         stroke="#334155"
         strokeWidth={Math.max(2, ring.r * 0.07)}
         fill="none"
