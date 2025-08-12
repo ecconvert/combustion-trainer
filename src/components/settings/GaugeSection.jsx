@@ -106,6 +106,18 @@ export default function GaugeSection({ values, onChange }) {
           onChange={e => onChange("needleInner", Number(e.target.value))}
         />
       </label>
+      <label className="block text-sm">
+        Arc Offset
+        <input
+          type="number"
+          min="-180"
+          max="180"
+          step="1"
+          className="mt-1 border rounded-md px-2 py-1 w-full"
+          value={values.arcOffset ?? 0}
+          onChange={e => onChange("arcOffset", Number(e.target.value))}
+        />
+      </label>
     </div>
   );
 }

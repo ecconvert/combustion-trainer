@@ -15,6 +15,7 @@ function AirDrawerIndicator({
   needleWidth = 0.06,
   dotSize = 0.06,
   needleInner = 0, // 0 = center, 0.2 = 20% out from center, etc.
+  arcOffset = 0,
 }) {
   const [box, setBox] = React.useState({ left: 0, top: 0, width: 0, height: 0 });
   const [ring, setRing] = React.useState({ cx: 0, cy: 0, r: 60 });
@@ -130,7 +131,7 @@ function AirDrawerIndicator({
       <circle cx={cx} cy={cy} r={ring.r * 0.95} fill="rgba(255,255,255,0.45)" stroke="#cbd5e1" strokeWidth={Math.max(1, ring.r * 0.03)} />
       {/* arc from 7 to 11 o'clock for visual cue */}
       <path
-        d={describeArc(cx, cy, ring.r * 0.82, angleLow, angleHigh)}
+        d={describeArc(cx, cy, ring.r * 0.82, angleLow + arcOffset, angleHigh + arcOffset)}
         stroke="#334155"
         strokeWidth={Math.max(2, ring.r * 0.07)}
         fill="none"

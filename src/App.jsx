@@ -317,7 +317,9 @@ function PanelHeader({ title, right, dockAction }) {
 
 export default function CombustionTrainer() {
   const { drawerOpen, setDrawerOpen, seriesVisibility, setSeriesVisibility } = useUIState();
-  const [config, setConfig] = useState(loadConfig() || getDefaultConfig());
+  const [config, setConfig] = useState(getDefaultConfig());
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [previewConfig, setPreviewConfig] = useState(config);
   const unitSystem = config.units.system;
   const [showSettings, setShowSettings] = useState(false);
   const [layouts, setLayouts] = useState(loadLayouts());
@@ -1226,10 +1228,10 @@ const rheostatRampRef = useRef(null);
         </RightDrawer>
 
         <SettingsMenu
-          open={showSettings}
-          config={config}
+          open={settingsOpen}
+          config={previewConfig}
           onApply={handleApply}
-          onCancel={() => setShowSettings(false)}
+          onCancel={handleCancel}
         />
 
 
@@ -1332,6 +1334,7 @@ const rheostatRampRef = useRef(null);
                     needleWidth={config.gauge.gaugeNeedleWidth}
                     dotSize={config.gauge.gaugeDotSize}
                     needleInner={config.gauge.needleInner}
+                    arcOffset={config.gauge.arcOffset}
                   />
                   <div className="absolute bottom-3 right-3 space-y-1 text-xs">
                     {steady.warnings.soot && (<div className="px-2 py-1 rounded bg-yellow-100 text-yellow-900">Soot risk</div>)}
