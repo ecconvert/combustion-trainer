@@ -323,6 +323,8 @@ export default function CombustionTrainer() {
   const unitSystem = config.units.system;
   const [showSettings, setShowSettings] = useState(false);
   const [layouts, setLayouts] = useState(loadLayouts());
+  const [autoSizeLock, setAutoSizeLock] = useState(false);
+  const lastRowsRef = useRef({});
 
   const [theme, setTheme] = useState(() => {
     try {
@@ -357,19 +359,27 @@ export default function CombustionTrainer() {
   };
   // helper to set height for a panel in current breakpoint layout
   const setItemRows = useCallback((key, rows) => {
+    if (autoSizeLock) return; // avoid feedback loop while dragging/resizing
+    if (lastRowsRef.current[key] === rows) return;
+    lastRowsRef.current[key] = rows;
     setLayouts((prev) => {
-      const bp = Object.keys(rglBreakpoints).find((b) => window.innerWidth >= rglBreakpoints[b]);
-      if (!bp) return prev;
-      const copy = { ...prev, [bp]: [...(prev[bp] || [])] };
-      const idx = copy[bp].findIndex((it) => it.i === key);
+      const width = typeof window !== 'undefined' ? window.innerWidth : 1920;
+      // choose the largest breakpoint less than or equal to width
+      const sorted = Object.entries(rglBreakpoints).sort((a,b) => b[1] - a[1]);
+      const match = sorted.find(([, px]) => width >= px);
+      const bp = match ? match[0] : 'xxs';
+      const arr = prev[bp] || [];
+      const idx = arr.findIndex((it) => it.i === key);
       if (idx === -1) return prev;
-      const cur = copy[bp][idx];
+      const cur = arr[idx];
       if (cur.h === rows) return prev;
-      copy[bp][idx] = { ...cur, h: rows };
+      const nextArr = [...arr];
+      nextArr[idx] = { ...cur, h: rows };
+      const copy = { ...prev, [bp]: nextArr };
       saveLayouts(copy);
       return copy;
     });
-  }, []);
+  }, [autoSizeLock]);
 
   const handleResetLayouts = () => {
     localStorage.removeItem(RGL_LS_KEY);
@@ -478,7 +488,7 @@ export default function CombustionTrainer() {
   const isGas = !isOil;
 
   // Programmer timing constants derived from a common Fireye EP-160 sequence
-  const EP160 = { PURGE_HF_SEC: 30, LOW_FIRE_MIN_SEC: 30, PTFI_SEC: 10, MTFI_SPARK_OFF_SEC: 10, MTFI_PILOT_OFF_SEC: 15, POST_PURGE_SEC: 15, FFRT_SEC: 4 };
+  const EP160 = { PURGE_HF_SEC: 30, LOW_FIRE_MIN_SEC: 30, LOW_FIRE_DRIVE_SEC: 5, PTFI_SEC: 10, MTFI_SPARK_OFF_SEC: 10, MTFI_PILOT_OFF_SEC: 15, POST_PURGE_SEC: 15, FFRT_SEC: 4 };
   // Ranges for air/fuel ratio expressed as excess air (EA)
   const IGNITABLE_EA = { min: 0.85, max: 1.6 }; // flame can light within this EA window
   const STABLE_EA = { min: 0.9, max: 1.5 }; // stable flame once running
@@ -744,7 +754,7 @@ useEffect(() => {
         if (stateTimeRef.current >= EP160.PURGE_HF_SEC * 1000) { setBurnerState("DRIVE_LOW"); stateTimeRef.current = 0; }
       } else if (burnerState === "DRIVE_LOW") {
         // move to low-fire for minimum purge
-        if (stateTimeRef.current >= 1000) { setBurnerState("LOW_PURGE_MIN"); stateTimeRef.current = 0; }
+        if (stateTimeRef.current >= EP160.LOW_FIRE_DRIVE_SEC * 1000) { setBurnerState("LOW_PURGE_MIN"); stateTimeRef.current = 0; }
       } else if (burnerState === "LOW_PURGE_MIN") {
         if (stateTimeRef.current >= EP160.LOW_FIRE_MIN_SEC * 1000) {
           // begin pilot trial for ignition (PTFI)
@@ -812,7 +822,8 @@ useEffect(() => {
 
       // Display remaining time for states that have a fixed duration
       let remaining = null;
-      if (burnerState === "PREPURGE_HI") remaining = EP160.PURGE_HF_SEC - stateTimeRef.current / 1000;
+  if (burnerState === "PREPURGE_HI") remaining = EP160.PURGE_HF_SEC - stateTimeRef.current / 1000;
+  else if (burnerState === "DRIVE_LOW") remaining = EP160.LOW_FIRE_DRIVE_SEC - stateTimeRef.current / 1000;
       else if (burnerState === "LOW_PURGE_MIN") remaining = EP160.LOW_FIRE_MIN_SEC - stateTimeRef.current / 1000;
       else if (burnerState === "PTFI") remaining = EP160.PTFI_SEC - stateTimeRef.current / 1000;
       else if (burnerState === "MTFI") remaining = EP160.MTFI_PILOT_OFF_SEC - stateTimeRef.current / 1000;
@@ -1327,6 +1338,10 @@ const rheostatRampRef = useRef(null);
           cols={rglCols}
           layouts={layouts}
           onLayoutChange={handleLayoutChange}
+          onDragStart={() => setAutoSizeLock(true)}
+          onDragStop={() => setAutoSizeLock(false)}
+          onResizeStart={() => setAutoSizeLock(true)}
+          onResizeStop={() => setAutoSizeLock(false)}
           rowHeight={10}
           margin={[16, 16]}
           draggableHandle=".drag-handle"
@@ -1421,9 +1436,9 @@ const rheostatRampRef = useRef(null);
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Led on={t5Spark} label="T5 Spark" color="#065f46" />
-                  <Led on={t6Pilot} label="T6 Pilot" color="#2dd4bf" />
-                  <Led on={t7Main} label="T7 Main" color="#22c55e" />
+                  <Led on={t5Spark} label="T5 Spark" color="#f59e0b" />
+                  <Led on={t6Pilot} label="T6 Pilot" color="#fb923c" />
+                  <Led on={t7Main} label="T7 Main" color="#3b82f6" />
                 </div>
               </div>
               <div className="mt-2 flex items-center gap-4 digital-text">
