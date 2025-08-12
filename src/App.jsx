@@ -1125,6 +1125,10 @@ const rheostatRampRef = useRef(null);
         .btn { padding: .5rem .75rem; border-radius: .75rem; border: 1px solid #cbd5e1; background: white; }
         .btn-primary { background: #0f172a; color: white; border-color: #0f172a; }
         .pill { padding: .25rem .5rem; border-radius: 9999px; font-size: .7rem; }
+  /* Digital programmer styling */
+  .digital-panel { background: linear-gradient(180deg, #bff5bf 0%, #8fe18f 100%); border: 1px solid #065f46; border-radius: 0.75rem; padding: 0.75rem 1rem; box-shadow: 0 0 18px rgba(16,185,129,0.25), inset 0 0 8px rgba(255,255,255,0.6); }
+  .digital-text { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; letter-spacing: 0.02em; color: #052e05; text-shadow: 0 0 3px rgba(16,185,129,0.5); }
+  .digital-readout { font-size: 1.05rem; font-weight: 700; padding: 0.15rem 0.4rem; background: rgba(255,255,255,0.45); border-radius: 0.375rem; border: 1px dashed rgba(6,95,70,0.35); }
       `}</style>
         <RightDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)}>
 
@@ -1402,24 +1406,32 @@ const rheostatRampRef = useRef(null);
               </div>
             </div>
             {/* Programmer moved directly below visualization */}
-            <div className="mt-6">
-              <div className="flex items-center justify-between">
+            <div className="mt-6 digital-panel">
+              <div className="flex items-center justify-between digital-text">
                 <div>
-                  <div className="label">Programmer (EP160)</div>
-                  <div className="text-sm">State: {burnerState} {stateCountdown !== null && (<span className="pill bg-slate-100 ml-2">{stateCountdown}s left</span>)} {burnerState === "LOCKOUT" && (<span className="pill bg-red-100 ml-2">Lockout: {lockoutReason}</span>)}</div>
+                  <div className="label" style={{ color: "#064e3b" }}>Programmer (EP160)</div>
+                  <div className="text-sm">
+                    State: <span className="digital-readout">{burnerState}</span>
+                    {stateCountdown !== null && (
+                      <span className="pill bg-white/60 ml-2" style={{ color: "#065f46", border: "1px solid rgba(6,95,70,0.35)" }}>{stateCountdown}s left</span>
+                    )}
+                    {burnerState === "LOCKOUT" && (
+                      <span className="pill bg-red-100 ml-2">Lockout: {lockoutReason}</span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Led on={t5Spark} label="T5 Spark" color="#06b6d4" />
-                  <Led on={t6Pilot} label="T6 Pilot" color="#f59e0b" />
-                  <Led on={t7Main} label="T7 Main" color="#84cc16" />
+                  <Led on={t5Spark} label="T5" color="#065f46" />
+                  <Led on={t6Pilot} label="T6" color="#2dd4bf" />
+                  <Led on={t7Main} label="T7" color="#22c55e" />
                 </div>
               </div>
-              <div className="mt-2 flex items-center gap-4">
-                <div className="text-sm">Flame Signal: <span className="font-semibold">{Math.round(flameSignal)}</span> (10 min, 20–80 normal)</div>
-                <button className="btn" onClick={advanceStep}>Advance simulation</button>
-                {burnerState === "LOCKOUT" && (<button className="btn btn-primary" onClick={resetProgrammer}>Reset Programmer</button>)}
+              <div className="mt-2 flex items-center gap-4 digital-text">
+                <div className="text-sm">Flame Signal: <span className="digital-readout">{Math.round(flameSignal)}</span> <span className="opacity-75">(10 min, 20–80 normal)</span></div>
+                <button className="btn" onClick={advanceStep}>Advance</button>
+                {burnerState === "LOCKOUT" && (<button className="btn btn-primary" onClick={resetProgrammer}>Reset</button>)}
               </div>
-              <div className="mt-2 text-xs text-slate-500">Prepurge {EP160.PURGE_HF_SEC}s → Low fire {EP160.LOW_FIRE_MIN_SEC}s → PTFI {EP160.PTFI_SEC}s → MTFI (spark off {EP160.MTFI_SPARK_OFF_SEC}s, pilot off {EP160.MTFI_PILOT_OFF_SEC}s) → Run → Post purge {EP160.POST_PURGE_SEC}s.</div>
+              <div className="mt-2 text-xs digital-text" style={{ opacity: 0.8 }}>Prepurge {EP160.PURGE_HF_SEC}s → Low fire {EP160.LOW_FIRE_MIN_SEC}s → PTFI {EP160.PTFI_SEC}s → MTFI (spark off {EP160.MTFI_SPARK_OFF_SEC}s, pilot off {EP160.MTFI_PILOT_OFF_SEC}s) → Run → Post purge {EP160.POST_PURGE_SEC}s.</div>
             </div>
           </GridAutoSizer>
           <GridAutoSizer key="controls" id="controls" data-testid="panel-controls" className="card overflow-hidden" onRows={(r) => setItemRows("controls", r)} rowHeight={10}>
