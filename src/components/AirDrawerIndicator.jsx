@@ -16,7 +16,7 @@ function AirDrawerIndicator({
   arcAngleLow = 220,
   arcAngleHigh = 330,
   flipDirection = false,
-  needleWidth = 0.06,
+  _needleWidth = 0.06,
   dotSize = 0.06,
   needleInner = 0, // 0 = center, 0.2 = 20% out from center, etc.
   arcOffset = 0,
@@ -96,7 +96,6 @@ function AirDrawerIndicator({
 
   // Needle: from center to near edge, slightly inside
   const needleLength = ring.r * 0.87;
-  const needleW = Math.max(2, ring.r * needleWidth);
 
   // Center coordinates
   const cx = ring.r;
@@ -104,11 +103,9 @@ function AirDrawerIndicator({
 
   // Calculate base and tip points
   const baseRadius = ring.r * needleInner; // new: base is offset from center
-  const tipRadius = ring.r * 0.87; // or whatever your tip length is
+  const _tipRadius = ring.r * 0.87; // not directly used
 
-  // Calculate base and tip positions using polarToCartesian
-  const base = polarToCartesian(cx, cy, baseRadius, angle);
-  const tip = polarToCartesian(cx, cy, tipRadius, angle);
+  // Calculate base and tip positions using polarToCartesian (only baseRadius used below)
 
   // Compute needle tip and base points for a simple pointer triangle
   const angleRad = (Math.PI / 180) * angle; // SVG 0deg is at 3 o'clock, but pointer is centered

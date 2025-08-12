@@ -6,7 +6,6 @@ import React, { useEffect, useRef } from "react";
  * of ReactGridLayout so it can receive the key.
  */
 export default function GridAutoSizer({
-  id,
   className,
   children,
   rowHeight = 10,

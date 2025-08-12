@@ -36,11 +36,11 @@ import { buildSafeCamMap } from "./lib/cam";
 import CollapsibleSection from "./components/CollapsibleSection";
 import RightDrawer from "./components/RightDrawer";
 import { useUIState } from "./components/UIStateContext";
-import { loadConfig, saveConfig, getDefaultConfig } from "./lib/config";
+import { saveConfig, getDefaultConfig } from "./lib/config";
 import SettingsMenu from "./components/SettingsMenu";
 import AirDrawerIndicator from "./components/AirDrawerIndicator";
 import GridAutoSizer from "./components/GridAutoSizer";
-import { panels, defaultZoneById, defaultLayouts as techDefaults } from "./panels";
+import { panels, defaultZoneById } from "./panels";
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
 const useIsomorphicLayoutEffect =
@@ -168,28 +168,6 @@ function saveZones(z) {
   }
 }
 
-const TECH_LS_KEY = "ct_tech_layouts_v1";
-function loadTechLayouts() {
-  try {
-    const raw = localStorage.getItem(TECH_LS_KEY);
-    const parsed = raw ? JSON.parse(raw) : techDefaults.techDrawer;
-    return normalizeLayouts(parsed);
-  } catch (e) {
-    if (isDev) {
-      console.error("Failed to load tech layouts from localStorage:", e);
-    }
-    return normalizeLayouts(techDefaults.techDrawer);
-  }
-}
-function saveTechLayouts(ls) {
-  try {
-    localStorage.setItem(TECH_LS_KEY, JSON.stringify(ls));
-  } catch (e) {
-    if (isDev) {
-      console.error("Failed to save tech layouts to localStorage:", e);
-    }
-  }
-}
 
 function loadSaved() {
   try {
@@ -393,17 +371,9 @@ export default function CombustionTrainer() {
       return next;
     });
   }, []);
-  const onTechChange = (_cur, all) => {
-    setTechLayouts(all);
-    saveTechLayouts(all);
-  };
   const [zones, setZones] = useState(loadZones());
   const mainItems = useMemo(
     () => Object.keys(panels).filter((id) => zones[id] === "main"),
-    [zones],
-  );
-  const techItems = useMemo(
-    () => Object.keys(panels).filter((id) => zones[id] === "techDrawer"),
     [zones],
   );
   useEffect(() => {
