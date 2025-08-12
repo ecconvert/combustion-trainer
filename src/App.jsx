@@ -6,7 +6,6 @@
  * modules located in `src/lib` for math, chemistry calculations, cam
  * map generation and CSV export. Recharts is used for trend plotting.
  */
-/* global process */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Responsive, WidthProvider } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
@@ -309,8 +308,18 @@ export default function CombustionTrainer() {
   const unitSystem = config.units.system;
   const [showSettings, setShowSettings] = useState(false);
   const [layouts, setLayouts] = useState(loadLayouts());
-  const [zones, setZones] = useState(loadZones());
-  const [techLayouts, setTechLayouts] = useState(loadTechLayouts());
+
+  const [theme, setTheme] = useState(() => localStorage.getItem("ct_theme") || "system");
+
+  useLayoutEffect(() => {
+    applyTheme(theme);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("ct_theme", theme);
+    applyTheme(theme);
+  }, [theme]);
+
 
   const handleLayoutChange = (_current, allLayouts) => {
     setLayouts(allLayouts);
@@ -393,16 +402,15 @@ export default function CombustionTrainer() {
     root.classList.toggle('dark', isDark);
   };
   useEffect(() => {
-    applyTheme(config.general.theme);
     const media = window.matchMedia('(prefers-color-scheme: dark)');
-    const handler = () => applyTheme(config.general.theme);
+    const handler = () => applyTheme(theme);
     media.addEventListener('change', handler);
     return () => media.removeEventListener('change', handler);
-  }, [config.general.theme]);
+  }, [theme]);
   const handleApply = (next) => {
     setConfig(next);
     saveConfig(next);
-    applyTheme(next.general.theme);
+    setTheme(next.general.theme);
     setShowSettings(false);
   };
   // ----------------------- Fuel selection -----------------------
@@ -1032,40 +1040,137 @@ const rheostatRampRef = useRef(null);
         .pill { padding: .25rem .5rem; border-radius: 9999px; font-size: .7rem; }
       `}</style>
         <RightDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)}>
-  <ResponsiveGridLayout
-    className="layout"
-    breakpoints={rglBreakpoints}
-    cols={rglCols}
-    layouts={techLayouts}
-    onLayoutChange={onTechChange}
-    rowHeight={10}
-    margin={[16, 16]}
-    draggableHandle=".drag-handle"
-    compactType="vertical"
-  >
-    {techItems.map((id) => {
-      const Panel = panels[id].Component;
-      return (
-        <div key={id} data-grid={{}} className="card overflow-hidden flex flex-col">
-          <PanelHeader
-            title={panels[id].title}
-            dockAction={
-              <button className="btn" onClick={() => dock(id, "main")}>
-                Dock to main
-              </button>
-            }
-          />
-          <Panel
-            visibility={seriesVisibility}
-            setVisibility={setSeriesVisibility}
-            saved={saved}
-            exportSavedReadings={exportSavedReadings}
-          />
-        </div>
-      );
-    })}
-  </ResponsiveGridLayout>
-</RightDrawer>
+
+          <div className="space-y-4">
+            <button className="btn" onClick={() => setShowSettings(true)}>
+              Settings
+            </button>
+            <div className="card">
+              <div className="label">Start Troubleshooting Scenarios</div>
+              <select
+                aria-label="troubleshooting scenarios"
+                className="w-full border rounded-md px-2 py-2 mt-2"
+                value={scenarioSel}
+                onChange={handleScenarioChange}
+              >
+                <option value="">Start Troubleshooting Scenarios</option>
+                {[
+                  "Low air, hot stack",
+                  "High draft, cold stack",
+                  "Dirty nozzles (incomplete)",
+                  "Biodiesel blend, medium stack",
+                  "Reset",
+                ].map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="card">
+              <div className="label">Tuning Mode</div>
+              <div className="flex gap-2 mt-2">
+                <button
+                  className={`btn ${!tuningOn ? "btn-primary" : ""}`}
+                  onClick={() => setTuningOn(false)}
+                >
+                  Off
+                </button>
+                <button
+                  className={`btn ${tuningOn ? "btn-primary" : ""}`}
+                  onClick={() => setTuningOn(true)}
+                >
+                  On
+                </button>
+              </div>
+              <div className="text-xs text-slate-500 mt-2">
+                When ON, adjust fuel and air together and step the cam in 10%
+                intervals.
+              </div>
+            </div>
+            <CollapsibleSection title="Analyzer">
+              <div className="card">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm">
+                      State: {anState}{" "}
+                      {probeInFlue && (
+                        <span className="pill bg-slate-100 ml-2">
+                          Probe in flue
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <Led on={anState !== "OFF"} label="Power" />
+                    <Led on={anState === "ZERO"} label="Zero" color="#06b6d4" />
+                    <Led
+                      on={anState === "SAMPLING"}
+                      label="Sampling"
+                      color="#84cc16"
+                    />
+                    <Led
+                      on={anState === "HOLD"}
+                      label="Hold"
+                      color="#f59e0b"
+                    />
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button className="btn" onClick={startAnalyzer}>
+                    Start
+                  </button>
+                  <button
+                    className="btn"
+                    onClick={finishZero}
+                    disabled={anState !== "ZERO"}
+                  >
+                    Finish Zero
+                  </button>
+                  <button
+                    className="btn"
+                    onClick={insertProbe}
+                    disabled={anState !== "READY"}
+                  >
+                    Insert Probe
+                  </button>
+                  <button
+                    className="btn"
+                    onClick={() => setProbeInFlue(false)}
+                  >
+                    Remove Probe
+                  </button>
+                  <button
+                    className="btn"
+                    onClick={holdAnalyzer}
+                    disabled={anState !== "SAMPLING"}
+                  >
+                    Hold
+                  </button>
+                  <button
+                    className="btn"
+                    onClick={resumeAnalyzer}
+                    disabled={anState !== "HOLD"}
+                  >
+                    Resume
+                  </button>
+                  <button
+                    className="btn-primary"
+                    data-testid="btn-save-reading"
+                    onClick={saveReading}
+                    disabled={anState === "OFF"}
+                  >
+                    Save Reading
+                  </button>
+                </div>
+                <div className="mt-2 text-xs text-slate-500">
+                  Zero in room air to capture combustion air temperature. Then
+                  insert probe to sample.
+                </div>
+              </div>
+            </CollapsibleSection>
+          </div>
+        </RightDrawer>
 
         <SettingsMenu
           open={showSettings}
@@ -1083,6 +1188,7 @@ const rheostatRampRef = useRef(null);
             <button className="btn" onClick={() => setDrawerOpen(true)}>Technician</button>
             <button className="btn" onClick={exportSavedReadings}>Export Saved Readings</button>
             <button className="btn" onClick={handleResetLayouts}>Reset Layout</button>
+
             <button
               className="btn"
               aria-label="Settings"
@@ -1106,6 +1212,7 @@ const rheostatRampRef = useRef(null);
 
       <main className="max-w-7xl mx-auto p-6">
         <ResponsiveGridLayout
+          data-testid="grid-main"
           className="layout"
           breakpoints={rglBreakpoints}
           cols={rglCols}
@@ -1116,7 +1223,7 @@ const rheostatRampRef = useRef(null);
           draggableHandle=".drag-handle"
           compactType="vertical"
         >
-          <div key="viz" className="card overflow-hidden">
+          <div key="viz" data-testid="panel-viz" className="card overflow-hidden">
             <PanelHeader title="Boiler Visualization" />
             <div className="flex items-center justify-between">
               <div>
@@ -1168,7 +1275,7 @@ const rheostatRampRef = useRef(null);
               </div>
             </div>
           </div>
-          <div key="controls" className="card overflow-hidden">
+          <div key="controls" data-testid="panel-controls" className="card overflow-hidden">
             <PanelHeader title="Boiler Control Panel" />
             <CollapsibleSection title="Fuel Selector">
               <select aria-label="fuel selector" className="w-full border rounded-md px-2 py-2 mt-1" value={fuelKey} onChange={(e) => setFuelKey(e.target.value)}>
@@ -1393,7 +1500,7 @@ const rheostatRampRef = useRef(null);
               <div className="mt-2 text-xs text-slate-500">Prepurge {EP160.PURGE_HF_SEC}s → Low fire {EP160.LOW_FIRE_MIN_SEC}s → PTFI {EP160.PTFI_SEC}s → MTFI (spark off {EP160.MTFI_SPARK_OFF_SEC}s, pilot off {EP160.MTFI_PILOT_OFF_SEC}s) → Run → Post purge {EP160.POST_PURGE_SEC}s.</div>
             </div>
           </div>
-          <div key="readouts" className="card">
+          <div key="readouts" data-testid="panel-readouts" className="card">
             <PanelHeader title="Readouts" />
             <div className="grid grid-cols-2 gap-3" role="group" aria-label="readouts">
               <div><div className="label">O₂ (dry)</div><div className="value">{disp.O2.toFixed(2)}%</div></div>
@@ -1459,9 +1566,10 @@ const rheostatRampRef = useRef(null);
                   )}
                 </LineChart>
               </ResponsiveContainer>
+
             </div>
           </div>
-          <div key="meter" className="card overflow-hidden">
+          <div key="meter" data-testid="panel-meter" className="card overflow-hidden">
             <PanelHeader title="Clock the Boiler (Metering)" />
             <div className="flex gap-2 mt-2">
               <button
@@ -1482,6 +1590,7 @@ const rheostatRampRef = useRef(null);
                 <label className="text-sm">
                   Dial size (ft³)
                   <input
+                    data-testid="meter-input"
                     type="number"
                     list="dialSizes"
                     className="w-full border rounded-md px-2 py-1 mt-1"
@@ -1545,7 +1654,7 @@ const rheostatRampRef = useRef(null);
                 </div>
                 <div className="text-sm">
                   Meter CFH (clocked avg):{" "}
-                  <span className="font-semibold">{gasCFH.toFixed(1)}</span>
+                  <span className="font-semibold" data-testid="meter-output">{gasCFH.toFixed(1)}</span>
                 </div>
                 <div className="text-sm">
                   Burner CFH (model):{" "}
@@ -1651,6 +1760,7 @@ const rheostatRampRef = useRef(null);
                 </div>
               );
             })}
+
         </ResponsiveGridLayout>
       </main>
 

@@ -15,6 +15,7 @@ export default function RightDrawer({ open, onClose, children }) {
       <div className="p-4 h-full overflow-y-auto">
         <button
           type="button"
+          data-testid="btn-tech-close"
           onClick={onClose}
           className="mb-4 btn"
           aria-label="Close technician drawer"
