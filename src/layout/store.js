@@ -1,3 +1,4 @@
+/* global process */
 import { useSyncExternalStore } from "react";
 import { defaultLayouts, defaultZoneById } from "./panels";
 
@@ -14,7 +15,10 @@ function loadState() {
     try {
       const v = localStorage.getItem(key);
       return v ? JSON.parse(v) : fallback;
-    } catch {
+    } catch (e) {
+      if (typeof process !== "undefined" && process.env.NODE_ENV !== "production") {
+        console.error(`Failed to load ${key} from localStorage:`, e);
+      }
       return fallback;
     }
   };
@@ -33,10 +37,16 @@ const listeners = new Set();
 
 function save() {
   if (typeof window === "undefined") return;
-  localStorage.setItem(KEY_MAIN_WIDE, JSON.stringify(state.layouts.mainWide));
-  localStorage.setItem(KEY_MAIN_NARROW, JSON.stringify(state.layouts.mainNarrow));
-  localStorage.setItem(KEY_TECH, JSON.stringify(state.layouts.techDrawer));
-  localStorage.setItem(KEY_ZONES, JSON.stringify(state.zoneById));
+  try {
+    localStorage.setItem(KEY_MAIN_WIDE, JSON.stringify(state.layouts.mainWide));
+    localStorage.setItem(KEY_MAIN_NARROW, JSON.stringify(state.layouts.mainNarrow));
+    localStorage.setItem(KEY_TECH, JSON.stringify(state.layouts.techDrawer));
+    localStorage.setItem(KEY_ZONES, JSON.stringify(state.zoneById));
+  } catch (e) {
+    if (typeof process !== "undefined" && process.env.NODE_ENV !== "production") {
+      console.error("Failed to save layouts to localStorage:", e);
+    }
+  }
 }
 
 function setState(partial) {

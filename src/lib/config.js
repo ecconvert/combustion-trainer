@@ -1,3 +1,4 @@
+/* global process */
 import { clamp } from "./math";
 
 const defaultConfig = {
@@ -55,7 +56,10 @@ export function loadConfig() {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     return validateConfig(parsed);
-  } catch {
+  } catch (e) {
+    if (typeof process !== "undefined" && process.env.NODE_ENV !== "production") {
+      console.error("Failed to load config from localStorage:", e);
+    }
     return null;
   }
 }
@@ -65,6 +69,8 @@ export function saveConfig(cfg) {
     const valid = validateConfig(cfg);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(valid));
   } catch (error) {
-    console.error("Failed to save config to localStorage:", error);
+    if (typeof process !== "undefined" && process.env.NODE_ENV !== "production") {
+      console.error("Failed to save config to localStorage:", error);
+    }
   }
 }

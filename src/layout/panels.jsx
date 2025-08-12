@@ -1,6 +1,7 @@
 import React from "react";
 import SeriesVisibility from "../components/SeriesVisibility";
 
+/* eslint-disable react-refresh/only-export-components */
 // Placeholder component for panels not yet implemented
 const Placeholder = ({ label }) => (
   <div className="p-2 text-center text-xs">{label}</div>
@@ -18,11 +19,13 @@ export const panels = {
   tuningPanel: { title: "Tuning Panel", Component: () => <Placeholder label="Tuning" /> },
   trendGraph: { title: "Trend Graph", Component: () => <Placeholder label="Trend Graph" /> },
   trendTable: { title: "Trend Table", Component: () => <Placeholder label="Trend Table" /> },
-  savedReadings: { title: "Saved Readings", Component: () => <Placeholder label="Saved Readings" /> },
+  saved: { title: "Saved Readings", Component: () => <Placeholder label="Saved Readings" /> },
   clockBoiler: { title: "Clock the Boiler", Component: () => <Placeholder label="Clock Boiler" /> },
   seriesVisibility: { title: "Series Visibility", Component: SeriesVisibility },
   ambientInputs: { title: "Ambient Inputs", Component: () => <Placeholder label="Ambient Inputs" /> },
 };
+
+/* eslint-enable react-refresh/only-export-components */
 
 const zoneOrder = {
   mainWide: ["chamberViz", "boilerPower", "fireRate", "flows", "programmer", "tuningPanel"],
@@ -31,7 +34,7 @@ const zoneOrder = {
     "analyzer",
     "trendGraph",
     "trendTable",
-    "savedReadings",
+    "saved",
     "clockBoiler",
     "ambientInputs",
     "seriesVisibility",

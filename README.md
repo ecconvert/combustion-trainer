@@ -26,6 +26,13 @@ npm run build
 npm run preview
 ```
 
+## Development notes
+
+Preview deployments opened through Vercel's Live collaboration overlay may log a
+cross-origin frame warning in the browser console. This message is harmless and
+goes away when the overlay is disabled or when running the app locally with
+`npm run dev`.
+
 ## What it simulates
 
 - **Fuel/Air mixing & excess air**  
