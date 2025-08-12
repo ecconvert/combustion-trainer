@@ -17,14 +17,16 @@ export default function SettingsMenu({ open, config, onApply, onCancel, onChange
 
   useEffect(() => {
     if (open) {
+      // Only reset local state when opening; avoid stealing focus on every live change
       setLocal(config);
-      // focus first focusable element
       const focusable = modalRef.current?.querySelectorAll(
         "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])"
       );
       focusable && focusable[0]?.focus();
     }
-  }, [open, config]);
+    // Intentionally omit `config` from deps to prevent refocus on every keystroke
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   // ESC to close and basic focus trap
   useEffect(() => {
