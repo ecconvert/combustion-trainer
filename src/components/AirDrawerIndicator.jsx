@@ -82,7 +82,7 @@ function AirDrawerIndicator({
 
   // Needle: from center to near edge, slightly inside
   const needleLength = ring.r * 0.87;
-  const needleWidth = Math.max(2, ring.r * 0.10);
+  const needleWidth = Math.max(2, ring.r * 0.06);
 
   // Center coordinates
   const cx = ring.r;
@@ -126,7 +126,7 @@ function AirDrawerIndicator({
         style={{ filter: "drop-shadow(0 0 2px #fff8)" }}
       />
       {/* hub */}
-      <circle cx={cx} cy={cy} r={ring.r * 0.13} fill="#334155" stroke="#fff" strokeWidth={Math.max(1, ring.r * 0.02)} />
+      <circle cx={cx} cy={cy} r={ring.r * 0.06} fill="#334155" stroke="#fff" strokeWidth={Math.max(1, ring.r * 0.02)} />
     </svg>
   );
 }
