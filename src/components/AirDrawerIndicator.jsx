@@ -10,7 +10,7 @@ function AirDrawerIndicator({
   speed = 1,             // 0.5, 1, 2 animation speed
   scale = 1.18,          // size relative to measured flame
   angleLow = 180,        // 7 o'clock (degrees, clockwise from 12)
-  angleHigh = 300        // 11 o'clock (degrees, clockwise from 12)
+  angleHigh = 300,       // 11 o'clock (degrees, clockwise from 12)
   flipDirection = false,
   needleWidth = 0.06,
   dotSize = 0.06,
