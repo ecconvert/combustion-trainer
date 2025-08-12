@@ -9,12 +9,20 @@ function AirDrawerIndicator({
   flameSelector = "[data-flame-root]", // optional CSS selector for the flame node
   speed = 1,             // 0.5, 1, 2 animation speed
   scale = 1.18,          // size relative to measured flame
-  angleLow = 0,        // 7 o'clock (degrees, clockwise from 12)
+  angleLow = 180,        // 7 o'clock (degrees, clockwise from 12)
   angleHigh = 300        // 11 o'clock (degrees, clockwise from 12)
+  flipDirection = false,
+  needleWidth = 0.06,
+  dotSize = 0.06,
 }) {
   const [box, setBox] = React.useState({ left: 0, top: 0, width: 0, height: 0 });
   const [ring, setRing] = React.useState({ cx: 0, cy: 0, r: 60 });
-  const [angle, setAngle] = React.useState(angleLow + (angleHigh - angleLow) * (value / 100));
+  // Compute angle, flipping if needed
+  const computeAngle = (v) =>
+    flipDirection
+      ? angleHigh - (angleHigh - angleLow) * (v / 100)
+      : angleLow + (angleHigh - angleLow) * (v / 100);
+  const [angle, setAngle] = React.useState(computeAngle(value));
 
   // Measure chamber and flame size
   React.useEffect(() => {
@@ -61,7 +69,7 @@ function AirDrawerIndicator({
     let raf;
     const start = performance.now();
     const a0 = angle;
-    const a1 = angleLow + (angleHigh - angleLow) * (value / 100);
+    const a1 = computeAngle(value);
     const dur = 650 / Math.max(0.25, speed);
     const step = (t) => {
       const k = Math.min(1, (t - start) / dur);
@@ -71,7 +79,7 @@ function AirDrawerIndicator({
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [value, speed, angleLow, angleHigh]); // eslint-disable-line
+  }, [value, speed, angleLow, angleHigh, flipDirection]); // eslint-disable-line
 
   if (!ring.r || !box.width) return null;
 
@@ -82,7 +90,7 @@ function AirDrawerIndicator({
 
   // Needle: from center to near edge, slightly inside
   const needleLength = ring.r * 0.87;
-  const needleWidth = Math.max(2, ring.r * 0.06);
+  const needleW = Math.max(2, ring.r * needleWidth);
 
   // Center coordinates
   const cx = ring.r;
@@ -94,11 +102,14 @@ function AirDrawerIndicator({
   const tipY = cy + needleLength * Math.sin(angleRad);
   const baseAngle1 = angleRad + Math.PI / 2.5;
   const baseAngle2 = angleRad - Math.PI / 2.5;
-  const baseRadius = needleWidth;
+  const baseRadius = needleW;
   const baseX1 = cx + baseRadius * Math.cos(baseAngle1);
   const baseY1 = cy + baseRadius * Math.sin(baseAngle1);
   const baseX2 = cx + baseRadius * Math.cos(baseAngle2);
   const baseY2 = cy + baseRadius * Math.sin(baseAngle2);
+
+  // hub
+  const hubRadius = ring.r * dotSize;
 
   return (
     <svg
@@ -126,7 +137,7 @@ function AirDrawerIndicator({
         style={{ filter: "drop-shadow(0 0 2px #fff8)" }}
       />
       {/* hub */}
-      <circle cx={cx} cy={cy} r={ring.r * 0.06} fill="#334155" stroke="#fff" strokeWidth={Math.max(1, ring.r * 0.02)} />
+      <circle cx={cx} cy={cy} r={hubRadius} fill="#334155" stroke="#fff" strokeWidth={Math.max(1, ring.r * 0.02)} />
     </svg>
   );
 }

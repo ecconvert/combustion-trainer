@@ -22,6 +22,16 @@ const defaultConfig = {
     zipGeoBaseUrl: "https://api.zippopotam.us/us",
   },
   data: {},
+  gauge: {
+    gaugeAngleLow: 180,
+    gaugeAngleHigh: 300,
+    gaugeScale: 1.18,
+    gaugeSpeed: 1,
+    gaugeFireRate: 0,
+    gaugeFlipDirection: false,
+    gaugeNeedleWidth: 0.06,
+    gaugeDotSize: 0.06,
+  },
 };
 
 export function getDefaultConfig() {

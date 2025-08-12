@@ -5,6 +5,7 @@ import AnalyzerSection from "./settings/AnalyzerSection.jsx";
 import UnitsSection from "./settings/UnitsSection.jsx";
 import AmbientSection from "./settings/AmbientSection.jsx";
 import DataSection from "./settings/DataSection.jsx";
+import GaugeSection from "./settings/GaugeSection";
 
 export default function SettingsMenu({ open, config, onApply, onCancel }) {
   const [local, setLocal] = useState(config);
@@ -49,6 +50,7 @@ export default function SettingsMenu({ open, config, onApply, onCancel }) {
 
   const sections = {
     general: { label: "General", Component: GeneralSection },
+    gauge: { label: "Gauge / Needle", Component: GaugeSection },
     analyzer: { label: "Analyzer", Component: AnalyzerSection },
     units: { label: "Units", Component: UnitsSection },
     ambient: { label: "Ambient", Component: AmbientSection },

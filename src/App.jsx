@@ -1322,14 +1322,15 @@ const rheostatRampRef = useRef(null);
                   </div>
                   {/* Adjust scale or offsetRatio to tweak placement relative to the flame */}
                   <AirDrawerIndicator
-                    value={rheostat}
+                    value={config.gauge.gaugeFireRate}
                     chamberRef={chamberRef}
-                    flameSelector="[data-flame-root]"
-                    speed={1}
-                    scale={1.18}
-                    offsetRatio={{ x: 0.22, y: -0.06 }}
-                    angleLow={-140}
-                    angleHigh={40}
+                    angleLow={config.gauge.gaugeAngleLow}
+                    angleHigh={config.gauge.gaugeAngleHigh}
+                    scale={config.gauge.gaugeScale}
+                    speed={config.gauge.gaugeSpeed}
+                    flipDirection={config.gauge.gaugeFlipDirection}
+                    needleWidth={config.gauge.gaugeNeedleWidth}
+                    dotSize={config.gauge.gaugeDotSize}
                   />
                   <div className="absolute bottom-3 right-3 space-y-1 text-xs">
                     {steady.warnings.soot && (<div className="px-2 py-1 rounded bg-yellow-100 text-yellow-900">Soot risk</div>)}
@@ -1458,7 +1459,7 @@ const rheostatRampRef = useRef(null);
                             onChange={(e) => setAirFlow(parseFloat(e.target.value || 0))}
                           />
                         </label>
-                        <label className="text-sm col-span-2">
+                                               <label className="text-sm col-span-2">
                           Fuel Flow
                           <input
                             type="number"
