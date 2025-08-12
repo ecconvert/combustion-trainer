@@ -76,7 +76,13 @@ export default function SettingsMenu({ open, config, onApply, onCancel }) {
         className="bg-white w-full h-full sm:h-auto sm:max-w-3xl sm:rounded-md sm:flex"
         role="dialog"
         aria-modal="true"
+        aria-labelledby="settings-title"
+        aria-describedby="settings-desc"
       >
+        <h2 id="settings-title" className="sr-only">Settings</h2>
+        <p id="settings-desc" className="sr-only">
+          Configure theme, units, and analyzer options
+        </p>
         <div className="sm:hidden flex items-center justify-between p-4 border-b">
           <h2 className="text-lg font-semibold">Settings</h2>
           <button className="btn" onClick={onCancel} aria-label="Close settings">
