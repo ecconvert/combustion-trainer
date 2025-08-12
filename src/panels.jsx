@@ -1,5 +1,6 @@
 import React from "react";
 import SeriesVisibility from "./components/SeriesVisibility";
+import SavedReadingsPanel from "./components/SavedReadings";
 
 /* eslint-disable react-refresh/only-export-components */
 const Placeholder = ({ label }) => (
@@ -10,7 +11,7 @@ export const panels = {
   analyzer: { title: "Analyzer", Component: () => <Placeholder label="Analyzer" /> },
   trendGraph: { title: "Trend Graph", Component: () => <Placeholder label="Trend Graph" /> },
   trendTable: { title: "Trend Table", Component: () => <Placeholder label="Trend Table" /> },
-  savedReadings: { title: "Saved", Component: () => <Placeholder label="Saved" /> },
+  saved: { title: "Saved Readings", Component: SavedReadingsPanel },
   clockBoiler: { title: "Clock Boiler", Component: () => <Placeholder label="Clock Boiler" /> },
   ambientInputs: { title: "Ambient Inputs", Component: () => <Placeholder label="Ambient Inputs" /> },
   seriesVisibility: { title: "Series Visibility", Component: SeriesVisibility },

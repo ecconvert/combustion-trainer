@@ -7,7 +7,7 @@
  * map generation and CSV export. Recharts is used for trend plotting.
  */
 /* global process */
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Responsive, WidthProvider } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -54,6 +54,7 @@ const seriesConfig = [
 
 const RGL_LS_KEY = "ct_layouts_v2";
 const ZONES_KEY = "ct_zones_v1";
+const SAVED_KEY = "ct_saved_v1";
 
 const rglBreakpoints = { lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 };
 const rglCols        = { lg:   12,  md:  10,  sm:   8,  xs:   6,  xxs:  4 };
@@ -65,7 +66,6 @@ const defaultLayouts = {
     { i: "readouts", x: 7, y: 0,  w: 5,  h: 12, minW: 3, minH:  6 },
     { i: "trend",    x: 7, y: 12, w: 5,  h: 16, minW: 3, minH: 10 },
     { i: "meter",    x: 7, y: 28, w: 5,  h: 12, minW: 3, minH:  8 },
-    { i: "saved",    x: 0, y: 46, w:12, h: 16, minW: 6, minH: 10 },
   ],
   md: [
     { i: "viz",      x: 0, y: 0,  w: 6,  h: 26 },
@@ -73,7 +73,6 @@ const defaultLayouts = {
     { i: "readouts", x: 6, y: 0,  w: 4,  h: 12 },
     { i: "trend",    x: 6, y: 12, w: 4,  h: 16 },
     { i: "meter",    x: 6, y: 28, w: 4,  h: 12 },
-    { i: "saved",    x: 0, y: 46, w:10, h: 16 },
   ],
   sm: [
     { i: "viz",      x: 0, y: 0,  w: 5,  h: 26 },
@@ -81,7 +80,6 @@ const defaultLayouts = {
     { i: "readouts", x: 5, y: 0,  w: 3,  h: 12 },
     { i: "trend",    x: 5, y: 12, w: 3,  h: 16 },
     { i: "meter",    x: 5, y: 28, w: 3,  h: 12 },
-    { i: "saved",    x: 0, y: 46, w: 8, h: 16 },
   ],
   xs: [
     { i: "viz",      x: 0, y: 0,  w: 6, h: 24 },
@@ -89,7 +87,6 @@ const defaultLayouts = {
     { i: "readouts", x: 0, y: 42, w: 6, h: 10 },
     { i: "trend",    x: 0, y: 52, w: 6, h: 16 },
     { i: "meter",    x: 0, y: 68, w: 6, h: 10 },
-    { i: "saved",    x: 0, y: 78, w: 6, h: 14 },
   ],
   xxs: [
     { i: "viz",      x: 0, y: 0,  w: 4, h: 24 },
@@ -97,7 +94,6 @@ const defaultLayouts = {
     { i: "readouts", x: 0, y: 42, w: 4, h: 10 },
     { i: "trend",    x: 0, y: 52, w: 4, h: 16 },
     { i: "meter",    x: 0, y: 68, w: 4, h: 10 },
-    { i: "saved",    x: 0, y: 78, w: 4, h: 14 },
   ],
 };
 
@@ -121,7 +117,10 @@ function loadLayouts() {
     const raw = localStorage.getItem(RGL_LS_KEY);
     const parsed = raw ? JSON.parse(raw) : defaultLayouts;
     return normalizeLayouts(parsed);
-  } catch {
+  } catch (e) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("Failed to load layouts from localStorage:", e);
+    }
     return normalizeLayouts(defaultLayouts);
   }
 }
@@ -139,14 +138,21 @@ function saveLayouts(layouts) {
 function loadZones() {
   try {
     return JSON.parse(localStorage.getItem(ZONES_KEY)) || defaultZoneById;
-  } catch {
+  } catch (e) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("Failed to load zones from localStorage:", e);
+    }
     return defaultZoneById;
   }
 }
 function saveZones(z) {
   try {
     localStorage.setItem(ZONES_KEY, JSON.stringify(z));
-  } catch { /* ignore */ }
+  } catch (e) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("Failed to save zones to localStorage:", e);
+    }
+  }
 }
 
 const TECH_LS_KEY = "ct_tech_layouts_v1";
@@ -155,7 +161,10 @@ function loadTechLayouts() {
     const raw = localStorage.getItem(TECH_LS_KEY);
     const parsed = raw ? JSON.parse(raw) : techDefaults.techDrawer;
     return normalizeLayouts(parsed);
-  } catch {
+  } catch (e) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("Failed to load tech layouts from localStorage:", e);
+    }
     return normalizeLayouts(techDefaults.techDrawer);
   }
 }
@@ -165,6 +174,27 @@ function saveTechLayouts(ls) {
   } catch (e) {
     if (process.env.NODE_ENV !== "production") {
       console.error("Failed to save tech layouts to localStorage:", e);
+    }
+  }
+}
+
+function loadSaved() {
+  try {
+    const raw = localStorage.getItem(SAVED_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("Failed to load saved readings:", e);
+    }
+    return [];
+  }
+}
+function persistSaved(next) {
+  try {
+    localStorage.setItem(SAVED_KEY, JSON.stringify(next));
+  } catch (e) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("Failed to persist saved readings:", e);
     }
   }
 }
@@ -291,18 +321,25 @@ export default function CombustionTrainer() {
     localStorage.removeItem(RGL_LS_KEY);
     setLayouts(normalizeLayouts(defaultLayouts));
   };
-  const dock = (id, zone) => {
+  const dock = useCallback((id, zone) => {
     setZones((prev) => {
       const next = { ...prev, [id]: zone };
       saveZones(next);
       return next;
     });
-  };
+  }, []);
   const onTechChange = (_cur, all) => {
     setTechLayouts(all);
     saveTechLayouts(all);
   };
-  const techItems = Object.keys(panels).filter((id) => zones[id] === "techDrawer");
+  const mainItems = useMemo(
+    () => Object.keys(panels).filter((id) => zones[id] === "main"),
+    [zones],
+  );
+  const techItems = useMemo(
+    () => Object.keys(panels).filter((id) => zones[id] === "techDrawer"),
+    [zones],
+  );
   useEffect(() => {
     const v2 = localStorage.getItem(RGL_LS_KEY);
     const v1 = localStorage.getItem("ct_layouts_v1");
@@ -312,7 +349,41 @@ export default function CombustionTrainer() {
         const normalized = normalizeLayouts(parsed);
         localStorage.setItem(RGL_LS_KEY, JSON.stringify(normalized));
         localStorage.removeItem("ct_layouts_v1");
-      } catch { /* ignore */ }
+      } catch (e) {
+        if (process.env.NODE_ENV !== "production") {
+          console.error("Failed to migrate old layouts:", e);
+        }
+      }
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      const zonesRaw = localStorage.getItem(ZONES_KEY);
+      const zonesObj = zonesRaw ? JSON.parse(zonesRaw) : null;
+      if (!zonesObj || zonesObj.saved == null) {
+        const next = { ...(zonesObj || {}), saved: "techDrawer" };
+        localStorage.setItem(ZONES_KEY, JSON.stringify(next));
+      }
+      const layoutsRaw = localStorage.getItem(RGL_LS_KEY);
+      if (layoutsRaw) {
+        const parsed = JSON.parse(layoutsRaw);
+        let changed = false;
+        Object.keys(parsed).forEach((bp) => {
+          const arr = parsed[bp];
+          const filtered = arr.filter((it) => it.i !== "saved");
+          if (filtered.length !== arr.length) {
+            parsed[bp] = filtered;
+            changed = true;
+          }
+        });
+        if (changed) {
+          localStorage.setItem(RGL_LS_KEY, JSON.stringify(parsed));
+        }
+      }
+    } catch (e) {
+      if (process.env.NODE_ENV !== "production") {
+        console.error("Failed to migrate saved panel:", e);
+      }
     }
   }, []);
   const applyTheme = (theme) => {
@@ -365,7 +436,7 @@ export default function CombustionTrainer() {
   const stateTimeRef = useRef(0); // milliseconds elapsed in current state
 
   // ----------------------- Analyzer state machine -----------------------
-  const [saved] = useState([]); // logged analyzer readings
+  const [saved, setSaved] = useState(loadSaved); // logged analyzer readings
   const [t5Spark, setT5Spark] = useState(false); // output relay states for animation
   const [t6Pilot, setT6Pilot] = useState(false);
   const [t7Main, setT7Main] = useState(false);
@@ -839,6 +910,62 @@ useEffect(() => {
     }, config.analyzer.samplingSec * 1000);
     return () => clearInterval(id);
   }, [config.analyzer.samplingSec, config.general.trendLength]);
+
+  const saveReading = useCallback((snapshot) => {
+    const row = { id: crypto.randomUUID(), t: Date.now(), ...snapshot };
+    setSaved((prev) => {
+      const next = [row, ...prev];
+      persistSaved(next);
+      return next;
+    });
+  }, []);
+
+  const exportSavedReadings = useCallback(() => {
+    if (!saved.length) return;
+    const headers = [
+      "id",
+      "t",
+      "fuel",
+      "setFire",
+      "airFlow",
+      "fuelFlow",
+      "stackF",
+      "O2",
+      "CO2",
+      "COppm",
+      "NOxppm",
+      "excessAir",
+      "efficiency",
+      "notes",
+    ];
+    const lines = [headers.join(",")].concat(
+      saved.map((r) =>
+        [
+          r.id,
+          new Date(r.t).toISOString(),
+          r.fuel ?? "",
+          r.setFire ?? "",
+          r.airFlow ?? "",
+          r.fuelFlow ?? "",
+          r.stackF ?? "",
+          r.O2 ?? "",
+          r.CO2 ?? "",
+          r.COppm ?? "",
+          r.NOxppm ?? "",
+          r.excessAir ?? "",
+          r.efficiency ?? "",
+          JSON.stringify(r.notes ?? ""),
+        ].join(","),
+      ),
+    );
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "saved_readings.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [saved]);
   // Tuning assistant
   const tuningActive = tuningOn;
 
@@ -931,6 +1058,8 @@ const rheostatRampRef = useRef(null);
           <Panel
             visibility={seriesVisibility}
             setVisibility={setSeriesVisibility}
+            saved={saved}
+            exportSavedReadings={exportSavedReadings}
           />
         </div>
       );
@@ -952,7 +1081,7 @@ const rheostatRampRef = useRef(null);
           <div className="ml-auto flex items-center gap-3">
             <button className="btn" onClick={() => downloadCSV("session.csv", history)}>Export Trend CSV</button>
             <button className="btn" onClick={() => setDrawerOpen(true)}>Technician</button>
-            <button className="btn" onClick={() => downloadCSV("saved-readings.csv", saved)}>Export Saved Readings</button>
+            <button className="btn" onClick={exportSavedReadings}>Export Saved Readings</button>
             <button className="btn" onClick={handleResetLayouts}>Reset Layout</button>
             <button
               className="btn"
@@ -1278,6 +1407,29 @@ const rheostatRampRef = useRef(null);
               <div className="col-span-2 text-xs text-slate-500 mt-1">
                 Targets for {fuelKey}: O₂ {fuel.targets.O2[0]} to {fuel.targets.O2[1]} percent; CO AF ≤ {fuel.targets.COafMax} ppm; stack {fuel.targets.stackF[0]} to {fuel.targets.stackF[1]} °F.
               </div>
+              <div className="col-span-2 mt-2">
+                <button
+                  className="btn"
+                  data-testid="btn-save-reading"
+                  onClick={() =>
+                    saveReading({
+                      fuel: fuelKey,
+                      setFire: rheostat,
+                      airFlow: Number(Number(airFlow).toFixed(2)),
+                      fuelFlow: Number(Number(fuelFlow).toFixed(2)),
+                      stackF: Math.round(disp.StackF),
+                      O2: Number(disp.O2.toFixed(2)),
+                      CO2: Number(disp.CO2.toFixed(2)),
+                      COppm: Math.round(disp.CO),
+                      NOxppm: Math.round(disp.NOx),
+                      excessAir: Number(((steady.excessAir - 1) * 100).toFixed(1)),
+                      efficiency: Number(Number(disp.Eff).toFixed(1)),
+                    })
+                  }
+                >
+                  Save Reading
+                </button>
+              </div>
             </div>
           </div>
           <div key="trend" className="card overflow-hidden flex flex-col">
@@ -1478,68 +1630,14 @@ const rheostatRampRef = useRef(null);
               </div>
             )}
           </div>
-          <div key="saved" className="card overflow-x-auto">
-            <PanelHeader title="Saved readings" />
-            <table className="min-w-full text-xs">
-              <thead>
-                <tr className="text-left text-slate-500">
-                  {"t,Fuel,Rate,FuelFlow,AirFlow,O2,CO2,COaf,CO,NOx,StackF,Eff,EA,Mode"
-                    .split(",")
-                    .map((h) => (
-                      <th key={h} className="py-1 pr-3">
-                        {h}
-                      </th>
-                    ))}
-                </tr>
-              </thead>
-              <tbody>
-                {saved.slice(-40).map((r, i) => (
-                  <tr key={i} className="border-t">
-                    {Object.values(r).map((v, j) => (
-                      <td key={j} className="py-1 pr-3 whitespace-nowrap">
-                        {v}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="label mb-2 mt-4">Trend table</div>
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-500">
-                  {"t,O2,CO2,CO,NOx,StackF,Eff".split(",").map((h) => (
-                    <th key={h} className="py-1 pr-4">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {history.slice(-60).map((r) => (
-                  <tr key={r.ts} className="border-t">
-                    <td className="py-1 pr-4 whitespace-nowrap">{r.t}</td>
-                    <td className="py-1 pr-4">{r.O2}</td>
-                    <td className="py-1 pr-4">{r.CO2}</td>
-                    <td className="py-1 pr-4">{r.CO}</td>
-                    <td className="py-1 pr-4">{r.NOx}</td>
-                    <td className="py-1 pr-4">{r.StackF}</td>
-                    <td className="py-1 pr-4">{r.Eff}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {Object.keys(panels)
-            .filter((id) => zones[id] === "main")
-            .map((id) => {
+          {mainItems.map((id) => {
               const Panel = panels[id].Component;
               return (
                 <div key={id} className="card overflow-hidden" data-grid={{ w: 3, h: 10 }}>
                   <PanelHeader
                     title={panels[id].title}
                     dockAction={
-                      <button className="btn" onClick={() => dock(id, "techDrawer")}>
+                      <button className="btn" onClick={() => dock(id, "techDrawer")}> 
                         Move to Tech
                       </button>
                     }
@@ -1547,6 +1645,8 @@ const rheostatRampRef = useRef(null);
                   <Panel
                     visibility={seriesVisibility}
                     setVisibility={setSeriesVisibility}
+                    saved={saved}
+                    exportSavedReadings={exportSavedReadings}
                   />
                 </div>
               );
