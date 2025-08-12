@@ -318,8 +318,7 @@ function PanelHeader({ title, right, dockAction }) {
 export default function CombustionTrainer() {
   const { drawerOpen, setDrawerOpen, seriesVisibility, setSeriesVisibility } = useUIState();
   const [config, setConfig] = useState(getDefaultConfig());
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [previewConfig, setPreviewConfig] = useState(config);
+  // Settings modal visibility
   const unitSystem = config.units.system;
   const [showSettings, setShowSettings] = useState(false);
   const [layouts, setLayouts] = useState(loadLayouts());
@@ -445,6 +444,7 @@ export default function CombustionTrainer() {
     setTheme(next.general.theme);
     setShowSettings(false);
   };
+  const handleCancel = () => setShowSettings(false);
   // Scenario selection state and handler
   const [scenarioSel, setScenarioSel] = useState("");
   const handleScenarioChange = useCallback((e) => {
@@ -1228,10 +1228,15 @@ const rheostatRampRef = useRef(null);
         </RightDrawer>
 
         <SettingsMenu
-          open={settingsOpen}
-          config={previewConfig}
+          open={showSettings}
+          config={config}
           onApply={handleApply}
           onCancel={handleCancel}
+          onChange={(next) => {
+            // Live preview: update config in-memory and theme immediately
+            setConfig(next);
+            if (next?.general?.theme) applyTheme(next.general.theme);
+          }}
         />
 
 

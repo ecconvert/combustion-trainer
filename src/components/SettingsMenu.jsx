@@ -7,7 +7,7 @@ import AmbientSection from "./settings/AmbientSection.jsx";
 import DataSection from "./settings/DataSection.jsx";
 import GaugeSection from "./settings/GaugeSection";
 
-export default function SettingsMenu({ open, config, onApply, onCancel }) {
+export default function SettingsMenu({ open, config, onApply, onCancel, onChange }) {
   const [local, setLocal] = useState(config);
   const [section, setSection] = useState("general");
   const [position, setPosition] = useState({ x: 100, y: 100 });
@@ -61,13 +61,21 @@ export default function SettingsMenu({ open, config, onApply, onCancel }) {
   };
 
   const handleField = (sec, field, value) => {
-    setLocal((p) => ({ ...p, [sec]: { ...p[sec], [field]: value } }));
+    setLocal((p) => {
+      const next = { ...p, [sec]: { ...p[sec], [field]: value } };
+      if (onChange) onChange(next);
+      return next;
+    });
   };
 
   const handleReset = () => {
     if (!window.confirm("Reset this section to defaults?")) return;
     const defaults = getDefaultConfig();
-    setLocal((p) => ({ ...p, [section]: defaults[section] }));
+    setLocal((p) => {
+      const next = { ...p, [section]: defaults[section] };
+      if (onChange) onChange(next);
+      return next;
+    });
   };
 
   const SectionComponent = sections[section]?.Component;
