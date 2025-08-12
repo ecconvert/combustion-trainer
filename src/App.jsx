@@ -581,7 +581,27 @@ useEffect(() => {
   };
 
   // Tuning Mode
-  const [tuningOn] = useState(false);
+const [tuningOn, setTuningOn] = useState(false);
+
+  // Troubleshooting scenarios UI
+  const [scenarioSel, setScenarioSel] = useState("");
+  const handleScenarioChange = useCallback((e) => {
+    const val = e.target.value;
+    setScenarioSel(val);
+    // optional: apply per-scenario tweaks later
+  }, []);
+
+  // Minimal analyzer state so the UI can render without ReferenceErrors
+  const [anState, setAnState] = useState("OFF");      // OFF | ZERO | READY | SAMPLING | HOLD
+  const [probeInFlue, setProbeInFlue] = useState(false);
+  const startAnalyzer = useCallback(() => setAnState("ZERO"), []);
+  const finishZero    = useCallback(() => setAnState("READY"), []);
+  const insertProbe   = useCallback(() => {
+    setProbeInFlue(true);
+    setAnState((s) => (s === "READY" || s === "HOLD" ? "SAMPLING" : s));
+  }, []);
+  const holdAnalyzer   = useCallback(() => setAnState("HOLD"), []);
+  const resumeAnalyzer = useCallback(() => setAnState("SAMPLING"), []);
   const [camMap, setCamMap] = useState({}); // { percent: { fuel, air } }
   const [defaultsLoaded, setDefaultsLoaded] = useState(false);
 
