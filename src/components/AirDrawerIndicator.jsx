@@ -9,7 +9,7 @@ function AirDrawerIndicator({
   flameSelector = "[data-flame-root]", // optional CSS selector for the flame node
   speed = 1,             // 0.5, 1, 2 animation speed
   scale = 1.18,          // size relative to measured flame
-  angleLow = 180,        // 7 o'clock (degrees, clockwise from 12)
+  angleLow = 0,        // 7 o'clock (degrees, clockwise from 12)
   angleHigh = 300        // 11 o'clock (degrees, clockwise from 12)
 }) {
   const [box, setBox] = React.useState({ left: 0, top: 0, width: 0, height: 0 });
