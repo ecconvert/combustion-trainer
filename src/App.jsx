@@ -28,6 +28,7 @@ import SeriesVisibility from "./components/SeriesVisibility";
 import { useUIState } from "./components/UIStateContext";
 import { loadConfig, saveConfig, getDefaultConfig } from "./lib/config";
 import SettingsMenu from "./components/SettingsMenu";
+import { resetAllLayouts } from "./layout/store";
 
 /**
  * Visual representation of a flame.
@@ -1195,6 +1196,7 @@ const rheostatRampRef = useRef(null);
             <button className="btn" onClick={() => downloadCSV("session.csv", history)}>Export Trend CSV</button>
             <button className="btn" onClick={() => setDrawerOpen(true)}>Technician</button>
             <button className="btn" onClick={() => downloadCSV("saved-readings.csv", saved)}>Export Saved Readings</button>
+            <button className="btn" onClick={resetAllLayouts}>Reset Layout</button>
             <button
               className="btn"
               aria-label="Settings"
