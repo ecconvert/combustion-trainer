@@ -10,6 +10,9 @@ import GaugeSection from "./settings/GaugeSection";
 export default function SettingsMenu({ open, config, onApply, onCancel }) {
   const [local, setLocal] = useState(config);
   const [section, setSection] = useState("general");
+  const [position, setPosition] = useState({ x: 100, y: 100 });
+  const [dragging, setDragging] = useState(false);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
   const modalRef = useRef(null);
 
   useEffect(() => {
@@ -69,6 +72,36 @@ export default function SettingsMenu({ open, config, onApply, onCancel }) {
 
   const SectionComponent = sections[section]?.Component;
 
+  const handleMouseDown = (e) => {
+    setDragging(true);
+    setOffset({
+      x: e.clientX - position.x,
+      y: e.clientY - position.y,
+    });
+  };
+
+  const handleMouseMove = (e) => {
+    if (dragging) {
+      setPosition({
+        x: e.clientX - offset.x,
+        y: e.clientY - offset.y,
+      });
+    }
+  };
+
+  const handleMouseUp = () => setDragging(false);
+
+  useEffect(() => {
+    if (dragging) {
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+      return () => {
+        window.removeEventListener("mousemove", handleMouseMove);
+        window.removeEventListener("mouseup", handleMouseUp);
+      };
+    }
+  }, [dragging, offset]);
+
   if (!open) return null;
 
   return (
@@ -80,19 +113,33 @@ export default function SettingsMenu({ open, config, onApply, onCancel }) {
         aria-modal="true"
         aria-labelledby="settings-title"
         aria-describedby="settings-desc"
+        style={{
+          position: "fixed",
+          left: position.x,
+          top: position.y,
+          zIndex: 1000,
+          minWidth: 320,
+        }}
       >
-        <h2 id="settings-title" className="sr-only">Settings</h2>
-        <p id="settings-desc" className="sr-only">
-          Configure theme, units, and analyzer options
-        </p>
-        <div className="sm:hidden flex items-center justify-between p-4 border-b">
-          <h2 className="text-lg font-semibold">Settings</h2>
-          <button className="btn" onClick={onCancel} aria-label="Close settings">
-            Close
+        <div
+          style={{ cursor: "move", background: "#eee", padding: "0.5em" }}
+          onMouseDown={handleMouseDown}
+        >
+          <strong>Settings</strong>
+          <button
+            className="btn"
+            onClick={onCancel}
+            aria-label="Close settings"
+            style={{ float: "right" }}
+          >
+            &times;
           </button>
         </div>
         <div className="flex-1 flex">
-          <nav className="w-40 border-r p-4 hidden sm:block" aria-label="Settings sections">
+          <nav
+            className="w-40 border-r p-4 hidden sm:block"
+            aria-label="Settings sections"
+          >
             <ul className="space-y-2">
               {Object.entries(sections).map(([key, { label }]) => (
                 <li key={key}>
@@ -123,7 +170,10 @@ export default function SettingsMenu({ open, config, onApply, onCancel }) {
                 <button className="btn" onClick={onCancel}>
                   Cancel
                 </button>
-                <button className="btn btn-primary" onClick={() => onApply(local)}>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => onApply(local)}
+                >
                   Apply
                 </button>
               </div>
