@@ -1421,9 +1421,9 @@ const rheostatRampRef = useRef(null);
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Led on={t5Spark} label="T5" color="#065f46" />
-                  <Led on={t6Pilot} label="T6" color="#2dd4bf" />
-                  <Led on={t7Main} label="T7" color="#22c55e" />
+                  <Led on={t5Spark} label="T5 Spark" color="#065f46" />
+                  <Led on={t6Pilot} label="T6 Pilot" color="#2dd4bf" />
+                  <Led on={t7Main} label="T7 Main" color="#22c55e" />
                 </div>
               </div>
               <div className="mt-2 flex items-center gap-4 digital-text">
