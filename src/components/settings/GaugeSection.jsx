@@ -94,6 +94,18 @@ export default function GaugeSection({ values, onChange }) {
           onChange={e => onChange("gaugeDotSize", Number(e.target.value))}
         />
       </label>
+      <label className="block text-sm">
+        Needle Start (Inner)
+        <input
+          type="number"
+          min="0"
+          max="0.8"
+          step="0.01"
+          className="mt-1 border rounded-md px-2 py-1 w-full"
+          value={values.needleInner ?? 0}
+          onChange={e => onChange("needleInner", Number(e.target.value))}
+        />
+      </label>
     </div>
   );
 }

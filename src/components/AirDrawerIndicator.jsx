@@ -14,6 +14,7 @@ function AirDrawerIndicator({
   flipDirection = false,
   needleWidth = 0.06,
   dotSize = 0.06,
+  needleInner = 0, // 0 = center, 0.2 = 20% out from center, etc.
 }) {
   const [box, setBox] = React.useState({ left: 0, top: 0, width: 0, height: 0 });
   const [ring, setRing] = React.useState({ cx: 0, cy: 0, r: 60 });
@@ -96,13 +97,20 @@ function AirDrawerIndicator({
   const cx = ring.r;
   const cy = ring.r;
 
+  // Calculate base and tip points
+  const baseRadius = ring.r * needleInner; // new: base is offset from center
+  const tipRadius = ring.r * 0.87; // or whatever your tip length is
+
+  // Calculate base and tip positions using polarToCartesian
+  const base = polarToCartesian(cx, cy, baseRadius, angle);
+  const tip = polarToCartesian(cx, cy, tipRadius, angle);
+
   // Compute needle tip and base points for a simple pointer triangle
   const angleRad = (Math.PI / 180) * angle; // SVG 0deg is at 3 o'clock, but pointer is centered
   const tipX = cx + needleLength * Math.cos(angleRad);
   const tipY = cy + needleLength * Math.sin(angleRad);
   const baseAngle1 = angleRad + Math.PI / 2.5;
   const baseAngle2 = angleRad - Math.PI / 2.5;
-  const baseRadius = needleW;
   const baseX1 = cx + baseRadius * Math.cos(baseAngle1);
   const baseY1 = cy + baseRadius * Math.sin(baseAngle1);
   const baseX2 = cx + baseRadius * Math.cos(baseAngle2);

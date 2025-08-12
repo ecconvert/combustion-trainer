@@ -1331,6 +1331,7 @@ const rheostatRampRef = useRef(null);
                     flipDirection={config.gauge.gaugeFlipDirection}
                     needleWidth={config.gauge.gaugeNeedleWidth}
                     dotSize={config.gauge.gaugeDotSize}
+                    needleInner={config.gauge.needleInner}
                   />
                   <div className="absolute bottom-3 right-3 space-y-1 text-xs">
                     {steady.warnings.soot && (<div className="px-2 py-1 rounded bg-yellow-100 text-yellow-900">Soot risk</div>)}
@@ -1766,7 +1767,7 @@ const rheostatRampRef = useRef(null);
                 <div className="text-sm">
                   Sec/gal at current flow:{" "}
                   <span className="font-semibold">
-                    {oilSecPerGal > 0 ? oilSecPerGal.toFixed(0) : "—"}
+                    {oilBurnerGPH > 0 ? oilSecPerGal.toFixed(0) : "—"}
                   </span>
                 </div>
                 <div className="text-sm">
