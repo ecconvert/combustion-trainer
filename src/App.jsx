@@ -7,6 +7,9 @@
  * map generation and CSV export. Recharts is used for trend plotting.
  */
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Responsive, WidthProvider } from "react-grid-layout";
+import "react-grid-layout/css/styles.css";
+import "react-resizable/css/styles.css";
 import {
   LineChart,
   Line,
@@ -29,6 +32,7 @@ import { useUIState } from "./components/UIStateContext";
 import { loadConfig, saveConfig, getDefaultConfig } from "./lib/config";
 import SettingsMenu from "./components/SettingsMenu";
 import { resetAllLayouts } from "./layout/store";
+const ResponsiveGridLayout = WidthProvider(Responsive);
 
 /**
  * Visual representation of a flame.
@@ -47,6 +51,43 @@ const seriesConfig = [
   { key: 'StackF', name: 'Stack °F', yAxisId: 'right' },
   { key: 'Eff', name: 'Eff %', yAxisId: 'left' },
 ];
+
+const RGL_LS_KEY = "ct_layouts_v1";
+
+const rglBreakpoints = { lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 };
+const rglCols        = { lg:   12, md:  10, sm:   8, xs:   6, xxs:  4 };
+
+const defaultLayouts = {
+  lg: [
+    { i: "viz",      x: 0, y: 0,  w: 7, h: 26, minW: 4, minH: 12 },
+    { i: "controls", x: 0, y: 26, w: 7, h: 20, minW: 4, minH: 10 },
+    { i: "readouts", x: 7, y: 0,  w: 5, h: 12, minW: 3, minH: 6  },
+    { i: "trend",    x: 7, y: 12, w: 5, h: 16, minW: 3, minH: 10 },
+    { i: "meter",    x: 7, y: 28, w: 5, h: 12, minW: 3, minH: 8  },
+    { i: "saved",    x: 0, y: 46, w:12, h: 16, minW: 6, minH: 10 },
+  ],
+};
+defaultLayouts.md = defaultLayouts.lg;
+defaultLayouts.sm = defaultLayouts.lg;
+defaultLayouts.xs = defaultLayouts.lg;
+defaultLayouts.xxs = defaultLayouts.lg;
+
+function loadLayouts() {
+  try {
+    const raw = localStorage.getItem(RGL_LS_KEY);
+    return raw ? JSON.parse(raw) : defaultLayouts;
+  } catch {
+    return defaultLayouts;
+  }
+}
+
+function saveLayouts(layouts) {
+  try {
+    localStorage.setItem(RGL_LS_KEY, JSON.stringify(layouts));
+  } catch {
+    /* ignore */
+  }
+}
 
 function Flame({ phi, intensity, pilot = false }) {
   let color = "#48b3ff"; // lean -> blue
@@ -140,11 +181,32 @@ function Led({ on, label, color = "limegreen" }) {
   );
 }
 
+function PanelHeader({ title, right }) {
+  return (
+    <div className="flex items-center justify-between mb-2">
+      <div className="label drag-handle cursor-move select-none">{title}</div>
+      {right || null}
+    </div>
+  );
+}
+
 export default function CombustionTrainer() {
   const { drawerOpen, setDrawerOpen, seriesVisibility, setSeriesVisibility } = useUIState();
   const [config, setConfig] = useState(loadConfig() || getDefaultConfig());
   const unitSystem = config.units.system;
   const [showSettings, setShowSettings] = useState(false);
+  const [layouts, setLayouts] = useState(loadLayouts());
+
+  const handleLayoutChange = (_current, allLayouts) => {
+    setLayouts(allLayouts);
+    saveLayouts(allLayouts);
+  };
+
+  const handleResetLayouts = () => {
+    localStorage.removeItem(RGL_LS_KEY);
+    setLayouts(defaultLayouts);
+    try { resetAllLayouts(); } catch { /* ignore */ }
+  };
   const applyTheme = (theme) => {
     const root = document.documentElement;
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -910,274 +972,6 @@ const rheostatRampRef = useRef(null);
                 </div>
               </div>
             </CollapsibleSection>
-            <div className="card">
-              <div className="label">Trend (last {history.length} points)</div>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart
-                    data={history}
-                    margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis
-                      dataKey="ts"
-                      type="number"
-                      domain={["dataMin", "dataMax"]}
-                      hide
-                    />
-                    <YAxis yAxisId="left" domain={[0, 100]} />
-                    <YAxis yAxisId="right" orientation="right" domain={[0, 600]} />
-                    <Tooltip />
-                    <Legend />
-                    {seriesConfig.map((series) =>
-                      seriesVisibility[series.key] && (
-                        <Line
-                          key={series.key}
-                          yAxisId={series.yAxisId}
-                          type="monotone"
-                          dataKey={series.key}
-                          dot={false}
-                          name={series.name}
-                          strokeWidth={2}
-                          isAnimationActive={false}
-                        />
-                      )
-                    )}
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-            <SeriesVisibility
-              visibility={seriesVisibility}
-              setVisibility={setSeriesVisibility}
-            />
-            <div className="card">
-              <div className="label">Clock the Boiler (Metering)</div>
-              <div className="flex gap-2 mt-2">
-                <button
-                  className={`btn ${meterTab === "Gas" ? "btn-primary" : ""}`}
-                  onClick={() => setMeterTab("Gas")}
-                >
-                  Gas Meter
-                </button>
-                <button
-                  className={`btn ${meterTab === "Oil" ? "btn-primary" : ""}`}
-                  onClick={() => setMeterTab("Oil")}
-                >
-                  Oil Meter
-                </button>
-              </div>
-              {meterTab === "Gas" ? (
-                <div className="mt-3 space-y-2">
-                  <label className="text-sm">
-                    Dial size (ft³)
-                    <input
-                      type="number"
-                      list="dialSizes"
-                      className="w-full border rounded-md px-2 py-1 mt-1"
-                      value={gasDialSize}
-                      onChange={(e) =>
-                        setGasDialSize(parseFloat(e.target.value || 0))
-                      }
-                    />
-                    <datalist id="dialSizes">
-                      <option value="0.25" />
-                      <option value="0.5" />
-                      <option value="1" />
-                      <option value="2" />
-                    </datalist>
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      className="btn btn-primary"
-                      onClick={startGasClock}
-                      disabled={gasRunning || !isGas}
-                    >
-                      Start
-                    </button>
-                    <button
-                      className="btn"
-                      onClick={lapGasClock}
-                      disabled
-                      title="Meter laps are generated automatically from current burner flow"
-                    >
-                      Lap
-                    </button>
-                    <button
-                      className="btn"
-                      onClick={stopGasClock}
-                      disabled={!gasRunning}
-                    >
-                      Stop
-                    </button>
-                    <button className="btn" onClick={resetGasClock}>
-                      Reset
-                    </button>
-                    <button
-                      className="btn"
-                      onClick={exportGasClock}
-                      disabled={!gasLaps.length}
-                    >
-                      Export
-                    </button>
-                  </div>
-                  {!isGas && (
-                    <div className="text-xs text-slate-500 mt-1">
-                      Gas meter is only active for Natural Gas/Propane. Select a
-                      gas fuel to clock.
-                    </div>
-                  )}
-                  <div className="text-sm">
-                    Sim sec/rev (from burner):{" "}
-                    <span className="font-semibold">
-                      {gasMeterRevSec > 0 ? gasMeterRevSec.toFixed(1) : "—"}
-                    </span>
-                  </div>
-                  <div className="text-sm">
-                    Meter CFH (clocked avg):{" "}
-                    <span className="font-semibold">{gasCFH.toFixed(1)}</span>
-                  </div>
-                  <div className="text-sm">
-                    Burner CFH (model):{" "}
-                    <span className="font-semibold">
-                      {gasBurnerCFH.toFixed(1)}
-                    </span>
-                  </div>
-                  <div className="text-sm">
-                    Cam/Reg CFH (mapped):{" "}
-                    <span className="font-semibold">
-                      {gasCamCFH.toFixed(1)}
-                    </span>
-                  </div>
-                  <div className="text-sm">
-                    Input MBH (model):{" "}
-                    <span className="font-semibold">
-                      {gasMBH_model.toFixed(1)}
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-3 space-y-2">
-                  <div className="text-sm">
-                    Burner GPH (model):{" "}
-                    <span className="font-semibold">
-                      {oilBurnerGPH.toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="text-sm">
-                    Cam/Reg GPH (mapped):{" "}
-                    <span className="font-semibold">{oilCamGPH.toFixed(2)}</span>
-                  </div>
-                  <div className="text-sm">
-                    Sec/gal at current flow:{" "}
-                    <span className="font-semibold">
-                      {oilSecPerGal > 0 ? oilSecPerGal.toFixed(0) : "—"}
-                    </span>
-                  </div>
-                  <div className="text-sm">
-                    Volume in 60s:{" "}
-                    <span className="font-semibold">
-                      {(oilBurnerGPH / 60).toFixed(2)}
-                    </span>{" "}
-                    gal
-                  </div>
-                  <div className="text-xs text-slate-500">
-                    Field estimate from nozzle/pressure (optional):
-                  </div>
-                  <label className="text-sm">
-                    Nozzle GPH @100 psi
-                    <input
-                      type="number"
-                      className="w-full border rounded-md px-2 py-1 mt-1"
-                      value={nozzleGPH100}
-                      onChange={(e) =>
-                        setNozzleGPH100(parseFloat(e.target.value || 0))
-                      }
-                    />
-                  </label>
-                  <label className="text-sm">
-                    Pump pressure (psi)
-                    <input
-                      type="number"
-                      className="w-full border rounded-md px-2 py-1 mt-1"
-                      value={oilPressure}
-                      onChange={(e) =>
-                        setOilPressure(parseFloat(e.target.value || 0))
-                      }
-                    />
-                  </label>
-                  <div className="text-sm">
-                    Actual GPH:{" "}
-                    <span className="font-semibold">{oilGPH.toFixed(2)}</span>
-                  </div>
-                  <div className="text-sm">
-                    Input MBH:{" "}
-                    <span className="font-semibold">{oilMBH.toFixed(1)}</span>
-                  </div>
-                  <button className="btn mt-2" onClick={exportOilClock}>
-                    Export
-                  </button>
-                </div>
-              )}
-            </div>
-            <div className="card overflow-x-auto">
-              <div className="label mb-2">Saved readings</div>
-              <table className="min-w-full text-xs">
-                <thead>
-                  <tr className="text-left text-slate-500">
-                    {"t,Fuel,Rate,FuelFlow,AirFlow,O2,CO2,COaf,CO,NOx,StackF,Eff,EA,Mode"
-                      .split(",")
-                      .map((h) => (
-                        <th key={h} className="py-1 pr-3">
-                          {h}
-                        </th>
-                      ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {saved.slice(-40).map((r, i) => (
-                    <tr key={i} className="border-t">
-                      {Object.values(r).map((v, j) => (
-                        <td key={j} className="py-1 pr-3 whitespace-nowrap">
-                          {v}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="card overflow-x-auto">
-              <div className="label mb-2">Trend table</div>
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="text-left text-slate-500">
-                    {"t,O2,CO2,CO,NOx,StackF,Eff".split(",").map((h) => (
-                      <th key={h} className="py-1 pr-4">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {history.slice(-60).map((r) => (
-                    <tr key={r.ts} className="border-t">
-                      <td className="py-1 pr-4 whitespace-nowrap">{r.t}</td>
-                      <td className="py-1 pr-4">{r.O2}</td>
-                      <td className="py-1 pr-4">{r.CO2}</td>
-                      <td className="py-1 pr-4">{r.CO}</td>
-                      <td className="py-1 pr-4">{r.NOx}</td>
-                      <td className="py-1 pr-4">{r.StackF}</td>
-                      <td className="py-1 pr-4">{r.Eff}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <SeriesVisibility
-              visibility={seriesVisibility}
-              setVisibility={setSeriesVisibility}
-            />
           </div>
         </RightDrawer>
 
@@ -1196,7 +990,7 @@ const rheostatRampRef = useRef(null);
             <button className="btn" onClick={() => downloadCSV("session.csv", history)}>Export Trend CSV</button>
             <button className="btn" onClick={() => setDrawerOpen(true)}>Technician</button>
             <button className="btn" onClick={() => downloadCSV("saved-readings.csv", saved)}>Export Saved Readings</button>
-            <button className="btn" onClick={resetAllLayouts}>Reset Layout</button>
+            <button className="btn" onClick={handleResetLayouts}>Reset Layout</button>
             <button
               className="btn"
               aria-label="Settings"
@@ -1218,10 +1012,20 @@ const rheostatRampRef = useRef(null);
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto p-6 grid grid-cols-12 gap-4">
-        {/* Middle: boiler visualization */}
-        <section className="col-span-12 lg:col-span-9">
-          <div className="card">
+      <main className="max-w-7xl mx-auto p-6">
+        <ResponsiveGridLayout
+          className="layout"
+          breakpoints={rglBreakpoints}
+          cols={rglCols}
+          layouts={layouts}
+          onLayoutChange={handleLayoutChange}
+          rowHeight={10}
+          margin={[16, 16]}
+          draggableHandle=".drag-handle"
+          compactType="vertical"
+        >
+          <div key="viz" className="card overflow-hidden">
+            <PanelHeader title="Boiler Visualization" />
             <div className="flex items-center justify-between">
               <div>
                 <div className="label">Stack Temperature</div>
@@ -1230,7 +1034,6 @@ const rheostatRampRef = useRef(null);
               </div>
               <div className="text-sm text-slate-600">Flame Test {steady.flameTempF} °F</div>
             </div>
-
             <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="md:col-span-2">
                 <div aria-label="combustion chamber" className="relative h-72 rounded-3xl border bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden">
@@ -1261,8 +1064,6 @@ const rheostatRampRef = useRef(null);
                   </div>
                 </div>
               </div>
-
-              {/* Right-side chamber controls */}
               <div className="space-y-4">
                 {!tuningActive && (
                   <>
@@ -1270,16 +1071,13 @@ const rheostatRampRef = useRef(null);
                     <div className="value">{Number(airFlow).toFixed(2)}</div>
                   </>
                 )}
-
                 <div className="label mt-6">Ambient Temperature (°F)</div>
                 <input aria-label="ambient temperature" type="number" className="w-full border rounded-md px-2 py-1" value={ambientF} onChange={(e) => setAmbientF(parseFloat(e.target.value || 0))} />
               </div>
             </div>
           </div>
-
-
-          <div className="card mt-4">
-            <div className="label mb-2">Boiler Control Panel</div>
+          <div key="controls" className="card overflow-hidden">
+            <PanelHeader title="Boiler Control Panel" />
             <CollapsibleSection title="Fuel Selector">
               <select aria-label="fuel selector" className="w-full border rounded-md px-2 py-2 mt-1" value={fuelKey} onChange={(e) => setFuelKey(e.target.value)}>
                 {Object.keys(FUELS).map((k) => (
@@ -1287,9 +1085,8 @@ const rheostatRampRef = useRef(null);
                 ))}
               </select>
               <div className="mt-2 text-sm text-slate-600">HHV: {FUELS[fuelKey].HHV.toLocaleString()} Btu/{FUELS[fuelKey].unit}</div>
-              <div className="mt-1 text-xs text-slate-500">Targets: O₂ {fuel.targets.O2[0]} to {fuel.targets.O2[1]} percent, CO air-free ≤ {fuel.targets.COafMax} ppm</div>
+              <div className="mt-1 text-xs text-slate-500">Targets: O₂ {fuel.targets.O2[0]} to {fuel.targets.O2[1]} percent, COair-free ≤ {fuel.targets.COafMax} ppm</div>
             </CollapsibleSection>
-
             <div className="label mt-4">Boiler Power</div>
             <div className="flex items-center gap-2 mt-2">
               <button className={`btn ${boilerOn ? 'btn-primary' : ''}`} onClick={() => setBoilerOn(true)}>On</button>
@@ -1308,7 +1105,6 @@ const rheostatRampRef = useRef(null);
               disabled={!canSetFiring}
             />
             <div className="value">{rheostat}%</div>
-
             <CollapsibleSection title="Fuel/Air Flows">
               {tuningActive ? (
                 <div>
@@ -1485,50 +1281,296 @@ const rheostatRampRef = useRef(null);
                 </div>
               )}
             </CollapsibleSection>
-          </div>
-
-          <div className="card mt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="label">Programmer (EP160)</div>
-                <div className="text-sm">State: {burnerState} {stateCountdown !== null && (<span className="pill bg-slate-100 ml-2">{stateCountdown}s left</span>)} {burnerState === "LOCKOUT" && (<span className="pill bg-red-100 ml-2">Lockout: {lockoutReason}</span>)}</div>
+            <div className="mt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="label">Programmer (EP160)</div>
+                  <div className="text-sm">State: {burnerState} {stateCountdown !== null && (<span className="pill bg-slate-100 ml-2">{stateCountdown}s left</span>)} {burnerState === "LOCKOUT" && (<span className="pill bg-red-100 ml-2">Lockout: {lockoutReason}</span>)}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Led on={t5Spark} label="T5 Spark" color="#06b6d4" />
+                  <Led on={t6Pilot} label="T6 Pilot" color="#f59e0b" />
+                  <Led on={t7Main} label="T7 Main" color="#84cc16" />
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Led on={t5Spark} label="T5 Spark" color="#06b6d4" />
-                <Led on={t6Pilot} label="T6 Pilot" color="#f59e0b" />
-                <Led on={t7Main} label="T7 Main" color="#84cc16" />
+              <div className="mt-2 flex items-center gap-4">
+                <div className="text-sm">Flame Signal: <span className="font-semibold">{Math.round(flameSignal)}</span> (10 min, 20–80 normal)</div>
+                <button className="btn" onClick={advanceStep}>Advance simulation</button>
+                {burnerState === "LOCKOUT" && (<button className="btn btn-primary" onClick={resetProgrammer}>Reset Programmer</button>)}
+              </div>
+              <div className="mt-2 text-xs text-slate-500">Prepurge {EP160.PURGE_HF_SEC}s → Low fire {EP160.LOW_FIRE_MIN_SEC}s → PTFI {EP160.PTFI_SEC}s → MTFI (spark off {EP160.MTFI_SPARK_OFF_SEC}s, pilot off {EP160.MTFI_PILOT_OFF_SEC}s) → Run → Post purge {EP160.POST_PURGE_SEC}s.</div>
+            </div>
+          </div>
+          <div key="readouts" className="card">
+            <PanelHeader title="Readouts" />
+            <div className="grid grid-cols-2 gap-3" role="group" aria-label="readouts">
+              <div><div className="label">O₂ (dry)</div><div className="value">{disp.O2.toFixed(2)}%</div></div>
+              <div><div className="label">CO₂ (dry)</div><div className="value">{disp.CO2.toFixed(2)}%</div></div>
+              <div><div className="label">CO</div><div className="value">{Math.round(disp.CO)} ppm</div></div>
+              <div><div className="label">CO air-free</div><div className="value">{Math.round(disp.COaf)} ppm</div></div>
+              <div><div className="label">NOₓ</div><div className="value">{Math.round(disp.NOx)} ppm</div></div>
+              <div><div className="label">Excess Air</div><div className="value">{((steady.excessAir - 1) * 100).toFixed(1)}%</div></div>
+              <div><div className="label">Efficiency</div><div className="value">{Number(disp.Eff).toFixed(1)}%</div></div>
+              <div><div className="label">Stack</div><div className="value">{Math.round(disp.StackF)} °F</div></div>
+              <div className="col-span-2 text-xs text-slate-500 mt-1">
+                Targets for {fuelKey}: O₂ {fuel.targets.O2[0]} to {fuel.targets.O2[1]} percent; CO AF ≤ {fuel.targets.COafMax} ppm; stack {fuel.targets.stackF[0]} to {fuel.targets.stackF[1]} °F.
               </div>
             </div>
-            <div className="mt-2 flex items-center gap-4">
-              <div className="text-sm">Flame Signal: <span className="font-semibold">{Math.round(flameSignal)}</span> (10 min, 20–80 normal)</div>
-              <button className="btn" onClick={advanceStep}>Advance simulation</button>
-              {burnerState === "LOCKOUT" && (<button className="btn btn-primary" onClick={resetProgrammer}>Reset Programmer</button>)}
-            </div>
-            <div className="mt-2 text-xs text-slate-500">Prepurge {EP160.PURGE_HF_SEC}s → Low fire {EP160.LOW_FIRE_MIN_SEC}s → PTFI {EP160.PTFI_SEC}s → MTFI (spark off {EP160.MTFI_SPARK_OFF_SEC}s, pilot off {EP160.MTFI_PILOT_OFF_SEC}s) → Run → Post purge {EP160.POST_PURGE_SEC}s.</div>
           </div>
-        </section>
-
-        {/* Right readouts and saved table */}
-        <section className="col-span-12 lg:col-span-3 space-y-4">
-          <div className="card grid grid-cols-2 gap-3" role="group" aria-label="readouts">
-            <div><div className="label">O₂ (dry)</div><div className="value">{disp.O2.toFixed(2)}%</div></div>
-            <div><div className="label">CO₂ (dry)</div><div className="value">{disp.CO2.toFixed(2)}%</div></div>
-            <div><div className="label">CO</div><div className="value">{Math.round(disp.CO)} ppm</div></div>
-            <div><div className="label">CO air-free</div><div className="value">{Math.round(disp.COaf)} ppm</div></div>
-            <div><div className="label">NOₓ</div><div className="value">{Math.round(disp.NOx)} ppm</div></div>
-            <div><div className="label">Excess Air</div><div className="value">{((steady.excessAir - 1) * 100).toFixed(1)}%</div></div>
-            <div><div className="label">Efficiency</div><div className="value">{Number(disp.Eff).toFixed(1)}%</div></div>
-            <div><div className="label">Stack</div><div className="value">{Math.round(disp.StackF)} °F</div></div>
-
-            {/* Targets overlay */}
-            <div className="col-span-2 text-xs text-slate-500 mt-1">
-              Targets for {fuelKey}: O₂ {fuel.targets.O2[0]} to {fuel.targets.O2[1]} percent; CO AF ≤ {fuel.targets.COafMax} ppm; stack {fuel.targets.stackF[0]} to {fuel.targets.stackF[1]} °F.
+          <div key="trend" className="card overflow-hidden">
+            <PanelHeader title="Trend" />
+            <div style={{ height: "calc(100% - 40px)" }} className="flex flex-col">
+              <div className="flex-1">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={history} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="ts" type="number" domain={["dataMin", "dataMax"]} hide />
+                    <YAxis yAxisId="left" domain={[0, 100]} />
+                    <YAxis yAxisId="right" orientation="right" domain={[0, 600]} />
+                    <Tooltip />
+                    <Legend />
+                    {seriesConfig.map((series) =>
+                      seriesVisibility[series.key] && (
+                        <Line
+                          key={series.key}
+                          yAxisId={series.yAxisId}
+                          type="monotone"
+                          dataKey={series.key}
+                          dot={false}
+                          name={series.name}
+                          strokeWidth={2}
+                          isAnimationActive={false}
+                        />
+                      )
+                    )}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <SeriesVisibility visibility={seriesVisibility} setVisibility={setSeriesVisibility} />
             </div>
           </div>
-
-
-        </section>
-
+          <div key="meter" className="card overflow-hidden">
+            <PanelHeader title="Clock the Boiler (Metering)" />
+            <div className="flex gap-2 mt-2">
+              <button
+                className={`btn ${meterTab === "Gas" ? "btn-primary" : ""}`}
+                onClick={() => setMeterTab("Gas")}
+              >
+                Gas Meter
+              </button>
+              <button
+                className={`btn ${meterTab === "Oil" ? "btn-primary" : ""}`}
+                onClick={() => setMeterTab("Oil")}
+              >
+                Oil Meter
+              </button>
+            </div>
+            {meterTab === "Gas" ? (
+              <div className="mt-3 space-y-2">
+                <label className="text-sm">
+                  Dial size (ft³)
+                  <input
+                    type="number"
+                    list="dialSizes"
+                    className="w-full border rounded-md px-2 py-1 mt-1"
+                    value={gasDialSize}
+                    onChange={(e) =>
+                      setGasDialSize(parseFloat(e.target.value || 0))
+                    }
+                  />
+                  <datalist id="dialSizes">
+                    <option value="0.25" />
+                    <option value="0.5" />
+                    <option value="1" />
+                    <option value="2" />
+                  </datalist>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    className="btn btn-primary"
+                    onClick={startGasClock}
+                    disabled={gasRunning || !isGas}
+                  >
+                    Start
+                  </button>
+                  <button
+                    className="btn"
+                    onClick={lapGasClock}
+                    disabled
+                    title="Meter laps are generated automatically from current burner flow"
+                  >
+                    Lap
+                  </button>
+                  <button
+                    className="btn"
+                    onClick={stopGasClock}
+                    disabled={!gasRunning}
+                  >
+                    Stop
+                  </button>
+                  <button className="btn" onClick={resetGasClock}>
+                    Reset
+                  </button>
+                  <button
+                    className="btn"
+                    onClick={exportGasClock}
+                    disabled={!gasLaps.length}
+                  >
+                    Export
+                  </button>
+                </div>
+                {!isGas && (
+                  <div className="text-xs text-slate-500 mt-1">
+                    Gas meter is only active for Natural Gas/Propane. Select a
+                    gas fuel to clock.
+                  </div>
+                )}
+                <div className="text-sm">
+                  Sim sec/rev (from burner):{" "}
+                  <span className="font-semibold">
+                    {gasMeterRevSec > 0 ? gasMeterRevSec.toFixed(1) : "—"}
+                  </span>
+                </div>
+                <div className="text-sm">
+                  Meter CFH (clocked avg):{" "}
+                  <span className="font-semibold">{gasCFH.toFixed(1)}</span>
+                </div>
+                <div className="text-sm">
+                  Burner CFH (model):{" "}
+                  <span className="font-semibold">
+                    {gasBurnerCFH.toFixed(1)}
+                  </span>
+                </div>
+                <div className="text-sm">
+                  Cam/Reg CFH (mapped):{" "}
+                  <span className="font-semibold">
+                    {gasCamCFH.toFixed(1)}
+                  </span>
+                </div>
+                <div className="text-sm">
+                  Input MBH (model):{" "}
+                  <span className="font-semibold">
+                    {gasMBH_model.toFixed(1)}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 space-y-2">
+                <div className="text-sm">
+                  Burner GPH (model):{" "}
+                  <span className="font-semibold">
+                    {oilBurnerGPH.toFixed(2)}
+                  </span>
+                </div>
+                <div className="text-sm">
+                  Cam/Reg GPH (mapped):{" "}
+                  <span className="font-semibold">{oilCamGPH.toFixed(2)}</span>
+                </div>
+                <div className="text-sm">
+                  Sec/gal at current flow:{" "}
+                  <span className="font-semibold">
+                    {oilSecPerGal > 0 ? oilSecPerGal.toFixed(0) : "—"}
+                  </span>
+                </div>
+                <div className="text-sm">
+                  Volume in 60s:{" "}
+                  <span className="font-semibold">
+                    {(oilBurnerGPH / 60).toFixed(2)}
+                  </span>{" "}
+                  gal
+                </div>
+                <div className="text-xs text-slate-500">
+                  Field estimate from nozzle/pressure (optional):
+                </div>
+                <label className="text-sm">
+                  Nozzle GPH @100 psi
+                  <input
+                    type="number"
+                    className="w-full border rounded-md px-2 py-1 mt-1"
+                    value={nozzleGPH100}
+                    onChange={(e) =>
+                      setNozzleGPH100(parseFloat(e.target.value || 0))
+                    }
+                  />
+                </label>
+                <label className="text-sm">
+                  Pump pressure (psi)
+                  <input
+                    type="number"
+                    className="w-full border rounded-md px-2 py-1 mt-1"
+                    value={oilPressure}
+                    onChange={(e) =>
+                      setOilPressure(parseFloat(e.target.value || 0))
+                    }
+                  />
+                </label>
+                <div className="text-sm">
+                  Actual GPH:{" "}
+                  <span className="font-semibold">{oilGPH.toFixed(2)}</span>
+                </div>
+                <div className="text-sm">
+                  Input MBH:{" "}
+                  <span className="font-semibold">{oilMBH.toFixed(1)}</span>
+                </div>
+                <button className="btn mt-2" onClick={exportOilClock}>
+                  Export
+                </button>
+              </div>
+            )}
+          </div>
+          <div key="saved" className="card overflow-x-auto">
+            <PanelHeader title="Saved readings" />
+            <table className="min-w-full text-xs">
+              <thead>
+                <tr className="text-left text-slate-500">
+                  {"t,Fuel,Rate,FuelFlow,AirFlow,O2,CO2,COaf,CO,NOx,StackF,Eff,EA,Mode"
+                    .split(",")
+                    .map((h) => (
+                      <th key={h} className="py-1 pr-3">
+                        {h}
+                      </th>
+                    ))}
+                </tr>
+              </thead>
+              <tbody>
+                {saved.slice(-40).map((r, i) => (
+                  <tr key={i} className="border-t">
+                    {Object.values(r).map((v, j) => (
+                      <td key={j} className="py-1 pr-3 whitespace-nowrap">
+                        {v}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="label mb-2 mt-4">Trend table</div>
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="text-left text-slate-500">
+                  {"t,O2,CO2,CO,NOx,StackF,Eff".split(",").map((h) => (
+                    <th key={h} className="py-1 pr-4">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {history.slice(-60).map((r) => (
+                  <tr key={r.ts} className="border-t">
+                    <td className="py-1 pr-4 whitespace-nowrap">{r.t}</td>
+                    <td className="py-1 pr-4">{r.O2}</td>
+                    <td className="py-1 pr-4">{r.CO2}</td>
+                    <td className="py-1 pr-4">{r.CO}</td>
+                    <td className="py-1 pr-4">{r.NOx}</td>
+                    <td className="py-1 pr-4">{r.StackF}</td>
+                    <td className="py-1 pr-4">{r.Eff}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </ResponsiveGridLayout>
       </main>
 
       <footer className="max-w-7xl mx-auto p-6 text-xs text-slate-500">Educational model. For classroom intuition only.</footer>

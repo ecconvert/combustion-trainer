@@ -1,6 +1,7 @@
 import React from "react";
 import SeriesVisibility from "../components/SeriesVisibility";
 
+/* eslint-disable react-refresh/only-export-components */
 // Placeholder component for panels not yet implemented
 const Placeholder = ({ label }) => (
   <div className="p-2 text-center text-xs">{label}</div>
@@ -23,6 +24,8 @@ export const panels = {
   seriesVisibility: { title: "Series Visibility", Component: SeriesVisibility },
   ambientInputs: { title: "Ambient Inputs", Component: () => <Placeholder label="Ambient Inputs" /> },
 };
+
+/* eslint-enable react-refresh/only-export-components */
 
 const zoneOrder = {
   mainWide: ["chamberViz", "boilerPower", "fireRate", "flows", "programmer", "tuningPanel"],
