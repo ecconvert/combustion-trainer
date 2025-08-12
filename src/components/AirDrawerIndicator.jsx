@@ -14,7 +14,7 @@ function AirDrawerIndicator({
 }) {
   const [box, setBox] = React.useState({ left: 0, top: 0, width: 0, height: 0 });
   const [ring, setRing] = React.useState({ cx: 0, cy: 0, r: 60 });
-  const [angle, setAngle] = React.useState(angleLow - ((angleLow - angleHigh) * (value / 100)));
+  const [angle, setAngle] = React.useState(angleLow + (angleHigh - angleLow) * (value / 100));
 
   // Measure chamber and flame size
   React.useEffect(() => {
