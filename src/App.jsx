@@ -452,12 +452,34 @@ export default function CombustionTrainer() {
       }
     }
   }, []);
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const applyTheme = (theme) => {
-    const root = document.documentElement;
+    const html = document.documentElement;
+    const body = document.body;
+    const rootEl = document.getElementById('root');
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     const isDark = theme === 'dark' || (theme === 'system' && prefersDark);
-    root.classList.toggle('dark', isDark);
+    // Keep all potential ancestors in sync so Tailwind's dark: variant cannot get stuck
+    [html, body, rootEl].forEach((el) => el && el.classList.toggle('dark', isDark));
+    // Ensure native form controls (select, inputs) follow current theme
+    html.style.setProperty('color-scheme', isDark ? 'dark' : 'light');
+    setIsDarkMode(isDark);
   };
+  // Extract CSS variables to drive 3rd-party components (e.g., charts)
+  const themeVars = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return { background: '#f8fafc', foreground: '#0f172a', card: '#ffffff', border: '#e2e8f0', muted: '#64748b' };
+    }
+    const s = getComputedStyle(document.documentElement);
+    const read = (name, fallback) => (s.getPropertyValue(name) || '').trim() || fallback;
+    return {
+      background: read('--background', '#f8fafc'),
+      foreground: read('--foreground', '#0f172a'),
+      card: read('--card', '#ffffff'),
+      border: read('--border', '#e2e8f0'),
+      muted: read('--muted', '#64748b'),
+    };
+  }, [isDarkMode]);
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     const handler = () => applyTheme(theme);
@@ -1125,21 +1147,27 @@ const rheostatRampRef = useRef(null);
   }, [burnerState]);
   
   return (
-    <div className="min-h-screen w-full bg-slate-50 text-slate-900">
-      <style>{`
+  <div className="min-h-screen w-full bg-background text-foreground">
+  <style>{`
         @keyframes flicker { from { transform: scale(1) translateY(0px); opacity: 0.9; } to { transform: scale(1.04) translateY(-2px); opacity: 1; } }
         @keyframes spark { from { transform: translateY(2px) scale(0.9); opacity: .7; } to { transform: translateY(-2px) scale(1.1); opacity: 1; } }
         @keyframes smoke { from { transform: translateY(0) scale(0.8); opacity: .6; } to { transform: translateY(-30px) scale(1.4); opacity: 0; } }
-        .card { background: white; border-radius: 1rem; box-shadow: 0 6px 16px rgba(15,23,42,0.08); padding: 1rem; }
-        .label { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: #64748b; }
+  .card { background: var(--card); border-radius: 1rem; box-shadow: 0 6px 16px rgba(15,23,42,0.08); padding: 1rem; }
+  .label { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
         .value { font-size: 1.1rem; font-weight: 600; }
-        .btn { padding: .5rem .75rem; border-radius: .75rem; border: 1px solid #cbd5e1; background: white; }
-        .btn-primary { background: #0f172a; color: white; border-color: #0f172a; }
+  .btn { padding: .5rem .75rem; border-radius: .75rem; border: 1px solid var(--border); background: var(--card); color: var(--foreground); }
+  .btn:hover { filter: brightness(1.02); }
+  .btn:active { filter: brightness(0.98); }
+  .btn-primary { background: #2563eb; color: #ffffff; border-color: transparent; }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-primary:active { background: rgba(29,78,216,0.9); }
         .pill { padding: .25rem .5rem; border-radius: 9999px; font-size: .7rem; }
   /* Digital programmer styling */
   .digital-panel { background: linear-gradient(180deg, #bff5bf 0%, #8fe18f 100%); border: 1px solid #065f46; border-radius: 0.75rem; padding: 0.75rem 1rem; box-shadow: 0 0 18px rgba(16,185,129,0.25), inset 0 0 8px rgba(255,255,255,0.6); }
   .digital-text { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; letter-spacing: 0.02em; color: #052e05; text-shadow: 0 0 3px rgba(16,185,129,0.5); }
   .digital-readout { font-size: 1.05rem; font-weight: 700; padding: 0.15rem 0.4rem; background: rgba(255,255,255,0.45); border-radius: 0.375rem; border: 1px dashed rgba(6,95,70,0.35); }
+  /* Ensure chamber top cap follows theme (tokens defined in src/index.css) */
+  .chamber-cap { background-color: var(--viz-ring-stroke); }
       `}</style>
         <RightDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)}>
 
@@ -1152,7 +1180,7 @@ const rheostatRampRef = useRef(null);
               <input
                 aria-label="ambient temperature"
                 type="number"
-                className="w-full border rounded-md px-2 py-1 mt-2"
+                className="w-full border rounded-md px-2 py-1 mt-2 dark:bg-slate-800 dark:border-slate-600"
                 value={ambientF}
                 onChange={(e) => setAmbientF(parseFloat(e.target.value || 0))}
               />
@@ -1297,14 +1325,14 @@ const rheostatRampRef = useRef(null);
         />
 
 
-      <header className="px-6 py-4 border-b bg-white sticky top-0 z-10">
+  <header className="px-6 py-4 border-b bg-card border-border sticky top-0 z-10">
         <div className="max-w-7xl mx-auto flex items-center gap-4">
           <h1 className="text-2xl font-semibold">Combustion Trainer</h1>
           <div className="ml-auto flex items-center gap-3">
             <button className="btn" onClick={() => downloadCSV("session.csv", history)}>Export Trend CSV</button>
             <button className="btn" onClick={() => setDrawerOpen(true)}>Technician</button>
             <button className="btn" onClick={exportSavedReadings}>Export Saved Readings</button>
-            <button className="btn" data-testid="btn-theme-toggle" onClick={() => setTheme(theme === "dark" ? "system" : "dark")}>
+            <button className="btn" data-testid="btn-theme-toggle" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
               Toggle Theme
             </button>
             <button className="btn" data-testid="btn-reset-layout" onClick={handleResetLayouts}>Reset Layout</button>
@@ -1362,10 +1390,10 @@ const rheostatRampRef = useRef(null);
                 <div
                   ref={chamberRef}
                   aria-label="combustion chamber"
-                  className="relative h-72 rounded-3xl border bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden"
+                  className="relative h-72 rounded-3xl border border-slate-300 bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden dark:from-slate-800 dark:to-slate-700 dark:border-slate-700"
                 >
-                  <div className="absolute inset-6 rounded-full border-2 border-slate-300" />
-                  <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-24 h-8 bg-slate-400 rounded-t-2xl" />
+                  <div className="absolute inset-6 rounded-full border-2 border-slate-300 dark:border-slate-600" />
+                  <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-24 h-8 chamber-cap rounded-t-2xl dark:bg-slate-600" />
                   <div className="absolute inset-0">
                     {(showMainFlame || showPilotFlame) && (
                       <div data-flame-root className="absolute inset-0">
@@ -1390,6 +1418,8 @@ const rheostatRampRef = useRef(null);
                   </div>
                   {/* Adjust scale or offsetRatio to tweak placement relative to the flame */}
                   <AirDrawerIndicator
+                    key={isDarkMode ? 'dark' : 'light'}
+                    theme={isDarkMode ? 'dark' : 'light'}
                     value={displayFireRate}
                     chamberRef={chamberRef}
                     angleLow={config.gauge.gaugeAngleLow ?? 180}
@@ -1397,7 +1427,7 @@ const rheostatRampRef = useRef(null);
                     arcAngleLow={config.gauge.arcAngleLow ?? 220}
                     arcAngleHigh={config.gauge.arcAngleHigh ?? 330}
                     scale={config.gauge.gaugeScale ?? 1.18}
-                    speed={config.gauge.gaugeSpeed ?? 1}
+                    speed={ config.gauge.gaugeSpeed ?? 1}
                     flipDirection={config.gauge.gaugeFlipDirection ?? false}
                     needleWidth={config.gauge.gaugeNeedleWidth ?? 0.06}
                     dotSize={config.gauge.gaugeDotSize ?? 0.06}
@@ -1405,9 +1435,9 @@ const rheostatRampRef = useRef(null);
                     arcOffset={config.gauge.arcOffset ?? 0}
                   />
                   <div className="absolute bottom-3 right-3 space-y-1 text-xs">
-                    {steady.warnings.soot && (<div className="px-2 py-1 rounded bg-yellow-100 text-yellow-900">Soot risk</div>)}
-                    {steady.warnings.overTemp && (<div className="px-2 py-1 rounded bg-red-100 text-red-800">Over-temp</div>)}
-                    {steady.warnings.underTemp && (<div className="px-2 py-1 rounded bg-blue-100 text-blue-900">Condensate risk</div>)}
+                    {steady.warnings.soot && (<div className="px-2 py-1 rounded bg-yellow-100 text-yellow-900 dark:bg-yellow-500/20 dark:text-yellow-200 dark:border dark:border-yellow-700/40">Soot risk</div>)}
+                    {steady.warnings.overTemp && (<div className="px-2 py-1 rounded bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-200 dark:border dark:border-red-700/40">Over-temp</div>)}
+                    {steady.warnings.underTemp && (<div className="px-2 py-1 rounded bg-blue-100 text-blue-900 dark:bg-blue-500/20 dark:text-blue-200 dark:border dark:border-blue-700/40">Condensate risk</div>)}
                   </div>
                 </div>
               </div>
@@ -1428,10 +1458,10 @@ const rheostatRampRef = useRef(null);
                   <div className="text-sm">
                     State: <span className="digital-readout">{burnerState}</span>
                     {stateCountdown !== null && (
-                      <span className="pill bg-white/60 ml-2" style={{ color: "#065f46", border: "1px solid rgba(6,95,70,0.35)" }}>{stateCountdown}s left</span>
+                      <span className="pill ml-2" style={{ background: "rgba(255,255,255,0.6)", color: "#065f46", border: "1px solid rgba(6,95,70,0.35)" }}>{stateCountdown}s left</span>
                     )}
                     {burnerState === "LOCKOUT" && (
-                      <span className="pill bg-red-100 ml-2">Lockout: {lockoutReason}</span>
+                      <span className="pill ml-2" style={{ background: "#fee2e2", color: "#991b1b", border: "1px solid rgba(185,28,28,0.25)" }}>Lockout: {lockoutReason}</span>
                     )}
                   </div>
                 </div>
@@ -1452,12 +1482,17 @@ const rheostatRampRef = useRef(null);
           <GridAutoSizer key="controls" id="controls" data-testid="panel-controls" className="card overflow-hidden" onRows={(r) => setItemRows("controls", r)} rowHeight={10}>
             <PanelHeader title="Boiler Control Panel" />
             <CollapsibleSection title="Fuel Selector">
-              <select aria-label="fuel selector" className="w-full border rounded-md px-2 py-2 mt-1" value={fuelKey} onChange={(e) => setFuelKey(e.target.value)}>
+              <select
+                aria-label="fuel selector"
+                className="w-full rounded-md px-2 py-2 mt-1 bg-card text-foreground border border-border dark:bg-slate-800 dark:border-slate-600 transition-colors"
+                value={fuelKey}
+                onChange={(e) => setFuelKey(e.target.value)}
+              >
                 {Object.keys(FUELS).map((k) => (
                   <option key={k} value={k}>{k}</option>
                 ))}
               </select>
-              <div className="mt-2 text-sm text-slate-600">HHV: {FUELS[fuelKey].HHV.toLocaleString()} Btu/{FUELS[fuelKey].unit}</div>
+              <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">HHV: {FUELS[fuelKey].HHV.toLocaleString()} Btu/{FUELS[fuelKey].unit}</div>
               <div className="mt-1 text-xs text-slate-500">Targets: O₂ {fuel.targets.O2[0]} to {fuel.targets.O2[1]} percent, COair-free ≤ {fuel.targets.COafMax} ppm</div>
             </CollapsibleSection>
             <div className="label mt-4">Boiler Power</div>
@@ -1700,12 +1735,12 @@ const rheostatRampRef = useRef(null);
             <div className="flex-1 min-h-0">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={history} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="ts" type="number" domain={["dataMin", "dataMax"]} hide />
-                  <YAxis yAxisId="left" domain={[0, 100]} />
-                  <YAxis yAxisId="right" orientation="right" domain={[0, 600]} />
-                  <Tooltip />
-                  <Legend />
+                  <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? "rgba(148,163,184,0.25)" : themeVars.border} />
+                  <XAxis dataKey="ts" type="number" domain={["dataMin", "dataMax"]} hide stroke={themeVars.muted} tick={{ fill: themeVars.muted }} />
+                  <YAxis yAxisId="left" domain={[0, 100]} stroke={themeVars.muted} tick={{ fill: themeVars.muted }} />
+                  <YAxis yAxisId="right" orientation="right" domain={[0, 600]} stroke={themeVars.muted} tick={{ fill: themeVars.muted }} />
+                  <Tooltip contentStyle={{ background: themeVars.card, border: `1px solid ${themeVars.border}`, color: themeVars.foreground }} labelStyle={{ color: themeVars.foreground }} />
+                  <Legend wrapperStyle={{ color: themeVars.foreground }} />
                   {seriesConfig.map((series) =>
                     seriesVisibility[series.key] && (
                       <Line

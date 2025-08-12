@@ -118,7 +118,7 @@ export default function SettingsMenu({ open, config, onApply, onCancel, onChange
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div
         ref={modalRef}
-        className="bg-white w-full h-full sm:h-auto sm:max-w-3xl sm:rounded-md sm:flex"
+  className="bg-card text-foreground w-full h-full sm:h-auto sm:max-w-3xl sm:rounded-md sm:flex"
         role="dialog"
         aria-modal="true"
         aria-labelledby="settings-title"
@@ -132,7 +132,8 @@ export default function SettingsMenu({ open, config, onApply, onCancel, onChange
         }}
       >
         <div
-          style={{ cursor: "move", background: "#eee", padding: "0.5em" }}
+          className="px-2 py-1 bg-card border-b border-border"
+          style={{ cursor: "move" }}
           onMouseDown={handleMouseDown}
         >
           <strong>Settings</strong>
@@ -147,16 +148,14 @@ export default function SettingsMenu({ open, config, onApply, onCancel, onChange
         </div>
         <div className="flex-1 flex">
           <nav
-            className="w-40 border-r p-4 hidden sm:block"
+            className="w-40 border-r p-4 hidden sm:block border-border"
             aria-label="Settings sections"
           >
             <ul className="space-y-2">
               {Object.entries(sections).map(([key, { label }]) => (
                 <li key={key}>
                   <button
-                    className={`text-left w-full px-2 py-1 rounded-md ${
-                      section === key ? "bg-slate-200" : ""
-                    }`}
+                    className={`text-left w-full px-2 py-1 rounded-md ${section === key ? "bg-background" : ""}`}
                     onClick={() => setSection(key)}
                   >
                     {label}

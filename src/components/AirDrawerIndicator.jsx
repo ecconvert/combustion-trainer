@@ -132,11 +132,11 @@ function AirDrawerIndicator({
       style={{ position: "absolute", left, top, pointerEvents: "none", zIndex: 2 }}
     >
       {/* background ring */}
-      <circle cx={cx} cy={cy} r={ring.r * 0.95} fill="rgba(255,255,255,0.45)" stroke="#cbd5e1" strokeWidth={Math.max(1, ring.r * 0.03)} />
+      <circle cx={cx} cy={cy} r={ring.r * 0.95} fill="var(--viz-ring-fill)" stroke="var(--viz-ring-stroke)" strokeWidth={Math.max(1, ring.r * 0.03)} />
       {/* fixed arc for visual cue (independent of needle angles) */}
       <path
         d={describeArc(cx, cy, ring.r * 0.82, arcAngleLow + arcOffset, arcAngleHigh + arcOffset)}
-        stroke="#334155"
+        stroke="var(--viz-arc)"
         strokeWidth={Math.max(2, ring.r * 0.07)}
         fill="none"
         opacity={0.7}
@@ -144,13 +144,13 @@ function AirDrawerIndicator({
       {/* pointer/needle */}
       <polygon
         points={`${tipX},${tipY} ${baseX1},${baseY1} ${baseX2},${baseY2}`}
-        fill="#1e293b"
+        fill="var(--viz-needle)"
         stroke="#fff"
         strokeWidth={Math.max(1, ring.r * 0.02)}
         style={{ filter: "drop-shadow(0 0 2px #fff8)" }}
       />
       {/* hub */}
-      <circle cx={cx} cy={cy} r={hubRadius} fill="#334155" stroke="#fff" strokeWidth={Math.max(1, ring.r * 0.02)} />
+      <circle cx={cx} cy={cy} r={hubRadius} fill="var(--viz-arc)" stroke="#fff" strokeWidth={Math.max(1, ring.r * 0.02)} />
     </svg>
   );
 }
