@@ -6,6 +6,7 @@
  * modules located in `src/lib` for math, chemistry calculations, cam
  * map generation and CSV export. Recharts is used for trend plotting.
  */
+/* global process */
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Responsive, WidthProvider } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
@@ -27,11 +28,10 @@ import { computeCombustion } from "./lib/chemistry";
 import { buildSafeCamMap } from "./lib/cam";
 import CollapsibleSection from "./components/CollapsibleSection";
 import RightDrawer from "./components/RightDrawer";
-import SeriesVisibility from "./components/SeriesVisibility";
 import { useUIState } from "./components/UIStateContext";
 import { loadConfig, saveConfig, getDefaultConfig } from "./lib/config";
 import SettingsMenu from "./components/SettingsMenu";
-import { resetAllLayouts } from "./layout/store";
+import { panels, defaultZoneById, defaultLayouts as techDefaults } from "./panels";
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
 /**
@@ -52,40 +52,120 @@ const seriesConfig = [
   { key: 'Eff', name: 'Eff %', yAxisId: 'left' },
 ];
 
-const RGL_LS_KEY = "ct_layouts_v1";
+const RGL_LS_KEY = "ct_layouts_v2";
+const ZONES_KEY = "ct_zones_v1";
 
 const rglBreakpoints = { lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 };
-const rglCols        = { lg:   12, md:  10, sm:   8, xs:   6, xxs:  4 };
+const rglCols        = { lg:   12,  md:  10,  sm:   8,  xs:   6,  xxs:  4 };
 
 const defaultLayouts = {
   lg: [
-    { i: "viz",      x: 0, y: 0,  w: 7, h: 26, minW: 4, minH: 12 },
-    { i: "controls", x: 0, y: 26, w: 7, h: 20, minW: 4, minH: 10 },
-    { i: "readouts", x: 7, y: 0,  w: 5, h: 12, minW: 3, minH: 6  },
-    { i: "trend",    x: 7, y: 12, w: 5, h: 16, minW: 3, minH: 10 },
-    { i: "meter",    x: 7, y: 28, w: 5, h: 12, minW: 3, minH: 8  },
+    { i: "viz",      x: 0, y: 0,  w: 7,  h: 26, minW: 4, minH: 12 },
+    { i: "controls", x: 0, y: 26, w: 7,  h: 20, minW: 4, minH: 10 },
+    { i: "readouts", x: 7, y: 0,  w: 5,  h: 12, minW: 3, minH:  6 },
+    { i: "trend",    x: 7, y: 12, w: 5,  h: 16, minW: 3, minH: 10 },
+    { i: "meter",    x: 7, y: 28, w: 5,  h: 12, minW: 3, minH:  8 },
     { i: "saved",    x: 0, y: 46, w:12, h: 16, minW: 6, minH: 10 },
   ],
+  md: [
+    { i: "viz",      x: 0, y: 0,  w: 6,  h: 26 },
+    { i: "controls", x: 0, y: 26, w: 6,  h: 20 },
+    { i: "readouts", x: 6, y: 0,  w: 4,  h: 12 },
+    { i: "trend",    x: 6, y: 12, w: 4,  h: 16 },
+    { i: "meter",    x: 6, y: 28, w: 4,  h: 12 },
+    { i: "saved",    x: 0, y: 46, w:10, h: 16 },
+  ],
+  sm: [
+    { i: "viz",      x: 0, y: 0,  w: 5,  h: 26 },
+    { i: "controls", x: 0, y: 26, w: 5,  h: 20 },
+    { i: "readouts", x: 5, y: 0,  w: 3,  h: 12 },
+    { i: "trend",    x: 5, y: 12, w: 3,  h: 16 },
+    { i: "meter",    x: 5, y: 28, w: 3,  h: 12 },
+    { i: "saved",    x: 0, y: 46, w: 8, h: 16 },
+  ],
+  xs: [
+    { i: "viz",      x: 0, y: 0,  w: 6, h: 24 },
+    { i: "controls", x: 0, y: 24, w: 6, h: 18 },
+    { i: "readouts", x: 0, y: 42, w: 6, h: 10 },
+    { i: "trend",    x: 0, y: 52, w: 6, h: 16 },
+    { i: "meter",    x: 0, y: 68, w: 6, h: 10 },
+    { i: "saved",    x: 0, y: 78, w: 6, h: 14 },
+  ],
+  xxs: [
+    { i: "viz",      x: 0, y: 0,  w: 4, h: 24 },
+    { i: "controls", x: 0, y: 24, w: 4, h: 18 },
+    { i: "readouts", x: 0, y: 42, w: 4, h: 10 },
+    { i: "trend",    x: 0, y: 52, w: 4, h: 16 },
+    { i: "meter",    x: 0, y: 68, w: 4, h: 10 },
+    { i: "saved",    x: 0, y: 78, w: 4, h: 14 },
+  ],
 };
-defaultLayouts.md = defaultLayouts.lg;
-defaultLayouts.sm = defaultLayouts.lg;
-defaultLayouts.xs = defaultLayouts.lg;
-defaultLayouts.xxs = defaultLayouts.lg;
 
+function fitToCols(items, cols) {
+  return items.map((it) => {
+    const w = Math.min(it.w ?? 1, cols);
+    const x = Math.min(it.x ?? 0, Math.max(0, cols - w));
+    return { ...it, w, x };
+  });
+}
+function normalizeLayouts(layouts) {
+  const out = {};
+  Object.entries(rglCols).forEach(([bp, cols]) => {
+    const arr = layouts?.[bp] ?? [];
+    out[bp] = fitToCols(arr, cols);
+  });
+  return out;
+}
 function loadLayouts() {
   try {
     const raw = localStorage.getItem(RGL_LS_KEY);
-    return raw ? JSON.parse(raw) : defaultLayouts;
+    const parsed = raw ? JSON.parse(raw) : defaultLayouts;
+    return normalizeLayouts(parsed);
   } catch {
-    return defaultLayouts;
+    return normalizeLayouts(defaultLayouts);
   }
 }
 
 function saveLayouts(layouts) {
   try {
     localStorage.setItem(RGL_LS_KEY, JSON.stringify(layouts));
+  } catch (e) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("Failed to save layouts to localStorage:", e);
+    }
+  }
+}
+
+function loadZones() {
+  try {
+    return JSON.parse(localStorage.getItem(ZONES_KEY)) || defaultZoneById;
   } catch {
-    /* ignore */
+    return defaultZoneById;
+  }
+}
+function saveZones(z) {
+  try {
+    localStorage.setItem(ZONES_KEY, JSON.stringify(z));
+  } catch { /* ignore */ }
+}
+
+const TECH_LS_KEY = "ct_tech_layouts_v1";
+function loadTechLayouts() {
+  try {
+    const raw = localStorage.getItem(TECH_LS_KEY);
+    const parsed = raw ? JSON.parse(raw) : techDefaults.techDrawer;
+    return normalizeLayouts(parsed);
+  } catch {
+    return normalizeLayouts(techDefaults.techDrawer);
+  }
+}
+function saveTechLayouts(ls) {
+  try {
+    localStorage.setItem(TECH_LS_KEY, JSON.stringify(ls));
+  } catch (e) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("Failed to save tech layouts to localStorage:", e);
+    }
   }
 }
 
@@ -181,11 +261,14 @@ function Led({ on, label, color = "limegreen" }) {
   );
 }
 
-function PanelHeader({ title, right }) {
+function PanelHeader({ title, right, dockAction }) {
   return (
     <div className="flex items-center justify-between mb-2">
       <div className="label drag-handle cursor-move select-none">{title}</div>
-      {right || null}
+      <div className="flex items-center gap-2">
+        {right}
+        {dockAction}
+      </div>
     </div>
   );
 }
@@ -196,6 +279,8 @@ export default function CombustionTrainer() {
   const unitSystem = config.units.system;
   const [showSettings, setShowSettings] = useState(false);
   const [layouts, setLayouts] = useState(loadLayouts());
+  const [zones, setZones] = useState(loadZones());
+  const [techLayouts, setTechLayouts] = useState(loadTechLayouts());
 
   const handleLayoutChange = (_current, allLayouts) => {
     setLayouts(allLayouts);
@@ -204,9 +289,32 @@ export default function CombustionTrainer() {
 
   const handleResetLayouts = () => {
     localStorage.removeItem(RGL_LS_KEY);
-    setLayouts(defaultLayouts);
-    try { resetAllLayouts(); } catch { /* ignore */ }
+    setLayouts(normalizeLayouts(defaultLayouts));
   };
+  const dock = (id, zone) => {
+    setZones((prev) => {
+      const next = { ...prev, [id]: zone };
+      saveZones(next);
+      return next;
+    });
+  };
+  const onTechChange = (_cur, all) => {
+    setTechLayouts(all);
+    saveTechLayouts(all);
+  };
+  const techItems = Object.keys(panels).filter((id) => zones[id] === "techDrawer");
+  useEffect(() => {
+    const v2 = localStorage.getItem(RGL_LS_KEY);
+    const v1 = localStorage.getItem("ct_layouts_v1");
+    if (!v2 && v1) {
+      try {
+        const parsed = JSON.parse(v1);
+        const normalized = normalizeLayouts(parsed);
+        localStorage.setItem(RGL_LS_KEY, JSON.stringify(normalized));
+        localStorage.removeItem("ct_layouts_v1");
+      } catch { /* ignore */ }
+    }
+  }, []);
   const applyTheme = (theme) => {
     const root = document.documentElement;
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -257,9 +365,7 @@ export default function CombustionTrainer() {
   const stateTimeRef = useRef(0); // milliseconds elapsed in current state
 
   // ----------------------- Analyzer state machine -----------------------
-  const [anState, setAnState] = useState("OFF"); // OFF, ZERO, READY, SAMPLING, HOLD
-  const [probeInFlue, setProbeInFlue] = useState(false); // whether probe inserted
-  const [saved, setSaved] = useState([]); // logged analyzer readings
+  const [saved] = useState([]); // logged analyzer readings
   const [t5Spark, setT5Spark] = useState(false); // output relay states for animation
   const [t6Pilot, setT6Pilot] = useState(false);
   const [t7Main, setT7Main] = useState(false);
@@ -268,7 +374,6 @@ export default function CombustionTrainer() {
   const flameOutTimerRef = useRef(0); // tracks flame failure detection time
   const [lockoutReason, setLockoutReason] = useState("");
   const [lockoutPending, setLockoutPending] = useState(false);
-  const [scenarioSel, setScenarioSel] = useState(""); // current troubleshooting scenario
 
   // ----------------------- Metering panel -----------------------
   const [meterTab, setMeterTab] = useState("Gas"); // which meter UI is visible
@@ -369,7 +474,7 @@ useEffect(() => {
   };
 
   // Tuning Mode
-  const [tuningOn, setTuningOn] = useState(false);
+  const [tuningOn] = useState(false);
   const [camMap, setCamMap] = useState({}); // { percent: { fuel, air } }
   const [defaultsLoaded, setDefaultsLoaded] = useState(false);
 
@@ -675,31 +780,6 @@ useEffect(() => {
     return () => clearInterval(id);
   }, []);
 
-  // Analyzer controls
-  const startAnalyzer = () => { setAnState("ZERO"); setProbeInFlue(false); };
-  const finishZero = () => { setAnState("READY"); };
-  const insertProbe = () => { if (anState === "READY") { setProbeInFlue(true); setAnState("SAMPLING"); } };
-  const holdAnalyzer = () => { if (anState === "SAMPLING") setAnState("HOLD"); };
-  const resumeAnalyzer = () => { if (anState === "HOLD") setAnState("SAMPLING"); };
-  const saveReading = () => {
-    const row = {
-      t: new Date().toLocaleTimeString(),
-      Fuel: fuelKey,
-      Rate: rheostat, // percent
-      FuelFlow: Number(parseFloat(fuelFlow).toFixed(2)),
-      AirFlow: Number(parseFloat(airFlow).toFixed(2)),
-      O2: Number(disp.O2.toFixed(2)),
-      CO2: Number(disp.CO2.toFixed(2)),
-      COaf: Math.round(disp.COaf),
-      CO: Math.round(disp.CO),
-      NOx: Math.round(disp.NOx),
-      StackF: Math.round(disp.StackF),
-      Eff: Number(Number(disp.Eff).toFixed(1)),
-      EA: steady.excessAir,
-      Mode: burnerState,
-    };
-    setSaved((s) => [...s, row]);
-  };
 
   const resetProgrammer = () => {
     setLockoutReason("");
@@ -759,26 +839,6 @@ useEffect(() => {
     }, config.analyzer.samplingSec * 1000);
     return () => clearInterval(id);
   }, [config.analyzer.samplingSec, config.general.trendLength]);
-  // Scenario presets (adds to previous ones)
-  const handleScenarioChange = (e) => {
-    const v = e.target.value;
-    setScenarioSel(v);
-    if (v) {
-      applyScenario(v);
-      setScenarioSel("");
-    }
-  };
-  const applyScenario = (key) => {
-    const s = {
-      "Low air, hot stack": () => { setAirFlow(30); setFuelFlow(8); },
-      "High draft, cold stack": () => { setAirFlow(140); setFuelFlow(4); },
-      "Dirty nozzles (incomplete)": () => { setFuelFlow(9); setAirFlow(50); },
-      "Biodiesel blend, medium stack": () => { setFuelKey("Biodiesel"); setFuelFlow(6); setAirFlow(90); },
-      Reset: () => { setFuelKey("Natural Gas"); setFuelFlow(5); setAirFlow(60); },
-    };
-    s[key]?.();
-  };
-
   // Tuning assistant
   const tuningActive = tuningOn;
 
@@ -845,135 +905,38 @@ const rheostatRampRef = useRef(null);
         .pill { padding: .25rem .5rem; border-radius: 9999px; font-size: .7rem; }
       `}</style>
         <RightDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)}>
-          <div className="space-y-4">
-            <button className="btn" onClick={() => setShowSettings(true)}>
-              Settings
-            </button>
-            <div className="card">
-              <div className="label">Start Troubleshooting Scenarios</div>
-              <select
-                aria-label="troubleshooting scenarios"
-                className="w-full border rounded-md px-2 py-2 mt-2"
-                value={scenarioSel}
-                onChange={handleScenarioChange}
-              >
-                <option value="">Start Troubleshooting Scenarios</option>
-                {[
-                  "Low air, hot stack",
-                  "High draft, cold stack",
-                  "Dirty nozzles (incomplete)",
-                  "Biodiesel blend, medium stack",
-                  "Reset",
-                ].map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="card">
-              <div className="label">Tuning Mode</div>
-              <div className="flex gap-2 mt-2">
-                <button
-                  className={`btn ${!tuningOn ? "btn-primary" : ""}`}
-                  onClick={() => setTuningOn(false)}
-                >
-                  Off
-                </button>
-                <button
-                  className={`btn ${tuningOn ? "btn-primary" : ""}`}
-                  onClick={() => setTuningOn(true)}
-                >
-                  On
-                </button>
-              </div>
-              <div className="text-xs text-slate-500 mt-2">
-                When ON, adjust fuel and air together and step the cam in 10%
-                intervals.
-              </div>
-            </div>
-            <CollapsibleSection title="Analyzer">
-              <div className="card">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm">
-                      State: {anState}{" "}
-                      {probeInFlue && (
-                        <span className="pill bg-slate-100 ml-2">
-                          Probe in flue
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex gap-2 items-center">
-                    <Led on={anState !== "OFF"} label="Power" />
-                    <Led on={anState === "ZERO"} label="Zero" color="#06b6d4" />
-                    <Led
-                      on={anState === "SAMPLING"}
-                      label="Sampling"
-                      color="#84cc16"
-                    />
-                    <Led
-                      on={anState === "HOLD"}
-                      label="Hold"
-                      color="#f59e0b"
-                    />
-                  </div>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button className="btn" onClick={startAnalyzer}>
-                    Start
-                  </button>
-                  <button
-                    className="btn"
-                    onClick={finishZero}
-                    disabled={anState !== "ZERO"}
-                  >
-                    Finish Zero
-                  </button>
-                  <button
-                    className="btn"
-                    onClick={insertProbe}
-                    disabled={anState !== "READY"}
-                  >
-                    Insert Probe
-                  </button>
-                  <button
-                    className="btn"
-                    onClick={() => setProbeInFlue(false)}
-                  >
-                    Remove Probe
-                  </button>
-                  <button
-                    className="btn"
-                    onClick={holdAnalyzer}
-                    disabled={anState !== "SAMPLING"}
-                  >
-                    Hold
-                  </button>
-                  <button
-                    className="btn"
-                    onClick={resumeAnalyzer}
-                    disabled={anState !== "HOLD"}
-                  >
-                    Resume
-                  </button>
-                  <button
-                    className="btn-primary"
-                    onClick={saveReading}
-                    disabled={anState === "OFF"}
-                  >
-                    Save Reading
-                  </button>
-                </div>
-                <div className="mt-2 text-xs text-slate-500">
-                  Zero in room air to capture combustion air temperature. Then
-                  insert probe to sample.
-                </div>
-              </div>
-            </CollapsibleSection>
-          </div>
-        </RightDrawer>
+  <ResponsiveGridLayout
+    className="layout"
+    breakpoints={rglBreakpoints}
+    cols={rglCols}
+    layouts={techLayouts}
+    onLayoutChange={onTechChange}
+    rowHeight={10}
+    margin={[16, 16]}
+    draggableHandle=".drag-handle"
+    compactType="vertical"
+  >
+    {techItems.map((id) => {
+      const Panel = panels[id].Component;
+      return (
+        <div key={id} data-grid={{}} className="card overflow-hidden flex flex-col">
+          <PanelHeader
+            title={panels[id].title}
+            dockAction={
+              <button className="btn" onClick={() => dock(id, "main")}>
+                Dock to main
+              </button>
+            }
+          />
+          <Panel
+            visibility={seriesVisibility}
+            setVisibility={setSeriesVisibility}
+          />
+        </div>
+      );
+    })}
+  </ResponsiveGridLayout>
+</RightDrawer>
 
         <SettingsMenu
           open={showSettings}
@@ -1317,36 +1280,33 @@ const rheostatRampRef = useRef(null);
               </div>
             </div>
           </div>
-          <div key="trend" className="card overflow-hidden">
+          <div key="trend" className="card overflow-hidden flex flex-col">
             <PanelHeader title="Trend" />
-            <div style={{ height: "calc(100% - 40px)" }} className="flex flex-col">
-              <div className="flex-1">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={history} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="ts" type="number" domain={["dataMin", "dataMax"]} hide />
-                    <YAxis yAxisId="left" domain={[0, 100]} />
-                    <YAxis yAxisId="right" orientation="right" domain={[0, 600]} />
-                    <Tooltip />
-                    <Legend />
-                    {seriesConfig.map((series) =>
-                      seriesVisibility[series.key] && (
-                        <Line
-                          key={series.key}
-                          yAxisId={series.yAxisId}
-                          type="monotone"
-                          dataKey={series.key}
-                          dot={false}
-                          name={series.name}
-                          strokeWidth={2}
-                          isAnimationActive={false}
-                        />
-                      )
-                    )}
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-              <SeriesVisibility visibility={seriesVisibility} setVisibility={setSeriesVisibility} />
+            <div className="flex-1 min-h-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={history} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="ts" type="number" domain={["dataMin", "dataMax"]} hide />
+                  <YAxis yAxisId="left" domain={[0, 100]} />
+                  <YAxis yAxisId="right" orientation="right" domain={[0, 600]} />
+                  <Tooltip />
+                  <Legend />
+                  {seriesConfig.map((series) =>
+                    seriesVisibility[series.key] && (
+                      <Line
+                        key={series.key}
+                        yAxisId={series.yAxisId}
+                        type="monotone"
+                        dataKey={series.key}
+                        dot={false}
+                        name={series.name}
+                        strokeWidth={2}
+                        isAnimationActive={false}
+                      />
+                    )
+                  )}
+                </LineChart>
+              </ResponsiveContainer>
             </div>
           </div>
           <div key="meter" className="card overflow-hidden">
@@ -1570,6 +1530,27 @@ const rheostatRampRef = useRef(null);
               </tbody>
             </table>
           </div>
+          {Object.keys(panels)
+            .filter((id) => zones[id] === "main")
+            .map((id) => {
+              const Panel = panels[id].Component;
+              return (
+                <div key={id} className="card overflow-hidden" data-grid={{ w: 3, h: 10 }}>
+                  <PanelHeader
+                    title={panels[id].title}
+                    dockAction={
+                      <button className="btn" onClick={() => dock(id, "techDrawer")}>
+                        Move to Tech
+                      </button>
+                    }
+                  />
+                  <Panel
+                    visibility={seriesVisibility}
+                    setVisibility={setSeriesVisibility}
+                  />
+                </div>
+              );
+            })}
         </ResponsiveGridLayout>
       </main>
 
