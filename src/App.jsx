@@ -1117,6 +1117,16 @@ const rheostatRampRef = useRef(null);
               Settings
             </button>
             <div className="card">
+              <div className="label">Ambient Temperature (°F)</div>
+              <input
+                aria-label="ambient temperature"
+                type="number"
+                className="w-full border rounded-md px-2 py-1 mt-2"
+                value={ambientF}
+                onChange={(e) => setAmbientF(parseFloat(e.target.value || 0))}
+              />
+            </div>
+            <div className="card">
               <div className="label">Start Troubleshooting Scenarios</div>
               <select
                 aria-label="troubleshooting scenarios"
@@ -1373,9 +1383,27 @@ const rheostatRampRef = useRef(null);
                     <div className="value">{Number(airFlow).toFixed(2)}</div>
                   </>
                 )}
-                <div className="label mt-6">Ambient Temperature (°F)</div>
-                <input aria-label="ambient temperature" type="number" className="w-full border rounded-md px-2 py-1" value={ambientF} onChange={(e) => setAmbientF(parseFloat(e.target.value || 0))} />
               </div>
+            </div>
+            {/* Programmer moved directly below visualization */}
+            <div className="mt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="label">Programmer (EP160)</div>
+                  <div className="text-sm">State: {burnerState} {stateCountdown !== null && (<span className="pill bg-slate-100 ml-2">{stateCountdown}s left</span>)} {burnerState === "LOCKOUT" && (<span className="pill bg-red-100 ml-2">Lockout: {lockoutReason}</span>)}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Led on={t5Spark} label="T5 Spark" color="#06b6d4" />
+                  <Led on={t6Pilot} label="T6 Pilot" color="#f59e0b" />
+                  <Led on={t7Main} label="T7 Main" color="#84cc16" />
+                </div>
+              </div>
+              <div className="mt-2 flex items-center gap-4">
+                <div className="text-sm">Flame Signal: <span className="font-semibold">{Math.round(flameSignal)}</span> (10 min, 20–80 normal)</div>
+                <button className="btn" onClick={advanceStep}>Advance simulation</button>
+                {burnerState === "LOCKOUT" && (<button className="btn btn-primary" onClick={resetProgrammer}>Reset Programmer</button>)}
+              </div>
+              <div className="mt-2 text-xs text-slate-500">Prepurge {EP160.PURGE_HF_SEC}s → Low fire {EP160.LOW_FIRE_MIN_SEC}s → PTFI {EP160.PTFI_SEC}s → MTFI (spark off {EP160.MTFI_SPARK_OFF_SEC}s, pilot off {EP160.MTFI_PILOT_OFF_SEC}s) → Run → Post purge {EP160.POST_PURGE_SEC}s.</div>
             </div>
           </div>
           <div key="controls" data-testid="panel-controls" className="card overflow-hidden">
@@ -1583,25 +1611,7 @@ const rheostatRampRef = useRef(null);
                 </div>
               )}
             </CollapsibleSection>
-            <div className="mt-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="label">Programmer (EP160)</div>
-                  <div className="text-sm">State: {burnerState} {stateCountdown !== null && (<span className="pill bg-slate-100 ml-2">{stateCountdown}s left</span>)} {burnerState === "LOCKOUT" && (<span className="pill bg-red-100 ml-2">Lockout: {lockoutReason}</span>)}</div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Led on={t5Spark} label="T5 Spark" color="#06b6d4" />
-                  <Led on={t6Pilot} label="T6 Pilot" color="#f59e0b" />
-                  <Led on={t7Main} label="T7 Main" color="#84cc16" />
-                </div>
-              </div>
-              <div className="mt-2 flex items-center gap-4">
-                <div className="text-sm">Flame Signal: <span className="font-semibold">{Math.round(flameSignal)}</span> (10 min, 20–80 normal)</div>
-                <button className="btn" onClick={advanceStep}>Advance simulation</button>
-                {burnerState === "LOCKOUT" && (<button className="btn btn-primary" onClick={resetProgrammer}>Reset Programmer</button>)}
-              </div>
-              <div className="mt-2 text-xs text-slate-500">Prepurge {EP160.PURGE_HF_SEC}s → Low fire {EP160.LOW_FIRE_MIN_SEC}s → PTFI {EP160.PTFI_SEC}s → MTFI (spark off {EP160.MTFI_SPARK_OFF_SEC}s, pilot off {EP160.MTFI_PILOT_OFF_SEC}s) → Run → Post purge {EP160.POST_PURGE_SEC}s.</div>
-            </div>
+            {/* Programmer moved to visualization section */}
           </div>
           <div key="readouts" data-testid="panel-readouts" className="card">
             <PanelHeader title="Readouts" />
