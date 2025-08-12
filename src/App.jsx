@@ -368,6 +368,7 @@ export default function CombustionTrainer() {
     setTechLayouts(all);
     saveTechLayouts(all);
   };
+  const [zones, setZones] = useState(loadZones());
   const mainItems = useMemo(
     () => Object.keys(panels).filter((id) => zones[id] === "main"),
     [zones],
