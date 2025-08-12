@@ -1,3 +1,4 @@
+/* global process */
 /* eslint react-refresh/only-export-components: "off" */
 import React, { createContext, useContext, useEffect, useState } from "react";
 
@@ -18,7 +19,10 @@ export function UIStateProvider({ children }) {
     try {
       const saved = localStorage.getItem("uiLayout_v1");
       return saved ? JSON.parse(saved) : {};
-    } catch {
+    } catch (e) {
+      if (typeof process !== "undefined" && process.env.NODE_ENV !== "production") {
+        console.error("Failed to load UI layout from localStorage:", e);
+      }
       return {};
     }
   });
@@ -26,8 +30,10 @@ export function UIStateProvider({ children }) {
   useEffect(() => {
     try {
       localStorage.setItem("uiLayout_v1", JSON.stringify(layout));
-    } catch {
-      // ignore
+    } catch (e) {
+      if (typeof process !== "undefined" && process.env.NODE_ENV !== "production") {
+        console.error("Failed to save UI layout to localStorage:", e);
+      }
     }
   }, [layout]);
 

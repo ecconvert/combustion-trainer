@@ -6,7 +6,15 @@
  * modules located in `src/lib` for math, chemistry calculations, cam
  * map generation and CSV export. Recharts is used for trend plotting.
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+/* global process */
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useLayoutEffect as _useLayoutEffect,
+} from "react";
 import { Responsive, WidthProvider } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -32,6 +40,10 @@ import { loadConfig, saveConfig, getDefaultConfig } from "./lib/config";
 import SettingsMenu from "./components/SettingsMenu";
 import { panels, defaultZoneById, defaultLayouts as techDefaults } from "./panels";
 const ResponsiveGridLayout = WidthProvider(Responsive);
+
+const useIsomorphicLayoutEffect =
+  typeof window !== "undefined" ? _useLayoutEffect : useEffect;
+const isDev = typeof process !== "undefined" && process.env.NODE_ENV !== "production";
 
 /**
  * Visual representation of a flame.
@@ -117,7 +129,7 @@ function loadLayouts() {
     const parsed = raw ? JSON.parse(raw) : defaultLayouts;
     return normalizeLayouts(parsed);
   } catch (e) {
-    if (process.env.NODE_ENV !== "production") {
+    if (isDev) {
       console.error("Failed to load layouts from localStorage:", e);
     }
     return normalizeLayouts(defaultLayouts);
@@ -128,7 +140,7 @@ function saveLayouts(layouts) {
   try {
     localStorage.setItem(RGL_LS_KEY, JSON.stringify(layouts));
   } catch (e) {
-    if (process.env.NODE_ENV !== "production") {
+    if (isDev) {
       console.error("Failed to save layouts to localStorage:", e);
     }
   }
@@ -138,7 +150,7 @@ function loadZones() {
   try {
     return JSON.parse(localStorage.getItem(ZONES_KEY)) || defaultZoneById;
   } catch (e) {
-    if (process.env.NODE_ENV !== "production") {
+    if (isDev) {
       console.error("Failed to load zones from localStorage:", e);
     }
     return defaultZoneById;
@@ -148,7 +160,7 @@ function saveZones(z) {
   try {
     localStorage.setItem(ZONES_KEY, JSON.stringify(z));
   } catch (e) {
-    if (process.env.NODE_ENV !== "production") {
+    if (isDev) {
       console.error("Failed to save zones to localStorage:", e);
     }
   }
@@ -161,7 +173,7 @@ function loadTechLayouts() {
     const parsed = raw ? JSON.parse(raw) : techDefaults.techDrawer;
     return normalizeLayouts(parsed);
   } catch (e) {
-    if (process.env.NODE_ENV !== "production") {
+    if (isDev) {
       console.error("Failed to load tech layouts from localStorage:", e);
     }
     return normalizeLayouts(techDefaults.techDrawer);
@@ -171,7 +183,7 @@ function saveTechLayouts(ls) {
   try {
     localStorage.setItem(TECH_LS_KEY, JSON.stringify(ls));
   } catch (e) {
-    if (process.env.NODE_ENV !== "production") {
+    if (isDev) {
       console.error("Failed to save tech layouts to localStorage:", e);
     }
   }
@@ -182,7 +194,7 @@ function loadSaved() {
     const raw = localStorage.getItem(SAVED_KEY);
     return raw ? JSON.parse(raw) : [];
   } catch (e) {
-    if (process.env.NODE_ENV !== "production") {
+    if (isDev) {
       console.error("Failed to load saved readings:", e);
     }
     return [];
@@ -192,7 +204,7 @@ function persistSaved(next) {
   try {
     localStorage.setItem(SAVED_KEY, JSON.stringify(next));
   } catch (e) {
-    if (process.env.NODE_ENV !== "production") {
+    if (isDev) {
       console.error("Failed to persist saved readings:", e);
     }
   }
@@ -309,14 +321,29 @@ export default function CombustionTrainer() {
   const [showSettings, setShowSettings] = useState(false);
   const [layouts, setLayouts] = useState(loadLayouts());
 
-  const [theme, setTheme] = useState(() => localStorage.getItem("ct_theme") || "system");
+  const [theme, setTheme] = useState(() => {
+    try {
+      return localStorage.getItem("ct_theme") || "system";
+    } catch (e) {
+      if (isDev) {
+        console.error("Failed to load theme from localStorage:", e);
+      }
+      return "system";
+    }
+  });
 
-  useLayoutEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     applyTheme(theme);
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("ct_theme", theme);
+    try {
+      localStorage.setItem("ct_theme", theme);
+    } catch (e) {
+      if (isDev) {
+        console.error("Failed to save theme to localStorage:", e);
+      }
+    }
     applyTheme(theme);
   }, [theme]);
 
@@ -328,6 +355,7 @@ export default function CombustionTrainer() {
 
   const handleResetLayouts = () => {
     localStorage.removeItem(RGL_LS_KEY);
+    localStorage.removeItem("ct_layouts_v1");
     setLayouts(normalizeLayouts(defaultLayouts));
   };
   const dock = useCallback((id, zone) => {
@@ -341,6 +369,7 @@ export default function CombustionTrainer() {
     setTechLayouts(all);
     saveTechLayouts(all);
   };
+  const [zones, setZones] = useState(loadZones());
   const mainItems = useMemo(
     () => Object.keys(panels).filter((id) => zones[id] === "main"),
     [zones],
@@ -350,18 +379,18 @@ export default function CombustionTrainer() {
     [zones],
   );
   useEffect(() => {
-    const v2 = localStorage.getItem(RGL_LS_KEY);
-    const v1 = localStorage.getItem("ct_layouts_v1");
-    if (!v2 && v1) {
-      try {
+    try {
+      const v2 = localStorage.getItem(RGL_LS_KEY);
+      const v1 = localStorage.getItem("ct_layouts_v1");
+      if (!v2 && v1) {
         const parsed = JSON.parse(v1);
         const normalized = normalizeLayouts(parsed);
         localStorage.setItem(RGL_LS_KEY, JSON.stringify(normalized));
         localStorage.removeItem("ct_layouts_v1");
-      } catch (e) {
-        if (process.env.NODE_ENV !== "production") {
-          console.error("Failed to migrate old layouts:", e);
-        }
+      }
+    } catch (e) {
+      if (isDev) {
+        console.error("Failed to migrate old layouts:", e);
       }
     }
   }, []);
@@ -390,7 +419,7 @@ export default function CombustionTrainer() {
         }
       }
     } catch (e) {
-      if (process.env.NODE_ENV !== "production") {
+      if (isDev) {
         console.error("Failed to migrate saved panel:", e);
       }
     }
@@ -413,6 +442,15 @@ export default function CombustionTrainer() {
     setTheme(next.general.theme);
     setShowSettings(false);
   };
+  // Scenario selection state and handler
+  const [scenarioSel, setScenarioSel] = useState("");
+  const handleScenarioChange = useCallback((e) => {
+    const val = e.target.value;
+    setScenarioSel(val);
+    if (val === "" || val === "Reset") {
+      // reset scenario-specific overrides if implemented later
+    }
+  }, []);
   // ----------------------- Fuel selection -----------------------
   const [fuelKey, setFuelKey] = useState("Natural Gas"); // currently selected fuel key
   const fuel = FUELS[fuelKey]; // lookup fuel properties
@@ -553,7 +591,9 @@ useEffect(() => {
   };
 
   // Tuning Mode
-  const [tuningOn] = useState(false);
+
+  const [tuningOn, setTuningOn] = useState(false);
+
   const [camMap, setCamMap] = useState({}); // { percent: { fuel, air } }
   const [defaultsLoaded, setDefaultsLoaded] = useState(false);
 
@@ -974,6 +1014,17 @@ useEffect(() => {
     a.click();
     URL.revokeObjectURL(url);
   }, [saved]);
+  // Analyzer simple state machine
+  const [anState, setAnState] = useState("OFF");
+  const [probeInFlue, setProbeInFlue] = useState(false);
+  const startAnalyzer = () => setAnState("ZERO");
+  const finishZero = () => setAnState("READY");
+  const insertProbe = () => {
+    setProbeInFlue(true);
+    setAnState("SAMPLING");
+  };
+  const holdAnalyzer = () => setAnState("HOLD");
+  const resumeAnalyzer = () => setAnState("SAMPLING");
   // Tuning assistant
   const tuningActive = tuningOn;
 
@@ -1187,7 +1238,10 @@ const rheostatRampRef = useRef(null);
             <button className="btn" onClick={() => downloadCSV("session.csv", history)}>Export Trend CSV</button>
             <button className="btn" onClick={() => setDrawerOpen(true)}>Technician</button>
             <button className="btn" onClick={exportSavedReadings}>Export Saved Readings</button>
-            <button className="btn" onClick={handleResetLayouts}>Reset Layout</button>
+            <button className="btn" data-testid="btn-theme-toggle" onClick={() => setTheme(theme === "dark" ? "system" : "dark")}>
+              Toggle Theme
+            </button>
+            <button className="btn" data-testid="btn-reset-layout" onClick={handleResetLayouts}>Reset Layout</button>
 
             <button
               className="btn"
