@@ -355,6 +355,7 @@ export default function CombustionTrainer() {
 
   const handleResetLayouts = () => {
     localStorage.removeItem(RGL_LS_KEY);
+    localStorage.removeItem("ct_layouts_v1");
     setLayouts(normalizeLayouts(defaultLayouts));
   };
   const dock = useCallback((id, zone) => {
@@ -441,6 +442,15 @@ export default function CombustionTrainer() {
     setTheme(next.general.theme);
     setShowSettings(false);
   };
+  // Scenario selection state and handler
+  const [scenarioSel, setScenarioSel] = useState("");
+  const handleScenarioChange = useCallback((e) => {
+    const val = e.target.value;
+    setScenarioSel(val);
+    if (val === "" || val === "Reset") {
+      // reset scenario-specific overrides if implemented later
+    }
+  }, []);
   // ----------------------- Fuel selection -----------------------
   const [fuelKey, setFuelKey] = useState("Natural Gas"); // currently selected fuel key
   const fuel = FUELS[fuelKey]; // lookup fuel properties
@@ -581,7 +591,7 @@ useEffect(() => {
   };
 
   // Tuning Mode
-  const [tuningOn] = useState(false);
+  const [tuningOn, setTuningOn] = useState(false);
   const [camMap, setCamMap] = useState({}); // { percent: { fuel, air } }
   const [defaultsLoaded, setDefaultsLoaded] = useState(false);
 
@@ -1002,6 +1012,17 @@ useEffect(() => {
     a.click();
     URL.revokeObjectURL(url);
   }, [saved]);
+  // Analyzer simple state machine
+  const [anState, setAnState] = useState("OFF");
+  const [probeInFlue, setProbeInFlue] = useState(false);
+  const startAnalyzer = () => setAnState("ZERO");
+  const finishZero = () => setAnState("READY");
+  const insertProbe = () => {
+    setProbeInFlue(true);
+    setAnState("SAMPLING");
+  };
+  const holdAnalyzer = () => setAnState("HOLD");
+  const resumeAnalyzer = () => setAnState("SAMPLING");
   // Tuning assistant
   const tuningActive = tuningOn;
 
@@ -1215,7 +1236,10 @@ const rheostatRampRef = useRef(null);
             <button className="btn" onClick={() => downloadCSV("session.csv", history)}>Export Trend CSV</button>
             <button className="btn" onClick={() => setDrawerOpen(true)}>Technician</button>
             <button className="btn" onClick={exportSavedReadings}>Export Saved Readings</button>
-            <button className="btn" onClick={handleResetLayouts}>Reset Layout</button>
+            <button className="btn" data-testid="btn-theme-toggle" onClick={() => setTheme(theme === "dark" ? "system" : "dark")}>
+              Toggle Theme
+            </button>
+            <button className="btn" data-testid="btn-reset-layout" onClick={handleResetLayouts}>Reset Layout</button>
 
             <button
               className="btn"
