@@ -38,6 +38,7 @@ import RightDrawer from "./components/RightDrawer";
 import { useUIState } from "./components/UIStateContext";
 import { loadConfig, saveConfig, getDefaultConfig } from "./lib/config";
 import SettingsMenu from "./components/SettingsMenu";
+import AirDrawerIndicator from "./components/AirDrawerIndicator";
 import { panels, defaultZoneById, defaultLayouts as techDefaults } from "./panels";
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -489,6 +490,7 @@ export default function CombustionTrainer() {
   const [flameSignal, setFlameSignal] = useState(0); // simulated flame scanner strength
   const [stateCountdown, setStateCountdown] = useState(null); // seconds remaining in timed states
   const flameOutTimerRef = useRef(0); // tracks flame failure detection time
+  const chamberRef = useRef(null); // chamber container for sizing overlays
   const [lockoutReason, setLockoutReason] = useState("");
   const [lockoutPending, setLockoutPending] = useState(false);
 
@@ -1289,18 +1291,26 @@ const rheostatRampRef = useRef(null);
             </div>
             <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="md:col-span-2">
-                <div aria-label="combustion chamber" className="relative h-72 rounded-3xl border bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden">
+                <div
+                  ref={chamberRef}
+                  aria-label="combustion chamber"
+                  className="relative h-72 rounded-3xl border bg-gradient-to-br from-slate-100 to-slate-200 overflow-hidden"
+                >
                   <div className="absolute inset-6 rounded-full border-2 border-slate-300" />
                   <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-24 h-8 bg-slate-400 rounded-t-2xl" />
                   <div className="absolute inset-0">
-                    {showMainFlame && (
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <Flame phi={phi} intensity={flameIntensity} />
-                      </div>
-                    )}
-                    {showPilotFlame && (
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <Flame phi={1} intensity={pilotIntensity} pilot />
+                    {(showMainFlame || showPilotFlame) && (
+                      <div data-flame-root className="absolute inset-0">
+                        {showMainFlame && (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <Flame phi={phi} intensity={flameIntensity} />
+                          </div>
+                        )}
+                        {showPilotFlame && (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <Flame phi={1} intensity={pilotIntensity} pilot />
+                          </div>
+                        )}
                       </div>
                     )}
                     {flameActive && steady.warnings.soot ? <Smoke /> : null}
@@ -1310,6 +1320,17 @@ const rheostatRampRef = useRef(null);
                       </div>
                     ) : null}
                   </div>
+                  {/* Adjust scale or offsetRatio to tweak placement relative to the flame */}
+                  <AirDrawerIndicator
+                    value={rheostat}
+                    chamberRef={chamberRef}
+                    flameSelector="[data-flame-root]"
+                    speed={1}
+                    scale={1.18}
+                    offsetRatio={{ x: 0.22, y: -0.06 }}
+                    angleLow={-140}
+                    angleHigh={40}
+                  />
                   <div className="absolute bottom-3 right-3 space-y-1 text-xs">
                     {steady.warnings.soot && (<div className="px-2 py-1 rounded bg-yellow-100 text-yellow-900">Soot risk</div>)}
                     {steady.warnings.overTemp && (<div className="px-2 py-1 rounded bg-red-100 text-red-800">Over-temp</div>)}
