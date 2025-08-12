@@ -6,7 +6,7 @@
  * modules located in `src/lib` for math, chemistry calculations, cam
  * map generation and CSV export. Recharts is used for trend plotting.
  */
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, useLayoutEffect } from "react";
 import { Responsive, WidthProvider } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -196,6 +196,16 @@ export default function CombustionTrainer() {
   const unitSystem = config.units.system;
   const [showSettings, setShowSettings] = useState(false);
   const [layouts, setLayouts] = useState(loadLayouts());
+  const [theme, setTheme] = useState(() => localStorage.getItem("ct_theme") || "system");
+
+  useLayoutEffect(() => {
+    applyTheme(theme);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("ct_theme", theme);
+    applyTheme(theme);
+  }, [theme]);
 
   const handleLayoutChange = (_current, allLayouts) => {
     setLayouts(allLayouts);
@@ -214,16 +224,15 @@ export default function CombustionTrainer() {
     root.classList.toggle('dark', isDark);
   };
   useEffect(() => {
-    applyTheme(config.general.theme);
     const media = window.matchMedia('(prefers-color-scheme: dark)');
-    const handler = () => applyTheme(config.general.theme);
+    const handler = () => applyTheme(theme);
     media.addEventListener('change', handler);
     return () => media.removeEventListener('change', handler);
-  }, [config.general.theme]);
+  }, [theme]);
   const handleApply = (next) => {
     setConfig(next);
     saveConfig(next);
-    applyTheme(next.general.theme);
+    setTheme(next.general.theme);
     setShowSettings(false);
   };
   // ----------------------- Fuel selection -----------------------
@@ -960,6 +969,7 @@ const rheostatRampRef = useRef(null);
                   </button>
                   <button
                     className="btn-primary"
+                    data-testid="btn-save-reading"
                     onClick={saveReading}
                     disabled={anState === "OFF"}
                   >
@@ -988,9 +998,10 @@ const rheostatRampRef = useRef(null);
           <h1 className="text-2xl font-semibold">Combustion Trainer</h1>
           <div className="ml-auto flex items-center gap-3">
             <button className="btn" onClick={() => downloadCSV("session.csv", history)}>Export Trend CSV</button>
-            <button className="btn" onClick={() => setDrawerOpen(true)}>Technician</button>
+            <button className="btn" data-testid="btn-tech-open" onClick={() => setDrawerOpen(true)}>Technician</button>
             <button className="btn" onClick={() => downloadCSV("saved-readings.csv", saved)}>Export Saved Readings</button>
-            <button className="btn" onClick={handleResetLayouts}>Reset Layout</button>
+            <button className="btn" data-testid="btn-reset-layout" onClick={handleResetLayouts}>Reset Layout</button>
+            <button className="btn" data-testid="btn-theme-toggle" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>Toggle Theme</button>
             <button
               className="btn"
               aria-label="Settings"
@@ -1014,6 +1025,7 @@ const rheostatRampRef = useRef(null);
 
       <main className="max-w-7xl mx-auto p-6">
         <ResponsiveGridLayout
+          data-testid="grid-main"
           className="layout"
           breakpoints={rglBreakpoints}
           cols={rglCols}
@@ -1024,7 +1036,7 @@ const rheostatRampRef = useRef(null);
           draggableHandle=".drag-handle"
           compactType="vertical"
         >
-          <div key="viz" className="card overflow-hidden">
+          <div key="viz" data-testid="panel-viz" className="card overflow-hidden">
             <PanelHeader title="Boiler Visualization" />
             <div className="flex items-center justify-between">
               <div>
@@ -1076,7 +1088,7 @@ const rheostatRampRef = useRef(null);
               </div>
             </div>
           </div>
-          <div key="controls" className="card overflow-hidden">
+          <div key="controls" data-testid="panel-controls" className="card overflow-hidden">
             <PanelHeader title="Boiler Control Panel" />
             <CollapsibleSection title="Fuel Selector">
               <select aria-label="fuel selector" className="w-full border rounded-md px-2 py-2 mt-1" value={fuelKey} onChange={(e) => setFuelKey(e.target.value)}>
@@ -1301,7 +1313,7 @@ const rheostatRampRef = useRef(null);
               <div className="mt-2 text-xs text-slate-500">Prepurge {EP160.PURGE_HF_SEC}s → Low fire {EP160.LOW_FIRE_MIN_SEC}s → PTFI {EP160.PTFI_SEC}s → MTFI (spark off {EP160.MTFI_SPARK_OFF_SEC}s, pilot off {EP160.MTFI_PILOT_OFF_SEC}s) → Run → Post purge {EP160.POST_PURGE_SEC}s.</div>
             </div>
           </div>
-          <div key="readouts" className="card">
+          <div key="readouts" data-testid="panel-readouts" className="card">
             <PanelHeader title="Readouts" />
             <div className="grid grid-cols-2 gap-3" role="group" aria-label="readouts">
               <div><div className="label">O₂ (dry)</div><div className="value">{disp.O2.toFixed(2)}%</div></div>
@@ -1317,10 +1329,10 @@ const rheostatRampRef = useRef(null);
               </div>
             </div>
           </div>
-          <div key="trend" className="card overflow-hidden">
+          <div key="trend" data-testid="panel-trend" className="card overflow-hidden">
             <PanelHeader title="Trend" />
             <div style={{ height: "calc(100% - 40px)" }} className="flex flex-col">
-              <div className="flex-1">
+              <div className="flex-1" data-testid="trend-chart">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={history} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" />
@@ -1349,7 +1361,7 @@ const rheostatRampRef = useRef(null);
               <SeriesVisibility visibility={seriesVisibility} setVisibility={setSeriesVisibility} />
             </div>
           </div>
-          <div key="meter" className="card overflow-hidden">
+          <div key="meter" data-testid="panel-meter" className="card overflow-hidden">
             <PanelHeader title="Clock the Boiler (Metering)" />
             <div className="flex gap-2 mt-2">
               <button
@@ -1370,6 +1382,7 @@ const rheostatRampRef = useRef(null);
                 <label className="text-sm">
                   Dial size (ft³)
                   <input
+                    data-testid="meter-input"
                     type="number"
                     list="dialSizes"
                     className="w-full border rounded-md px-2 py-1 mt-1"
@@ -1433,7 +1446,7 @@ const rheostatRampRef = useRef(null);
                 </div>
                 <div className="text-sm">
                   Meter CFH (clocked avg):{" "}
-                  <span className="font-semibold">{gasCFH.toFixed(1)}</span>
+                  <span className="font-semibold" data-testid="meter-output">{gasCFH.toFixed(1)}</span>
                 </div>
                 <div className="text-sm">
                   Burner CFH (model):{" "}
@@ -1518,7 +1531,7 @@ const rheostatRampRef = useRef(null);
               </div>
             )}
           </div>
-          <div key="saved" className="card overflow-x-auto">
+          <div key="saved" data-testid="panel-saved" className="card overflow-x-auto">
             <PanelHeader title="Saved readings" />
             <table className="min-w-full text-xs">
               <thead>
