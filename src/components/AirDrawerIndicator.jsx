@@ -1,7 +1,7 @@
 import React from "react";
 
-// Off-center Cleaver-Brooks style air drawer indicator.
-// Auto-sizes from the flame bounds if available, otherwise falls back to the chamber box.
+// Centered air drawer indicator with a simple pointer (needle) from 7 o'clock (Low Fire)
+// to 11 o'clock (High Fire).
 // Place it absolutely inside the chamber container.
 function AirDrawerIndicator({
   value,                 // 0..100 fire rate
@@ -9,9 +9,8 @@ function AirDrawerIndicator({
   flameSelector = "[data-flame-root]", // optional CSS selector for the flame node
   speed = 1,             // 0.5, 1, 2 animation speed
   scale = 1.18,          // size relative to measured flame
-  offsetRatio = { x: 0.22, y: -0.06 }, // offset from flame center, fraction of width and height
-  angleLow = -140,       // low-fire angle
-  angleHigh = 40         // high-fire angle
+  angleLow = 210,        // 7 o'clock (degrees, clockwise from 12)
+  angleHigh = 330        // 11 o'clock (degrees, clockwise from 12)
 }) {
   const [box, setBox] = React.useState({ left: 0, top: 0, width: 0, height: 0 });
   const [ring, setRing] = React.useState({ cx: 0, cy: 0, r: 60 });
@@ -31,8 +30,8 @@ function AirDrawerIndicator({
       }
       const basis = fRect || cRect;
 
-      const cx = basis.left + basis.width / 2 + basis.width * offsetRatio.x;
-      const cy = basis.top + basis.height / 2 + basis.height * offsetRatio.y;
+      const cx = basis.left + basis.width / 2;
+      const cy = basis.top + basis.height / 2;
 
       const rBase = (Math.min(basis.width, basis.height) * 0.5) / 2; // rough flame radius
       const r = rBase * scale;
@@ -55,7 +54,7 @@ function AirDrawerIndicator({
       window.removeEventListener("scroll", measure);
       window.removeEventListener("resize", measure);
     };
-  }, [chamberRef, flameSelector, offsetRatio.x, offsetRatio.y, scale]);
+  }, [chamberRef, flameSelector, scale]);
 
   // Ease the needle to the new angle on value change
   React.useEffect(() => {
@@ -81,23 +80,25 @@ function AirDrawerIndicator({
   const top = ring.cy - ring.r - box.top;
   const size = ring.r * 2;
 
-  // Build a sector path for the rotating shutter
-  const sectorPath = (cx, cy, rInner, rOuter) => {
-    const start = -70, end = 70; // visible opening span
-    const toXY = (rr, a) => {
-      const rad = (Math.PI / 180) * a;
-      return [cx + rr * Math.cos(rad), cy + rr * Math.sin(rad)];
-    };
-    const [x1, y1] = toXY(rInner, start);
-    const [x2, y2] = toXY(rOuter, start);
-    const [x3, y3] = toXY(rOuter, end);
-    const [x4, y4] = toXY(rInner, end);
-    const large = end - start > 180 ? 1 : 0;
-    return `M ${x1} ${y1} L ${x2} ${y2} A ${rOuter} ${rOuter} 0 ${large} 1 ${x3} ${y3} L ${x4} ${y4} A ${rInner} ${rInner} 0 ${large} 0 ${x1} ${y1} Z`;
-  };
+  // Needle: from center to near edge, slightly inside
+  const needleLength = ring.r * 0.87;
+  const needleWidth = Math.max(2, ring.r * 0.10);
 
-  const inner = ring.r * 0.62;    // inner radius like CB hub
-  const outer = ring.r * 0.98;    // outer ring
+  // Center coordinates
+  const cx = ring.r;
+  const cy = ring.r;
+
+  // Compute needle tip and base points for a simple pointer triangle
+  const angleRad = (Math.PI / 180) * angle; // SVG 0deg is at 3 o'clock, but pointer is centered
+  const tipX = cx + needleLength * Math.cos(angleRad);
+  const tipY = cy + needleLength * Math.sin(angleRad);
+  const baseAngle1 = angleRad + Math.PI / 2.5;
+  const baseAngle2 = angleRad - Math.PI / 2.5;
+  const baseRadius = needleWidth;
+  const baseX1 = cx + baseRadius * Math.cos(baseAngle1);
+  const baseY1 = cy + baseRadius * Math.sin(baseAngle1);
+  const baseX2 = cx + baseRadius * Math.cos(baseAngle2);
+  const baseY2 = cy + baseRadius * Math.sin(baseAngle2);
 
   return (
     <svg
@@ -106,15 +107,46 @@ function AirDrawerIndicator({
       viewBox={`0 0 ${size} ${size}`}
       style={{ position: "absolute", left, top, pointerEvents: "none", zIndex: 2 }}
     >
-      {/* ring */}
-      <circle cx={ring.r} cy={ring.r} r={outer} fill="rgba(255,255,255,0.35)" stroke="#cbd5e1" strokeWidth={Math.max(1, ring.r * 0.02)} />
-      <circle cx={ring.r} cy={ring.r} r={inner} fill="rgba(255,255,255,0.75)" stroke="#cbd5e1" strokeWidth={Math.max(1, ring.r * 0.02)} />
-      {/* rotating shutter vane like an air drawer */}
-      <g transform={`rotate(${angle} ${ring.r} ${ring.r})`}>
-        <path d={sectorPath(ring.r, ring.r, inner, outer)} fill="rgba(15,23,42,0.65)" />
-      </g>
+      {/* background ring */}
+      <circle cx={cx} cy={cy} r={ring.r * 0.95} fill="rgba(255,255,255,0.45)" stroke="#cbd5e1" strokeWidth={Math.max(1, ring.r * 0.03)} />
+      {/* arc from 7 to 11 o'clock for visual cue */}
+      <path
+        d={describeArc(cx, cy, ring.r * 0.82, angleLow, angleHigh)}
+        stroke="#334155"
+        strokeWidth={Math.max(2, ring.r * 0.07)}
+        fill="none"
+        opacity={0.7}
+      />
+      {/* pointer/needle */}
+      <polygon
+        points={`${tipX},${tipY} ${baseX1},${baseY1} ${baseX2},${baseY2}`}
+        fill="#1e293b"
+        stroke="#fff"
+        strokeWidth={Math.max(1, ring.r * 0.02)}
+        style={{ filter: "drop-shadow(0 0 2px #fff8)" }}
+      />
+      {/* hub */}
+      <circle cx={cx} cy={cy} r={ring.r * 0.13} fill="#334155" stroke="#fff" strokeWidth={Math.max(1, ring.r * 0.02)} />
     </svg>
   );
+}
+
+// Helper to describe an SVG arc
+function describeArc(cx, cy, r, startAngle, endAngle) {
+  const start = polarToCartesian(cx, cy, r, endAngle);
+  const end = polarToCartesian(cx, cy, r, startAngle);
+  const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+  return [
+    "M", start.x, start.y,
+    "A", r, r, 0, largeArcFlag, 0, end.x, end.y
+  ].join(" ");
+}
+function polarToCartesian(cx, cy, r, angleDeg) {
+  const angleRad = (angleDeg - 90) * Math.PI / 180.0;
+  return {
+    x: cx + (r * Math.cos(angleRad)),
+    y: cy + (r * Math.sin(angleRad))
+  };
 }
 
 export default AirDrawerIndicator;
