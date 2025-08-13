@@ -33,3 +33,6 @@ dist-ssr
 .DS_Store
 .env
 .env.*
+
+# test coverage output
+coverage/

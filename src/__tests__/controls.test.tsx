@@ -93,22 +93,40 @@ describe('Power and Firing Rate Controls', () => {
         renderApp();
         await advanceToState('RUN_AUTO');
 
+        // Switch to real timers for user interaction + effects/RAF
+        vi.useRealTimers();
+
         const firingRateSlider = screen.getByLabelText('firing rate');
         expect(firingRateSlider).toBeEnabled();
 
         const controlsPanel = screen.getByTestId('panel-controls');
-        const fuelFlowLabel = within(controlsPanel).getByText(/Fuel Flow/);
-        const fuelFlowValueElement = fuelFlowLabel.nextElementSibling;
-        const initialFuelFlow = parseFloat(fuelFlowValueElement.textContent);
+        const fuelFlowValue = () => {
+            const label = within(controlsPanel).getByText(/Fuel Flow/i);
+            const container = label.closest('[data-flow-row]') ?? label.parentElement;
+            if (!container) {
+                throw new Error('Fuel flow value container not found');
+            }
+            const el = container.querySelector('.value') ?? container.querySelector('.digital-readout');
+            if (!el) {
+                throw new Error('Fuel flow value element not found');
+            }
+            return parseFloat(el.textContent ?? '');
+        };
 
-        fireEvent.change(firingRateSlider, { target: { value: '50' } });
+        const initialFuelFlow = fuelFlowValue();
 
-        await screen.findByText('50%');
+        await act(async () => {
+            fireEvent.input(firingRateSlider, { target: { value: '50' } });
+        });
+
+        await screen.findByText(/50%/);
 
         await waitFor(() => {
-            const newFuelFlow = parseFloat(fuelFlowValueElement.textContent);
+            const newFuelFlow = fuelFlowValue();
+            expect(newFuelFlow).not.toBeNaN();
             expect(newFuelFlow).not.toEqual(initialFuelFlow);
+            // Generous tolerance; adjust if mapping changes
             expect(newFuelFlow).toBeCloseTo(10, 1);
-        });
+        }, { timeout: 5000 });
     }, 20000);
 });
