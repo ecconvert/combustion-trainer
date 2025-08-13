@@ -6,7 +6,7 @@ export default function GeneralSection({ values, onChange }) {
       <label className="block text-sm">
         Theme
         <select
-          className="mt-1 border rounded-md px-2 py-1 w-full"
+          className="mt-1 border rounded-md px-2 py-1 w-full dark:bg-slate-800 dark:border-slate-600"
           value={values.theme}
           onChange={(e) => onChange("theme", e.target.value)}
         >
@@ -18,7 +18,7 @@ export default function GeneralSection({ values, onChange }) {
       <label className="block text-sm">
         Default view
         <select
-          className="mt-1 border rounded-md px-2 py-1 w-full"
+          className="mt-1 border rounded-md px-2 py-1 w-full dark:bg-slate-800 dark:border-slate-600"
           value={values.defaultView}
           onChange={(e) => onChange("defaultView", e.target.value)}
         >
@@ -30,7 +30,7 @@ export default function GeneralSection({ values, onChange }) {
         Trend length (samples)
         <input
           type="number"
-          className="mt-1 border rounded-md px-2 py-1 w-full"
+          className="mt-1 border rounded-md px-2 py-1 w-full dark:bg-slate-800 dark:border-slate-600"
           value={values.trendLength}
           onChange={(e) => onChange("trendLength", parseInt(e.target.value || 0, 10))}
         />

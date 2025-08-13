@@ -8,7 +8,7 @@ import React from "react";
 export default function RightDrawer({ open, onClose, children }) {
   return (
     <div
-      className={`fixed top-0 right-0 h-full bg-white shadow-xl transition-transform duration-300 z-50 ${
+  className={`fixed top-0 right-0 h-full bg-card text-foreground shadow-xl transition-transform duration-300 z-50 ${
         open ? "translate-x-0" : "translate-x-full"
       } w-full sm:w-1/4`}
       role="dialog"

@@ -4,6 +4,7 @@ export default function GaugeSection({ values, onChange }) {
   return (
     <div className="space-y-4">
       <h3 className="font-semibold mb-2">Gauge / Needle Settings</h3>
+  <div className="text-xs text-slate-500">Needle sweep controls only the pointer. Arc angles below control the visual band and are independent.</div>
       <label className="block text-sm">
         Low Angle
         <input
@@ -11,7 +12,7 @@ export default function GaugeSection({ values, onChange }) {
           min="0"
           max="360"
           className="mt-1 border rounded-md px-2 py-1 w-full"
-          value={values.gaugeAngleLow ?? 180}
+          value={values.gaugeAngleLow ?? 132}
           onChange={e => onChange("gaugeAngleLow", Number(e.target.value))}
         />
       </label>
@@ -22,8 +23,30 @@ export default function GaugeSection({ values, onChange }) {
           min="0"
           max="360"
           className="mt-1 border rounded-md px-2 py-1 w-full"
-          value={values.gaugeAngleHigh ?? 300}
+          value={values.gaugeAngleHigh ?? 235}
           onChange={e => onChange("gaugeAngleHigh", Number(e.target.value))}
+        />
+      </label>
+      <label className="block text-sm">
+        Arc Low Angle
+        <input
+          type="number"
+          min="0"
+          max="360"
+          className="mt-1 border rounded-md px-2 py-1 w-full"
+          value={values.arcAngleLow ?? 220}
+          onChange={e => onChange("arcAngleLow", Number(e.target.value))}
+        />
+      </label>
+      <label className="block text-sm">
+        Arc High Angle
+        <input
+          type="number"
+          min="0"
+          max="360"
+          className="mt-1 border rounded-md px-2 py-1 w-full"
+          value={values.arcAngleHigh ?? 330}
+          onChange={e => onChange("arcAngleHigh", Number(e.target.value))}
         />
       </label>
       <label className="block text-sm">
@@ -78,7 +101,7 @@ export default function GaugeSection({ values, onChange }) {
           max="0.2"
           step="0.01"
           className="mt-1 border rounded-md px-2 py-1 w-full"
-          value={values.gaugeNeedleWidth ?? 0.06}
+          value={values.gaugeNeedleWidth ?? 0.10}
           onChange={e => onChange("gaugeNeedleWidth", Number(e.target.value))}
         />
       </label>
@@ -90,7 +113,7 @@ export default function GaugeSection({ values, onChange }) {
           max="0.2"
           step="0.01"
           className="mt-1 border rounded-md px-2 py-1 w-full"
-          value={values.gaugeDotSize ?? 0.06}
+          value={values.gaugeDotSize ?? 0.02}
           onChange={e => onChange("gaugeDotSize", Number(e.target.value))}
         />
       </label>

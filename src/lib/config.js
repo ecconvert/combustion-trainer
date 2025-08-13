@@ -23,14 +23,18 @@ const defaultConfig = {
   },
   data: {},
   gauge: {
-    gaugeAngleLow: 180,
-    gaugeAngleHigh: 300,
+  gaugeAngleLow: 132,
+  gaugeAngleHigh: 235,
+  arcAngleLow: 220,
+  arcAngleHigh: 330,
     gaugeScale: 1.18,
     gaugeSpeed: 1,
     gaugeFireRate: 0,
     gaugeFlipDirection: false,
-    gaugeNeedleWidth: 0.06,
-    gaugeDotSize: 0.06,
+  gaugeNeedleWidth: 0.10,
+  gaugeDotSize: 0.02,
+  needleInner: 0,
+  arcOffset: 0,
   },
 };
 
@@ -49,6 +53,7 @@ export function validateConfig(partial = {}) {
     units: { ...base.units, ...(partial.units || {}) },
     ambient: { ...base.ambient, ...(partial.ambient || {}) },
     data: { ...base.data, ...(partial.data || {}) },
+  gauge: { ...base.gauge, ...(partial.gauge || {}) },
   };
 
   // Clamp numeric fields to reasonable ranges
