@@ -27,6 +27,12 @@ class ResizeObserverMock {
 }
 vi.stubGlobal("ResizeObserver", ResizeObserverMock as any);
 
+// Ensure requestAnimationFrame exists in JSDOM for tests that rely on RAF
+if (!("requestAnimationFrame" in globalThis)) {
+  vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => setTimeout(() => cb(performance.now()), 0));
+  vi.stubGlobal("cancelAnimationFrame", (id: number) => clearTimeout(id));
+}
+
 // Mock Recharts components to prevent errors in JSDOM
 vi.mock('recharts', async () => {
   const OriginalModule = await vi.importActual('recharts');
