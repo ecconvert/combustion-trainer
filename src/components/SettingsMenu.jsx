@@ -117,7 +117,7 @@ export default function SettingsMenu({ open, config, onApply, onCancel, onPrevie
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div
         ref={modalRef}
-  className="bg-card text-foreground w-full h-full sm:h-auto sm:max-w-3xl sm:rounded-md sm:flex"
+  className="bg-card text-foreground w-full h-full sm:h-auto sm:max-w-3xl sm:rounded-md flex flex-col overflow-hidden max-h-screen sm:max-h-[85vh]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="settings-title"
@@ -145,9 +145,9 @@ export default function SettingsMenu({ open, config, onApply, onCancel, onPrevie
             &times;
           </button>
         </div>
-        <div className="flex-1 flex">
+        <div className="flex-1 flex min-h-0">
           <nav
-            className="w-40 border-r p-4 hidden sm:block border-border"
+            className="w-40 border-r p-4 hidden sm:block border-border overflow-y-auto"
             aria-label="Settings sections"
           >
             <ul className="space-y-2">
@@ -163,7 +163,7 @@ export default function SettingsMenu({ open, config, onApply, onCancel, onPrevie
               ))}
             </ul>
           </nav>
-          <div className="flex-1 p-4 overflow-y-auto">
+          <div className="flex-1 p-4 overflow-y-auto min-h-0">
             {SectionComponent && (
               <SectionComponent
                 values={local[section]}
