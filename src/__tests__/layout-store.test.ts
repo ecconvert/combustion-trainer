@@ -1,5 +1,16 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
+// Types to improve clarity when parsing from localStorage
+interface LayoutItem {
+  i: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+type Layout = Record<string, LayoutItem[]>;
+
 // Keys used by the layout store
 const KEY_MAIN_WIDE = 'uiLayout_v2_mainWide';
 const KEY_MAIN_NARROW = 'uiLayout_v2_mainNarrow';
@@ -25,16 +36,16 @@ describe('layout store persistence', () => {
     const { resetAllLayouts } = await loadStore();
     resetAllLayouts();
 
-  const mainWide = JSON.parse(localStorage.getItem(KEY_MAIN_WIDE) || '{}');
-  const mainNarrow = JSON.parse(localStorage.getItem(KEY_MAIN_NARROW) || '{}');
-  const tech = JSON.parse(localStorage.getItem(KEY_TECH) || '{}');
-  const zones = JSON.parse(localStorage.getItem(KEY_ZONES) || '{}');
+    const mainWide: Record<string, LayoutItem[]> = JSON.parse(localStorage.getItem(KEY_MAIN_WIDE) || '{}');
+    const mainNarrow: Record<string, LayoutItem[]> = JSON.parse(localStorage.getItem(KEY_MAIN_NARROW) || '{}');
+    const tech: Record<string, LayoutItem[]> = JSON.parse(localStorage.getItem(KEY_TECH) || '{}');
+    const zones: Record<string, string> = JSON.parse(localStorage.getItem(KEY_ZONES) || '{}');
 
-  // Expect default-like shapes
-  expect(mainWide.lg?.length).toBeGreaterThan(0);
-  expect(mainNarrow.lg?.length).toBeGreaterThan(0);
-  expect(tech.lg?.length).toBeGreaterThan(0);
-  expect(Object.keys(zones).length).toBeGreaterThan(0);
+    // Expect default-like shapes
+    expect(mainWide.lg?.length).toBeGreaterThan(0);
+    expect(mainNarrow.lg?.length).toBeGreaterThan(0);
+    expect(tech.lg?.length).toBeGreaterThan(0);
+    expect(Object.keys(zones).length).toBeGreaterThan(0);
   });
 
   test('moveAcrossZones writes updated layouts and zones to localStorage', async () => {
@@ -43,13 +54,13 @@ describe('layout store persistence', () => {
     // Move analyzer into mainWide and ensure it persists
     moveAcrossZones('analyzer', undefined, 'mainWide', { x: 0, y: 0, w: 2, h: 2 });
 
-    const zones = JSON.parse(localStorage.getItem(KEY_ZONES) || '{}');
+    const zones: Record<string, string> = JSON.parse(localStorage.getItem(KEY_ZONES) || '{}');
     expect(zones.analyzer).toBe('mainWide');
 
-    const mainWide = JSON.parse(localStorage.getItem(KEY_MAIN_WIDE) || '{}');
-    const hasAnalyzer = Object.values(mainWide as any)
+    const mainWide: Layout = JSON.parse(localStorage.getItem(KEY_MAIN_WIDE) || '{}');
+    const hasAnalyzer = Object.values(mainWide)
       .flat()
-      .some((it: any) => it.i === 'analyzer');
+      .some((it) => it.i === 'analyzer');
     expect(hasAnalyzer).toBe(true);
   });
 });
