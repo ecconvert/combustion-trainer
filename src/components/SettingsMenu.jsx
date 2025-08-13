@@ -24,7 +24,9 @@ export default function SettingsMenu({ open, config, onApply, onCancel, onPrevie
       );
       focusable && focusable[0]?.focus();
     }
-  }, [open, config]);
+    // Intentionally do not depend on `config` to prevent focus loss while typing
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   // ESC to close and basic focus trap
   useEffect(() => {
@@ -117,6 +119,7 @@ export default function SettingsMenu({ open, config, onApply, onCancel, onPrevie
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div
         ref={modalRef}
+  data-testid="settings-dialog"
   className="bg-card text-foreground w-full h-full sm:h-auto sm:max-w-3xl sm:rounded-md flex flex-col overflow-hidden max-h-screen sm:max-h-[85vh]"
         role="dialog"
         aria-modal="true"
@@ -163,7 +166,7 @@ export default function SettingsMenu({ open, config, onApply, onCancel, onPrevie
               ))}
             </ul>
           </nav>
-          <div className="flex-1 p-4 overflow-y-auto min-h-0">
+          <div data-testid="settings-scroll" className="flex-1 p-4 overflow-y-auto min-h-0">
             {SectionComponent && (
               <SectionComponent
                 values={local[section]}
