@@ -102,10 +102,15 @@ describe('Power and Firing Rate Controls', () => {
         const controlsPanel = screen.getByTestId('panel-controls');
         const fuelFlowValue = () => {
             const label = within(controlsPanel).getByText(/Fuel Flow/i);
-            const container = label.closest('[data-flow-row]') ?? label.parentElement as HTMLElement;
-            const el = (container?.querySelector('.value') as HTMLElement) || (container?.querySelector('.digital-readout') as HTMLElement);
-            if (!el) throw new Error('Fuel flow value element not found');
-            return parseFloat(el.textContent || '');
+            const container = label.closest('[data-flow-row]') ?? label.parentElement;
+            if (!container) {
+                throw new Error('Fuel flow value container not found');
+            }
+            const el = container.querySelector('.value') ?? container.querySelector('.digital-readout');
+            if (!el) {
+                throw new Error('Fuel flow value element not found');
+            }
+            return parseFloat(el.textContent ?? '');
         };
 
         const initialFuelFlow = fuelFlowValue();
