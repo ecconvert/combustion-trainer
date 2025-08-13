@@ -22,11 +22,11 @@ function sample(fuelKey: keyof typeof FUELS, airFactor: number) {
   });
 }
 
-describe('Analyzer curves vs excess air (Natural Gas)', () => {
+describe.each(Object.keys(FUELS))('Analyzer curves vs excess air (%s)', (fuelKey) => {
   test('CO rises rich of stoich, O2 rises lean, CO2 peaks near stoich', () => {
-    const rich = sample('Natural Gas', 0.8); // rich (less air)
-    const stoich = sample('Natural Gas', 1.0);
-    const lean = sample('Natural Gas', 1.2);
+    const rich = sample(fuelKey as keyof typeof FUELS, 0.8); // rich (less air)
+    const stoich = sample(fuelKey as keyof typeof FUELS, 1.0);
+    const lean = sample(fuelKey as keyof typeof FUELS, 1.2);
 
     // CO higher rich than lean
     expect(rich.CO_ppm).toBeGreaterThan(lean.CO_ppm);
