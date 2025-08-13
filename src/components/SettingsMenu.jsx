@@ -7,7 +7,7 @@ import AmbientSection from "./settings/AmbientSection.jsx";
 import DataSection from "./settings/DataSection.jsx";
 import GaugeSection from "./settings/GaugeSection";
 
-export default function SettingsMenu({ open, config, onApply, onCancel, onChange }) {
+export default function SettingsMenu({ open, config, onApply, onCancel, onPreview }) {
   const [local, setLocal] = useState(config);
   const [section, setSection] = useState("general");
   const [position, setPosition] = useState({ x: 100, y: 100 });
@@ -24,9 +24,7 @@ export default function SettingsMenu({ open, config, onApply, onCancel, onChange
       );
       focusable && focusable[0]?.focus();
     }
-    // Intentionally omit `config` from deps to prevent refocus on every keystroke
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, config]);
 
   // ESC to close and basic focus trap
   useEffect(() => {
@@ -65,7 +63,8 @@ export default function SettingsMenu({ open, config, onApply, onCancel, onChange
   const handleField = (sec, field, value) => {
     setLocal((p) => {
       const next = { ...p, [sec]: { ...p[sec], [field]: value } };
-      if (onChange) onChange(next);
+      // Live preview in parent if provided
+      onPreview && onPreview(next, { section: sec, field });
       return next;
     });
   };
@@ -75,7 +74,7 @@ export default function SettingsMenu({ open, config, onApply, onCancel, onChange
     const defaults = getDefaultConfig();
     setLocal((p) => {
       const next = { ...p, [section]: defaults[section] };
-      if (onChange) onChange(next);
+      onPreview && onPreview(next, { section, field: "*" });
       return next;
     });
   };

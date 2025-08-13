@@ -294,9 +294,11 @@ function PanelHeader({ title, right, dockAction }) {
   );
 }
 
-export default function CombustionTrainer() {
+export default function CombustionTrainer({ initialConfig }) {
   const { drawerOpen, setDrawerOpen, seriesVisibility, setSeriesVisibility } = useUIState();
-  const [config, setConfig] = useState(getDefaultConfig());
+  const [config, setConfig] = useState(initialConfig || getDefaultConfig());
+  const configBeforeSettings = useRef(null);
+
   // Settings modal visibility
   const unitSystem = config.units.system;
   const [showSettings, setShowSettings] = useState(false);
@@ -380,6 +382,7 @@ export default function CombustionTrainer() {
     try {
       const v2 = localStorage.getItem(RGL_LS_KEY);
       const v1 = localStorage.getItem("ct_layouts_v1");
+      console.log("Value of v1 from localStorage:", v1);
       if (!v2 && v1) {
         const parsed = JSON.parse(v1);
         const normalized = normalizeLayouts(parsed);
@@ -462,7 +465,21 @@ export default function CombustionTrainer() {
     setTheme(next.general.theme);
     setShowSettings(false);
   };
-  const handleCancel = () => setShowSettings(false);
+  const handleCancel = () => {
+    if (configBeforeSettings.current) {
+      setConfig(configBeforeSettings.current);
+      applyTheme(configBeforeSettings.current.general.theme);
+    }
+    setShowSettings(false);
+  };
+  // Live preview handler from SettingsMenu
+  const handlePreview = (next, meta) => {
+    setConfig(next);
+    // Only update theme immediately if the changed field is theme
+    if (meta?.section === 'general' && meta?.field === 'theme') {
+      setTheme(next.general.theme);
+    }
+  };
   // Scenario selection state and handler
   const [scenarioSel, setScenarioSel] = useState("");
   const handleScenarioChange = useCallback((e) => {
@@ -1287,11 +1304,7 @@ const rheostatRampRef = useRef(null);
           config={config}
           onApply={handleApply}
           onCancel={handleCancel}
-          onChange={(next) => {
-            // Live preview: update config in-memory and theme immediately
-            setConfig(next);
-            if (next?.general?.theme) applyTheme(next.general.theme);
-          }}
+          onPreview={handlePreview}
         />
 
 
@@ -1310,7 +1323,10 @@ const rheostatRampRef = useRef(null);
             <button
               className="btn"
               aria-label="Settings"
-              onClick={() => setShowSettings(true)}
+              onClick={() => {
+                configBeforeSettings.current = JSON.parse(JSON.stringify(config));
+                setShowSettings(true);
+              }}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
