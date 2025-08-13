@@ -630,8 +630,35 @@ useEffect(() => {
 
   const [tuningOn, setTuningOn] = useState(false);
 
-  const [camMap, setCamMap] = useState({}); // { percent: { fuel, air } }
   const [defaultsLoaded, setDefaultsLoaded] = useState(false);
+
+  const [allCamMaps, setAllCamMaps] = useState(() => {
+    if (typeof window === 'undefined') return {};
+    try {
+      const raw = localStorage.getItem("ct_cam_maps_v1");
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      if (isDev) console.error("Failed to load cam maps:", e);
+      return {};
+    }
+  });
+
+  const fuelKeyForMap = useMemo(() => fuelKey.replace(/ /g, "_"), [fuelKey]);
+  const camMap = useMemo(() => allCamMaps[fuelKeyForMap] || {}, [allCamMaps, fuelKeyForMap]);
+
+  const setCamMap = useCallback((updater) => {
+    setAllCamMaps(currentAllCamMaps => {
+      const currentMap = currentAllCamMaps[fuelKeyForMap] || {};
+      const newMap = typeof updater === 'function' ? updater(currentMap) : updater;
+      const newAllCamMaps = { ...currentAllCamMaps, [fuelKeyForMap]: newMap };
+      try {
+        localStorage.setItem("ct_cam_maps_v1", JSON.stringify(newAllCamMaps));
+      } catch (e) {
+        if (isDev) console.error("Failed to save cam maps:", e);
+      }
+      return newAllCamMaps;
+    });
+  }, [fuelKeyForMap]);
 
   // Current cam position key (rounded to 10%)
   const currentCam = useMemo(() => clamp(Math.round(rheostat / 10) * 10, 0, 100), [rheostat]);
