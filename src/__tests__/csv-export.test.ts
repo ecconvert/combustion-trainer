@@ -39,7 +39,11 @@ describe('downloadCSV', () => {
 
     // Assert the blob's content to ensure correct CSV formatting
     const blob = (URL.createObjectURL as vi.Mock).mock.calls[0][0] as Blob;
-    const csvContent = await blob.text();
+    const csvContent = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.readAsText(blob);
+    });
     expect(csvContent).toBe('a,b\n1,2\n3,4');
   });
 

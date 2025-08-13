@@ -755,50 +755,83 @@ useEffect(() => {
     setFuelFlow((v) => clamp(v, minFuel, maxFuel));
   }, [minFuel, maxFuel]);
 
+  const fuelFlowRef = useRef(fuelFlow);
+  useEffect(() => { fuelFlowRef.current = fuelFlow; }, [fuelFlow]);
+  const airFlowRef = useRef(airFlow);
+  useEffect(() => { airFlowRef.current = airFlow; }, [airFlow]);
+
+  // Refs for state machine to avoid stale closures in setInterval
+  const boilerOnRef = useRef(boilerOn);
+  useEffect(() => { boilerOnRef.current = boilerOn; }, [boilerOn]);
+  const burnerStateRef = useRef(burnerState);
+  useEffect(() => { burnerStateRef.current = burnerState; }, [burnerState]);
+  const fuelRef = useRef(fuel);
+  useEffect(() => { fuelRef.current = fuel; }, [fuel]);
+  const flameSignalRef = useRef(flameSignal);
+  useEffect(() => { flameSignalRef.current = flameSignal; }, [flameSignal]);
+  const lockoutPendingRef = useRef(lockoutPending);
+  useEffect(() => { lockoutPendingRef.current = lockoutPending; }, [lockoutPending]);
+  const ambientFRef = useRef(ambientF);
+  useEffect(() => { ambientFRef.current = ambientF; }, [ambientF]);
+  const setpointFRef = useRef(setpointF);
+  useEffect(() => { setpointFRef.current = setpointF; }, [setpointF]);
+
   // Main 10 Hz loop that advances the burner state machine and simulated sensors
   useEffect(() => {
     const id = setInterval(() => {
       const dtms = 100; // loop interval in milliseconds
       stateTimeRef.current += dtms; // track elapsed time in current state
 
+      // --- Get latest values from refs ---
+      const currentBoilerOn = boilerOnRef.current;
+      const currentBurnerState = burnerStateRef.current;
+      const currentFuel = fuelRef.current;
+      const currentFuelFlow = fuelFlowRef.current;
+      const currentAirFlow = airFlowRef.current;
+      const currentFlameSignal = flameSignalRef.current;
+      const currentLockoutPending = lockoutPendingRef.current;
+      const currentAmbientF = ambientFRef.current;
+      const currentSetpointF = setpointFRef.current;
+
+
       // Compute current excess air (EA) for control logic
-      const { C: _C, H: _H, O: _O } = fuel.formula;
-      const _O2_needed = Math.max(0.0001, fuelFlow) * (_C + _H / 4 - _O / 2);
+      const { C: _C, H: _H, O: _O } = currentFuel.formula;
+      const _O2_needed = Math.max(0.0001, currentFuelFlow) * (_C + _H / 4 - _O / 2);
       const _airStoich = _O2_needed / 0.21;
-      const EA_now = Math.max(0.1, airFlow / Math.max(0.001, _airStoich));
+      const EA_now = Math.max(0.1, currentAirFlow / Math.max(0.001, _airStoich));
 
       // ---- Programmer state machine ----
       // Each branch represents a step in the ignition sequence.
-      if (!boilerOn) {
+      if (!currentBoilerOn) {
         // If power is cut, jump to postpurge to clear the chamber
-        if (burnerState !== "OFF" && burnerState !== "POSTPURGE") {
+        if (currentBurnerState !== "OFF" && currentBurnerState !== "POSTPURGE") {
           setT5Spark(false); setT6Pilot(false); setT7Main(false);
           setBurnerState("POSTPURGE");
           stateTimeRef.current = 0;
         }
-      } else if (burnerState === "OFF") {
+      } else if (currentBurnerState === "OFF") {
         setBurnerState("DRIVE_HI");
         stateTimeRef.current = 0;
-      } else if (burnerState === "DRIVE_HI") {
+      } else if (currentBurnerState === "DRIVE_HI") {
         // brief high-fire drive to open air damper
         if (stateTimeRef.current >= 1000) { setBurnerState("PREPURGE_HI"); stateTimeRef.current = 0; }
-      } else if (burnerState === "PREPURGE_HI") {
+      } else if (currentBurnerState === "PREPURGE_HI") {
         // high-fire purge clears the chamber
         if (stateTimeRef.current >= EP160.PURGE_HF_SEC * 1000) { setBurnerState("DRIVE_LOW"); stateTimeRef.current = 0; }
-      } else if (burnerState === "DRIVE_LOW") {
+      } else if (currentBurnerState === "DRIVE_LOW") {
         // move to low-fire for minimum purge
         if (stateTimeRef.current >= EP160.LOW_FIRE_DRIVE_SEC * 1000) { setBurnerState("LOW_PURGE_MIN"); stateTimeRef.current = 0; }
-      } else if (burnerState === "LOW_PURGE_MIN") {
+      } else if (currentBurnerState === "LOW_PURGE_MIN") {
         if (stateTimeRef.current >= EP160.LOW_FIRE_MIN_SEC * 1000) {
           // begin pilot trial for ignition (PTFI)
           setBurnerState("PTFI");
           setT5Spark(true); setT6Pilot(true); setT7Main(false);
           stateTimeRef.current = 0;
         }
-      } else if (burnerState === "PTFI") {
+      } else if (currentBurnerState === "PTFI") {
         // pilot trial: wait for flame or lockout
         if (stateTimeRef.current >= EP160.PTFI_SEC * 1000) {
-          if (flameSignal >= 10) {
+          if (currentFlameSignal >= 10) {
             setT7Main(true); // main flame on
             setBurnerState("MTFI");
             stateTimeRef.current = 0;
@@ -810,7 +843,7 @@ useEffect(() => {
             stateTimeRef.current = 0;
           }
         }
-      } else if (burnerState === "MTFI") {
+      } else if (currentBurnerState === "MTFI") {
         // main-trial-for-ignition: drop spark then pilot
         if (stateTimeRef.current >= EP160.MTFI_SPARK_OFF_SEC * 1000) setT5Spark(false);
         if (stateTimeRef.current >= EP160.MTFI_PILOT_OFF_SEC * 1000) {
@@ -818,7 +851,7 @@ useEffect(() => {
           setBurnerState("RUN_AUTO");
           stateTimeRef.current = 0;
         }
-      } else if (burnerState === "RUN_AUTO") {
+      } else if (currentBurnerState === "RUN_AUTO") {
         // running state: monitor EA and flame signal
         if (EA_now < IGNITABLE_EA.min || EA_now > IGNITABLE_EA.max) {
           // EA out of range causes immediate flame blowout
@@ -827,7 +860,7 @@ useEffect(() => {
           setLockoutReason("FLAME BLOWOUT (EA out of range)");
           setLockoutPending(true);
           stateTimeRef.current = 0;
-        } else if (flameSignal < 10) {
+        } else if (currentFlameSignal < 10) {
           // delay timer for flame failure
           flameOutTimerRef.current += dtms;
           if (flameOutTimerRef.current >= EP160.FFRT_SEC * 1000) {
@@ -839,10 +872,10 @@ useEffect(() => {
         } else {
           flameOutTimerRef.current = 0;
         }
-      } else if (burnerState === "POSTPURGE") {
+      } else if (currentBurnerState === "POSTPURGE") {
         // continue fan to clear gases, then either lockout or off
         if (stateTimeRef.current >= EP160.POST_PURGE_SEC * 1000) {
-          if (lockoutPending) {
+          if (currentLockoutPending) {
             setBurnerState("LOCKOUT");
           } else {
             setBurnerState("OFF");
@@ -855,30 +888,30 @@ useEffect(() => {
 
       // Display remaining time for states that have a fixed duration
       let remaining = null;
-  if (burnerState === "PREPURGE_HI") remaining = EP160.PURGE_HF_SEC - stateTimeRef.current / 1000;
-  else if (burnerState === "DRIVE_LOW") remaining = EP160.LOW_FIRE_DRIVE_SEC - stateTimeRef.current / 1000;
-      else if (burnerState === "LOW_PURGE_MIN") remaining = EP160.LOW_FIRE_MIN_SEC - stateTimeRef.current / 1000;
-      else if (burnerState === "PTFI") remaining = EP160.PTFI_SEC - stateTimeRef.current / 1000;
-      else if (burnerState === "MTFI") remaining = EP160.MTFI_PILOT_OFF_SEC - stateTimeRef.current / 1000;
-      else if (burnerState === "POSTPURGE") remaining = EP160.POST_PURGE_SEC - stateTimeRef.current / 1000;
+  if (currentBurnerState === "PREPURGE_HI") remaining = EP160.PURGE_HF_SEC - stateTimeRef.current / 1000;
+  else if (currentBurnerState === "DRIVE_LOW") remaining = EP160.LOW_FIRE_DRIVE_SEC - stateTimeRef.current / 1000;
+      else if (currentBurnerState === "LOW_PURGE_MIN") remaining = EP160.LOW_FIRE_MIN_SEC - stateTimeRef.current / 1000;
+      else if (currentBurnerState === "PTFI") remaining = EP160.PTFI_SEC - stateTimeRef.current / 1000;
+      else if (currentBurnerState === "MTFI") remaining = EP160.MTFI_PILOT_OFF_SEC - stateTimeRef.current / 1000;
+      else if (currentBurnerState === "POSTPURGE") remaining = EP160.POST_PURGE_SEC - stateTimeRef.current / 1000;
       setStateCountdown(remaining !== null ? Math.max(0, Math.ceil(remaining)) : null);
 
       // Simulate flame-sensor response with a bit of noise for realism
       setFlameSignal((prev) => {
-        if (!(burnerState === "PTFI" || burnerState === "MTFI" || burnerState === "RUN_AUTO")) {
+        if (!(currentBurnerState === "PTFI" || currentBurnerState === "MTFI" || currentBurnerState === "RUN_AUTO")) {
           return 0;
         }
         let target = 0;
-        const { C, H, O } = fuel.formula;
-        const O2_needed = Math.max(0.0001, fuelFlow) * (C + H / 4 - O / 2);
+        const { C, H, O } = currentFuel.formula;
+        const O2_needed = Math.max(0.0001, currentFuelFlow) * (C + H / 4 - O / 2);
         const airStoich = O2_needed / 0.21;
-        const EA = Math.max(0.1, airFlow / Math.max(0.001, airStoich));
+        const EA = Math.max(0.1, currentAirFlow / Math.max(0.001, airStoich));
         const k = Math.exp(-Math.pow((EA - 1.05) / 0.35, 2));
-        if (burnerState === "PTFI") {
-          const ignitable = EA > IGNITABLE_EA.min && EA < IGNITABLE_EA.max && fuelFlow > 0.5;
+        if (currentBurnerState === "PTFI") {
+          const ignitable = EA > IGNITABLE_EA.min && EA < IGNITABLE_EA.max && currentFuelFlow > 0.5;
           target = ignitable ? 22 + 6 * k : 5;
-        } else if (burnerState === "MTFI" || burnerState === "RUN_AUTO") {
-          target = 25 + 55 * k * Math.tanh(fuelFlow / 10);
+        } else if (currentBurnerState === "MTFI" || currentBurnerState === "RUN_AUTO") {
+          target = 25 + 55 * k * Math.tanh(currentFuelFlow / 10);
         }
         const noise = (Math.random() - 0.5) * 2;
         return clamp(prev + (target - prev) * 0.25 + noise, 0, 80);
@@ -888,21 +921,21 @@ useEffect(() => {
       setSimStackF((prev) => {
         const dt = 0.1; // integration step seconds
         let tau = 1.5; // time constant
-        let target = ambientF;
-        if (burnerState === "OFF" || burnerState === "DRIVE_HI" || burnerState === "PREPURGE_HI" || burnerState === "DRIVE_LOW" || burnerState === "LOW_PURGE_MIN" || burnerState === "POSTPURGE" || burnerState === "LOCKOUT") {
-          tau = 3; target = ambientF; // cool to ambient
-        } else if (burnerState === "PTFI") {
-          tau = 2.5; target = Math.max(ambientF + 40, setpointF - 80);
-        } else if (burnerState === "MTFI") {
-          tau = 4; target = Math.max(ambientF + 80, setpointF - 40);
-        } else if (burnerState === "RUN_AUTO") {
-          tau = 6; target = setpointF;
+        let target = currentAmbientF;
+        if (currentBurnerState === "OFF" || currentBurnerState === "DRIVE_HI" || currentBurnerState === "PREPURGE_HI" || currentBurnerState === "DRIVE_LOW" || currentBurnerState === "LOW_PURGE_MIN" || currentBurnerState === "POSTPURGE" || currentBurnerState === "LOCKOUT") {
+          tau = 3; target = currentAmbientF; // cool to ambient
+        } else if (currentBurnerState === "PTFI") {
+          tau = 2.5; target = Math.max(currentAmbientF + 40, currentSetpointF - 80);
+        } else if (currentBurnerState === "MTFI") {
+          tau = 4; target = Math.max(currentAmbientF + 80, currentSetpointF - 40);
+        } else if (currentBurnerState === "RUN_AUTO") {
+          tau = 6; target = currentSetpointF;
         }
         return prev + (target - prev) * (dt / tau);
       });
     }, 100);
     return () => clearInterval(id);
-  }, [boilerOn, burnerState, setpointF, ambientF, fuel.formula, fuelFlow, airFlow, flameSignal, lockoutPending]);
+  }, []);
   // Link rheostat to fuel/air flows
   useEffect(() => {
     // If a tuned cam point exists for this position, apply it
@@ -995,12 +1028,8 @@ useEffect(() => {
   // Log history for trend chart
   const [history, setHistory] = useState([]);
   const dispRef = useRef(disp);
-  const fuelFlowRef = useRef(fuelFlow);
-  const airFlowRef = useRef(airFlow);
   const rheostatRef = useRef(rheostat);
   useEffect(() => { dispRef.current = disp; }, [disp]);
-  useEffect(() => { fuelFlowRef.current = fuelFlow; }, [fuelFlow]);
-  useEffect(() => { airFlowRef.current = airFlow; }, [airFlow]);
   useEffect(() => { rheostatRef.current = rheostat; }, [rheostat]);
   useEffect(() => {
     const id = setInterval(() => {
