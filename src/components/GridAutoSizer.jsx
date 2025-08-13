@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 
 /**
  * GridAutoSizer wraps a grid item and reports the content's scrollHeight
@@ -16,14 +16,14 @@ export default function GridAutoSizer({
   const roRef = useRef(null);
   const frameRef = useRef(0);
 
-  const report = () => {
+  const report = useCallback(() => {
     const el = ref.current;
     if (!el || !onRows) return;
     // Use scrollHeight to include all overflowing content
     const px = el.scrollHeight;
     const rows = Math.max(1, Math.ceil(px / Math.max(1, rowHeight)));
     onRows(rows);
-  };
+  }, [onRows, rowHeight]);
 
   useEffect(() => {
     report();
@@ -39,8 +39,7 @@ export default function GridAutoSizer({
       if (roRef.current) roRef.current.disconnect();
       cancelAnimationFrame(frameRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rowHeight]);
+  }, [report]);
 
   return (
     <div ref={ref} className={className} {...rest}>

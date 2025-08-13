@@ -1,32 +1,10 @@
 import React from "react";
-import { getDefaultConfig } from "../../lib/config";
 
 export default function GaugeSection({ values, onChange }) {
-  const handleResetAll = () => {
-    if (!window.confirm("Reset all gauge settings to defaults?")) return;
-    const d = getDefaultConfig().gauge;
-    onChange("gaugeAngleLow", d.gaugeAngleLow);
-    onChange("gaugeAngleHigh", d.gaugeAngleHigh);
-    onChange("arcAngleLow", d.arcAngleLow);
-    onChange("arcAngleHigh", d.arcAngleHigh);
-    onChange("gaugeScale", d.gaugeScale);
-    onChange("gaugeSpeed", d.gaugeSpeed);
-    onChange("gaugeFireRate", d.gaugeFireRate);
-    onChange("gaugeFlipDirection", d.gaugeFlipDirection);
-    onChange("gaugeNeedleWidth", d.gaugeNeedleWidth);
-    onChange("gaugeDotSize", d.gaugeDotSize);
-    onChange("needleInner", d.needleInner);
-    onChange("arcOffset", d.arcOffset);
-  };
   return (
     <div className="space-y-4">
       <h3 className="font-semibold mb-2">Gauge / Needle Settings</h3>
   <div className="text-xs text-slate-500">Needle sweep controls only the pointer. Arc angles below control the visual band and are independent.</div>
-      <div>
-        <button type="button" className="btn" onClick={handleResetAll}>
-          Reset All Gauge Settings
-        </button>
-      </div>
       <label className="block text-sm">
         Low Angle
         <input

@@ -16,7 +16,6 @@ function AirDrawerIndicator({
   arcAngleLow = 220,
   arcAngleHigh = 330,
   flipDirection = false,
-  _needleWidth = 0.06,
   dotSize = 0.06,
   needleInner = 0, // 0 = center, 0.2 = 20% out from center, etc.
   arcOffset = 0,

@@ -4,7 +4,7 @@ import App from "../App.jsx";
 import { UIStateProvider } from "../components/UIStateContext.jsx";
 
 test("reset layout clears storage", async () => {
-  localStorage.setItem("ct_layouts_v1", "test");
+  localStorage.setItem("ct_layouts_v1", JSON.stringify({}));
   render(
     <UIStateProvider>
       <App />

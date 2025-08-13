@@ -305,6 +305,7 @@ export default function CombustionTrainer({ initialConfig }) {
   const [layouts, setLayouts] = useState(loadLayouts());
   const [autoSizeLock, setAutoSizeLock] = useState(false);
   const lastRowsRef = useRef({});
+  const [breakpoint, setBreakpoint] = useState('lg');
 
   const [theme, setTheme] = useState(() => {
     try {
@@ -343,11 +344,7 @@ export default function CombustionTrainer({ initialConfig }) {
     if (lastRowsRef.current[key] === rows) return;
     lastRowsRef.current[key] = rows;
     setLayouts((prev) => {
-      const width = typeof window !== 'undefined' ? window.innerWidth : 1920;
-      // choose the largest breakpoint less than or equal to width
-      const sorted = Object.entries(rglBreakpoints).sort((a,b) => b[1] - a[1]);
-      const match = sorted.find(([, px]) => width >= px);
-      const bp = match ? match[0] : 'xxs';
+      const bp = breakpoint;
       const arr = prev[bp] || [];
       const idx = arr.findIndex((it) => it.i === key);
       if (idx === -1) return prev;
@@ -359,7 +356,7 @@ export default function CombustionTrainer({ initialConfig }) {
       saveLayouts(copy);
       return copy;
     });
-  }, [autoSizeLock]);
+  }, [autoSizeLock, breakpoint]);
 
   const handleResetLayouts = () => {
     localStorage.removeItem(RGL_LS_KEY);
@@ -1351,6 +1348,7 @@ const rheostatRampRef = useRef(null);
           breakpoints={rglBreakpoints}
           cols={rglCols}
           layouts={layouts}
+          onBreakpointChange={(bp) => setBreakpoint(bp)}
           onLayoutChange={handleLayoutChange}
           onDragStart={() => setAutoSizeLock(true)}
           onDragStop={() => setAutoSizeLock(false)}
@@ -1415,7 +1413,6 @@ const rheostatRampRef = useRef(null);
                     scale={config.gauge.gaugeScale ?? 1.18}
                     speed={ config.gauge.gaugeSpeed ?? 1}
                     flipDirection={config.gauge.gaugeFlipDirection ?? false}
-                    needleWidth={config.gauge.gaugeNeedleWidth ?? 0.06}
                     dotSize={config.gauge.gaugeDotSize ?? 0.06}
                     needleInner={config.gauge.needleInner ?? 0}
                     arcOffset={config.gauge.arcOffset ?? 0}
