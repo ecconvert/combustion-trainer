@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { computeCombustion } from '../lib/chemistry.js';
+import { computeCombustion, OXYGEN_IN_AIR_FRACTION } from '../lib/chemistry.js';
 import { FUELS } from '../lib/fuels.js';
 
 function sample(fuelKey: keyof typeof FUELS, airFactor: number) {
@@ -9,7 +9,6 @@ function sample(fuelKey: keyof typeof FUELS, airFactor: number) {
   // Approximate stoich air using the same formula used in computeCombustion
   const { C, H, O } = fuel.formula;
   const O2_needed = fuelFlow * (C + H / 4 - O / 2);
-  const OXYGEN_IN_AIR_FRACTION = 20.9 / 100;
   const airStoich = O2_needed / OXYGEN_IN_AIR_FRACTION;
   const airFlow = airStoich * airFactor;
 
