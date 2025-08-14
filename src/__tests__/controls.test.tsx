@@ -1,6 +1,9 @@
 import React from 'react';
 import { render, fireEvent, act, screen, within, waitFor } from '@testing-library/react';
-import CombustionTrainer from '../App';
+import '@testing-library/jest-dom';
+// Import the App wrapper (created to re-export App(1).jsx)
+// eslint-disable-next-line import/extensions
+import CombustionTrainer from '../App.jsx';
 import { UIStateProvider } from '../components/UIStateContext';
 import { expect, describe, test, vi, beforeEach, afterEach } from 'vitest';
 
@@ -22,7 +25,8 @@ const renderApp = () => {
 
 const getProgrammerState = () => {
     const programmerPanel = screen.getByText('Programmer (EP160)').closest('.digital-panel');
-    const stateDisplay = within(programmerPanel).getByText(/State:/);
+    if (!programmerPanel) throw new Error('Programmer panel not found');
+    const stateDisplay = within(programmerPanel as HTMLElement).getByText(/State:/);
     const stateValueSpan = stateDisplay.querySelector('.digital-readout');
     if (!stateValueSpan) throw new Error("Could not find state value span");
     return stateValueSpan.textContent;
@@ -30,28 +34,21 @@ const getProgrammerState = () => {
 
 const advanceToState = async (targetState) => {
     const advanceButton = screen.getByText('Advance');
-
-    // Initial advance to kick things off
-    await act(async () => {
-        await vi.advanceTimersByTimeAsync(200);
-    });
-
-    await waitFor(async () => {
-        const currentState = getProgrammerState();
-        if (currentState !== targetState) {
-            fireEvent.click(advanceButton);
-            // Give React time to process state update and re-render
-            await vi.advanceTimersByTimeAsync(500);
-        }
-        // The expectation will be retried by waitFor until it passes or times out.
-        expect(getProgrammerState()).toBe(targetState);
-    }, {
-        timeout: 10000, // Increased timeout for the whole process
-        onTimeout: (err) => {
-            err.message = `advanceToState timed out waiting for state '${targetState}'. Current state: '${getProgrammerState()}'`;
-            return err;
-        }
-    });
+    // Kick timers so initial interval effects run at least once
+    await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+    // Deterministically click through the sequence (max 20 safety)
+    for (let i = 0; i < 20 && getProgrammerState() !== targetState; i++) {
+        fireEvent.click(advanceButton);
+        // Allow React state flush
+        // Using act() with a resolved promise gives React a tick
+        // No reliance on advancing timers anymore
+        // eslint-disable-next-line no-await-in-loop
+        await act(async () => Promise.resolve());
+    }
+    const finalState = getProgrammerState();
+    if (finalState !== targetState) {
+        throw new Error(`advanceToState failed: expected ${targetState} got ${finalState}`);
+    }
 };
 
 describe('Power and Firing Rate Controls', () => {
@@ -61,7 +58,8 @@ describe('Power and Firing Rate Controls', () => {
         expect(getProgrammerState()).toBe('RUN_AUTO');
 
         const boilerPowerPanel = screen.getByText('Boiler Power').parentElement;
-        const offButton = within(boilerPowerPanel).getByRole('button', { name: 'Off' });
+    if (!boilerPowerPanel) throw new Error('Boiler power panel not found');
+    const offButton = within(boilerPowerPanel as HTMLElement).getByRole('button', { name: 'Off' });
         fireEvent.click(offButton);
 
         await act(async () => {
@@ -79,7 +77,7 @@ describe('Power and Firing Rate Controls', () => {
         });
         expect(getProgrammerState()).toBe('DRIVE_HI');
         const firingRateSlider = screen.getByLabelText('firing rate');
-        expect(firingRateSlider).toBeDisabled();
+    expect(firingRateSlider).toBeDisabled();
     });
 
     test('should enable firing rate slider in RUN_AUTO state and update flows', async () => {
@@ -90,7 +88,7 @@ describe('Power and Firing Rate Controls', () => {
         vi.useRealTimers();
 
         const firingRateSlider = screen.getByLabelText('firing rate');
-        expect(firingRateSlider).toBeEnabled();
+    expect(firingRateSlider).toBeEnabled();
 
         const controlsPanel = screen.getByTestId('panel-controls');
         const fuelFlowValue = () => {
@@ -129,9 +127,10 @@ describe('Cam Map Persistence', () => {
         const { unmount } = renderApp();
         await advanceToState('RUN_AUTO');
 
-        const tuningModePanel = screen.getByText('Tuning Mode').closest('.card');
+    const tuningModePanel = screen.getByText('Tuning Mode').closest('.card');
+    if (!tuningModePanel) throw new Error('Tuning mode panel not found');
         await act(async () => {
-            const tuningOnButton = within(tuningModePanel).getByRole('button', { name: 'On' });
+            const tuningOnButton = within(tuningModePanel as HTMLElement).getByRole('button', { name: 'On' });
             fireEvent.click(tuningOnButton);
         });
 
@@ -141,7 +140,9 @@ describe('Cam Map Persistence', () => {
         });
 
         const camMapKey = 'ct_cam_maps_v1';
-        const storedCamMap = JSON.parse(localStorage.getItem(camMapKey));
+    const raw = localStorage.getItem(camMapKey);
+    if (!raw) throw new Error('No cam map stored');
+    const storedCamMap = JSON.parse(raw);
         expect(storedCamMap.Natural_Gas['0']).toBeDefined();
 
         unmount();
@@ -149,13 +150,14 @@ describe('Cam Map Persistence', () => {
 
         await advanceToState('RUN_AUTO');
 
-        const tuningModePanel2 = screen.getByText('Tuning Mode').closest('.card');
+    const tuningModePanel2 = screen.getByText('Tuning Mode').closest('.card');
+    if (!tuningModePanel2) throw new Error('Tuning mode panel (2) not found');
         await act(async () => {
-            const tuningOnButton2 = within(tuningModePanel2).getByRole('button', { name: 'On' });
+            const tuningOnButton2 = within(tuningModePanel2 as HTMLElement).getByRole('button', { name: 'On' });
             fireEvent.click(tuningOnButton2);
         });
 
-        const savedPill = await screen.findByText(/Saved: F/);
+    const savedPill = await screen.findByTestId('cam-saved-pill');
         expect(savedPill).toBeInTheDocument();
     }, 40000);
 
@@ -164,9 +166,10 @@ describe('Cam Map Persistence', () => {
         await advanceToState('RUN_AUTO');
 
         // Set a cam point for Natural Gas
-        const tuningModePanel = screen.getByText('Tuning Mode').closest('.card');
+    const tuningModePanel = screen.getByText('Tuning Mode').closest('.card');
+    if (!tuningModePanel) throw new Error('Tuning mode panel not found');
         await act(async () => {
-            const tuningOnButton = within(tuningModePanel).getByRole('button', { name: 'On' });
+            const tuningOnButton = within(tuningModePanel as HTMLElement).getByRole('button', { name: 'On' });
             fireEvent.click(tuningOnButton);
         });
         await act(async () => {
@@ -185,8 +188,8 @@ describe('Cam Map Persistence', () => {
         });
 
         // Check that there is no saved pill
-        const savedPill = screen.queryByText(/Saved: F/);
-        expect(savedPill).not.toBeInTheDocument();
+    const savedPill = screen.queryByTestId('cam-saved-pill');
+    expect(savedPill).not.toBeInTheDocument();
 
         // Set a cam point for Propane at 10%
         const rheostat = screen.getByLabelText('firing rate');
@@ -199,7 +202,7 @@ describe('Cam Map Persistence', () => {
             fireEvent.click(setCamButtonPropane);
         });
 
-        const savedPillPropane = await screen.findByText(/Saved: F/);
+    const savedPillPropane = await screen.findByTestId('cam-saved-pill');
         expect(savedPillPropane).toBeInTheDocument();
 
         // Switch back to Natural Gas
@@ -216,7 +219,7 @@ describe('Cam Map Persistence', () => {
             fireEvent.input(rheostat, { target: { value: '0' } });
         });
 
-        const savedPillNG = await screen.findByText(/Saved: F/);
+    const savedPillNG = await screen.findByTestId('cam-saved-pill');
         expect(savedPillNG).toBeInTheDocument();
     }, 40000);
 });
