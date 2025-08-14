@@ -45,7 +45,7 @@ function coAirFree(co, o2) {
  * @param {number} params.ambientF - Ambient temperature in °F.
  * @returns {Object} Calculated gas readings and warnings.
  */
-export function computeCombustion({ fuel, fuelFlow, airFlow, stackTempF, ambientF }) {
+export function computeCombustion({ fuel, fuelFlow, airFlow, stackTempF, ambientF, draft = 0 }) {
   const { C, H, O } = fuel.formula;
   const fuelMol = Math.max(0, fuelFlow);
   const airActual = Math.max(0.0001, airFlow);

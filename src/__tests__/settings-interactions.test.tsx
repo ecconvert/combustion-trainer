@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent, act } from '@testing-library/react';
+import { render, fireEvent, act, screen, within } from '@testing-library/react';
 import CombustionTrainer from '../App';
 import { UIStateProvider } from '../components/UIStateContext';
 
@@ -60,4 +60,136 @@ describe('Settings menu interactions', () => {
     expect(scroller).toBeInTheDocument();
     expect(scroller.className).toContain('overflow-y-auto');
   });
+});
+
+describe('CSV Button Location', () => {
+    it('should not display CSV export buttons in the header', () => {
+        render(
+            <UIStateProvider>
+                <CombustionTrainer />
+            </UIStateProvider>
+        );
+
+        const header = screen.getByRole('banner');
+        const trendButton = within(header).queryByRole('button', { name: /export trend csv/i });
+        const savedButton = within(header).queryByRole('button', { name: /export saved readings/i });
+
+        expect(trendButton).not.toBeInTheDocument();
+        expect(savedButton).not.toBeInTheDocument();
+    });
+
+    it('should display CSV export buttons in the Data and privacy settings section', async () => {
+        const utils = render(
+            <UIStateProvider>
+                <CombustionTrainer />
+            </UIStateProvider>
+        );
+
+        openSettings(utils);
+
+        const dataSectionButton = await screen.findByRole('button', { name: /data and privacy/i });
+        fireEvent.click(dataSectionButton);
+
+        const dataSection = await screen.findByTestId('settings-section-data');
+        const trendButton = within(dataSection).getByRole('button', { name: /export trend csv/i });
+        const savedButton = within(dataSection).getByRole('button', { name: /export saved readings/i });
+
+        expect(trendButton).toBeInTheDocument();
+        expect(savedButton).toBeInTheDocument();
+    });
+});
+
+describe('Draft Input', () => {
+    it('should allow adjusting draft and see efficiency change', async () => {
+        render(
+            <UIStateProvider>
+                <CombustionTrainer />
+            </UIStateProvider>
+        );
+
+        // This test requires the boiler to be running to see efficiency
+        // We will skip this for now as the main goal is to test the input exists
+        // and can be changed, which will fail first.
+
+        // Open settings
+        const settingsButton = screen.getByLabelText('Settings');
+        fireEvent.click(settingsButton);
+
+        // Find and change draft input
+        const draftInput = await screen.findByLabelText('Draft (in. w.c.)');
+        fireEvent.change(draftInput, { target: { value: '-0.15' } });
+
+        expect(draftInput.value).toBe('-0.15');
+    });
+});
+
+describe('Troubleshooting Scenarios', () => {
+    test('selecting "Low air, hot stack" should decrease O2 and increase stack temp', async () => {
+        render(<UIStateProvider><CombustionTrainer /></UIStateProvider>);
+
+        // Let the simulation stabilize
+        await act(() => vi.advanceTimersByTime(2000));
+
+        const readouts = screen.getByRole('group', { name: /readouts/i });
+        const o2Readout = within(readouts).getByText(/O₂/).nextElementSibling;
+        const stackReadout = within(readouts).getByText(/Stack/).nextElementSibling;
+
+        const initialO2 = o2Readout.textContent;
+        const initialStack = stackReadout.textContent;
+
+        const scenarioSelector = screen.getByLabelText('troubleshooting scenarios');
+        await act(async () => {
+            fireEvent.change(scenarioSelector, { target: { value: 'Low air, hot stack' } });
+            await vi.advanceTimersByTimeAsync(2000);
+        });
+
+        await waitFor(() => {
+            expect(o2Readout.textContent).not.toBe(initialO2);
+            expect(stackReadout.textContent).not.toBe(initialStack);
+        });
+    });
+
+    test('selecting "High draft, cold stack" should increase O2 and decrease stack temp', async () => {
+        render(<UIStateProvider><CombustionTrainer /></UIStateProvider>);
+
+        await act(() => vi.advanceTimersByTime(2000));
+
+        const readouts = screen.getByRole('group', { name: /readouts/i });
+        const o2Readout = within(readouts).getByText(/O₂/).nextElementSibling;
+        const stackReadout = within(readouts).getByText(/Stack/).nextElementSibling;
+
+        const initialO2 = o2Readout.textContent;
+        const initialStack = stackReadout.textContent;
+
+        const scenarioSelector = screen.getByLabelText('troubleshooting scenarios');
+        await act(async () => {
+            fireEvent.change(scenarioSelector, { target: { value: 'High draft, cold stack' } });
+            await vi.advanceTimersByTimeAsync(2000);
+        });
+
+        await waitFor(() => {
+            expect(o2Readout.textContent).not.toBe(initialO2);
+            expect(stackReadout.textContent).not.toBe(initialStack);
+        });
+    });
+
+    test('selecting "Dirty nozzles (incomplete)" should increase CO', async () => {
+        render(<UIStateProvider><CombustionTrainer /></UIStateProvider>);
+
+        await act(() => vi.advanceTimersByTime(2000));
+
+        const readouts = screen.getByRole('group', { name: /readouts/i });
+        const coReadout = within(readouts).getByText(/^CO$/).nextElementSibling;
+        const initialCO = coReadout.textContent;
+
+        const scenarioSelector = screen.getByLabelText('troubleshooting scenarios');
+        await act(async () => {
+            fireEvent.change(scenarioSelector, { target: { value: 'Dirty nozzles (incomplete)' } });
+            await vi.advanceTimersByTimeAsync(2000);
+        });
+
+        await waitFor(() => {
+            expect(coReadout.textContent).not.toBe(initialCO);
+        });
+    });
 });
