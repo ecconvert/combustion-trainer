@@ -1,0 +1,24 @@
+@@ -149,6 +149,12 @@
+ 
+         await advanceToState('RUN_AUTO');
+ 
++        // Ensure rheostat is at 0% to match the saved cam position
++        await act(async () => {
++            const rheostat = screen.getByLabelText('firing rate');
++            fireEvent.input(rheostat, { target: { value: '0' } });
++        });
++
+         const tuningModePanel2 = screen.getByText('Tuning Mode').closest('.card');
+         if (!tuningModePanel2) throw new Error('Tuning mode panel (2) not found');
+         await act(async () => {
+@@ -156,7 +162,8 @@
+             fireEvent.click(tuningOnButton2);
+         });
+ 
+-        const savedPill = await screen.findByTestId('cam-saved-pill');
++        // Use synchronous check since debug test shows pill appears immediately
++        const savedPill = screen.getByTestId('cam-saved-pill');
+         expect(savedPill).toBeInTheDocument();
+     }, 40000);
+ 
+\ No newline at end of line
