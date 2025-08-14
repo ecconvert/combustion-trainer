@@ -229,3 +229,55 @@ describe('Cam Map Persistence', () => {
         expect(savedPillNG).toBeInTheDocument();
     }, 40000);
 });
+
+describe('Fuel and Air Flow Controls', () => {
+    test('should not display sliders when tuning mode is off', async () => {
+        renderApp();
+        await advanceToState('RUN_AUTO');
+
+        const fuelFlowSlider = screen.queryByLabelText('tuning fuel flow');
+        const airFlowSlider = screen.queryByLabelText('tuning air flow');
+
+        expect(fuelFlowSlider).not.toBeInTheDocument();
+        expect(airFlowSlider).not.toBeInTheDocument();
+    });
+
+    test('should display sliders and min/max warnings when tuning mode is on', async () => {
+        renderApp();
+        await advanceToState('RUN_AUTO');
+
+        const tuningModePanel = screen.getByText('Tuning Mode').closest('.card');
+        if (!tuningModePanel) throw new Error('Tuning mode panel not found');
+        await act(async () => {
+            const tuningOnButton = within(tuningModePanel as HTMLElement).getByRole('button', { name: 'On' });
+            fireEvent.click(tuningOnButton);
+        });
+
+        const fuelFlowSlider = screen.getByLabelText('tuning fuel flow');
+        const airFlowSlider = screen.getByLabelText('tuning air flow');
+
+        expect(fuelFlowSlider).toBeInTheDocument();
+        expect(airFlowSlider).toBeInTheDocument();
+
+        // Test fuel flow min
+        fireEvent.input(fuelFlowSlider, { target: { value: '0' } });
+        let minWarning = await screen.findByText('MIN');
+        expect(minWarning).toBeInTheDocument();
+
+        // Test fuel flow max
+        fireEvent.input(fuelFlowSlider, { target: { value: '18' } });
+        let maxWarning = await screen.findByText('MAX');
+        expect(maxWarning).toBeInTheDocument();
+
+        // Test air flow min
+        fireEvent.input(airFlowSlider, { target: { value: '0' } });
+        minWarning = await screen.findAllByText('MIN');
+        expect(minWarning.length).toBeGreaterThan(0);
+
+
+        // Test air flow max
+        fireEvent.input(airFlowSlider, { target: { value: '200' } });
+        maxWarning = await screen.findAllByText('MAX');
+        expect(maxWarning.length).toBeGreaterThan(0);
+    }, 30000);
+});
