@@ -1573,12 +1573,20 @@ const rheostatRampRef = useRef(null);
                     <div>
                       <div className="label">Fuel Flow ({FUELS[fuelKey].unit}, scaled)</div>
                       <input aria-label="tuning fuel flow" type="range" min={minFuel} max={maxFuel} step={0.1} value={fuelFlow} onChange={(e) => setFuelFlow(parseFloat(e.target.value))} className="w-full" />
-                      <div className="value">{fuelFlow.toFixed(2)}</div>
+                      <div className="value">
+                        {fuelFlow.toFixed(2)}
+                        {fuelFlow === minFuel && <span className="text-yellow-500 ml-2">MIN</span>}
+                        {fuelFlow === maxFuel && <span className="text-yellow-500 ml-2">MAX</span>}
+                      </div>
                     </div>
                     <div>
                       <div className="label">Air Flow (cfm, scaled)</div>
                       <input aria-label="tuning air flow" type="range" min={0} max={200} step={1} value={airFlow} onChange={(e) => setAirFlow(parseFloat(e.target.value))} className="w-full" />
-                      <div className="value">{Number(airFlow).toFixed(2)}</div>
+                      <div className="value">
+                        {Number(airFlow).toFixed(2)}
+                        {airFlow === 0 && <span className="text-yellow-500 ml-2">MIN</span>}
+                        {airFlow === 200 && <span className="text-yellow-500 ml-2">MAX</span>}
+                      </div>
                     </div>
                   </div>
                   <div className="mt-3">
