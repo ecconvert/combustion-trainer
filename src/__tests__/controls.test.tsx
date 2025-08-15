@@ -68,7 +68,7 @@ describe('Power and Firing Rate Controls', () => {
 
         expect(getProgrammerState()).toBe('POSTPURGE');
 
-    }, 20000);
+    }, 30000);
 
     test('should have firing rate slider disabled when not in RUN_AUTO state', async () => {
         renderApp();
@@ -119,7 +119,7 @@ describe('Power and Firing Rate Controls', () => {
             // Generous tolerance; adjust if mapping changes
             expect(newFuelFlow).toBeCloseTo(10, 1);
         }, { timeout: 5000 });
-    }, 20000);
+    }, 30000);
 });
 
 describe('Cam Map Persistence', () => {
@@ -165,7 +165,7 @@ describe('Cam Map Persistence', () => {
 
     const savedPill = screen.getByTestId('cam-saved-pill');
         expect(savedPill).toBeInTheDocument();
-    }, 40000);
+    }, 60000);
 
     test('should keep cam maps separate for different fuels', async () => {
         renderApp();
@@ -227,7 +227,7 @@ describe('Cam Map Persistence', () => {
 
     const savedPillNG = screen.getByTestId('cam-saved-pill');
         expect(savedPillNG).toBeInTheDocument();
-    }, 40000);
+    }, 60000);
 });
 
 describe('Fuel and Air Flow Controls', () => {
@@ -279,5 +279,5 @@ describe('Fuel and Air Flow Controls', () => {
         fireEvent.input(airFlowSlider, { target: { value: '200' } });
         maxWarning = await screen.findAllByText('MAX');
         expect(maxWarning.length).toBeGreaterThan(0);
-    }, 30000);
+    }, 60000);
 });

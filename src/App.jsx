@@ -1372,6 +1372,9 @@ const rheostatRampRef = useRef(null);
           onApply={handleApply}
           onCancel={handleCancel}
           onPreview={handlePreview}
+          history={history}
+          saved={saved}
+          onExportSaved={exportSavedReadings}
         />
 
 
@@ -1379,9 +1382,7 @@ const rheostatRampRef = useRef(null);
         <div className="max-w-7xl mx-auto flex items-center gap-4">
           <h1 className="text-2xl font-semibold">Combustion Trainer</h1>
           <div className="ml-auto flex items-center gap-3">
-            <button className="btn" onClick={() => downloadCSV("session.csv", history)}>Export Trend CSV</button>
             <button className="btn" onClick={() => setDrawerOpen(true)}>Technician</button>
-            <button className="btn" onClick={exportSavedReadings}>Export Saved Readings</button>
             <button className="btn" data-testid="btn-theme-toggle" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
               Toggle Theme
             </button>

@@ -6,8 +6,18 @@ import UnitsSection from "./settings/UnitsSection.jsx";
 import AmbientSection from "./settings/AmbientSection.jsx";
 import DataSection from "./settings/DataSection.jsx";
 import GaugeSection from "./settings/GaugeSection";
+import ExportSection from "./settings/ExportSection.jsx";
 
-export default function SettingsMenu({ open, config, onApply, onCancel, onPreview }) {
+export default function SettingsMenu({
+  open,
+  config,
+  onApply,
+  onCancel,
+  onPreview,
+  history,
+  saved,
+  onExportSaved,
+}) {
   const [local, setLocal] = useState(config);
   const [section, setSection] = useState("general");
   const [position, setPosition] = useState({ x: 100, y: 100 });
@@ -59,6 +69,7 @@ export default function SettingsMenu({ open, config, onApply, onCancel, onPrevie
     analyzer: { label: "Analyzer", Component: AnalyzerSection },
     units: { label: "Units", Component: UnitsSection },
     ambient: { label: "Ambient", Component: AmbientSection },
+    export: { label: "Export", Component: ExportSection },
     data: { label: "Data and privacy", Component: DataSection },
   };
 
@@ -167,11 +178,19 @@ export default function SettingsMenu({ open, config, onApply, onCancel, onPrevie
             </ul>
           </nav>
           <div data-testid="settings-scroll" className="flex-1 p-4 overflow-y-auto min-h-0">
-            {SectionComponent && (
-              <SectionComponent
-                values={local[section]}
-                onChange={(field, value) => handleField(section, field, value)}
+            {section === "export" ? (
+              <ExportSection
+                history={history}
+                saved={saved}
+                onExportSaved={onExportSaved}
               />
+            ) : (
+              SectionComponent && (
+                <SectionComponent
+                  values={local[section]}
+                  onChange={(field, value) => handleField(section, field, value)}
+                />
+              )
             )}
             <div className="mt-6 flex items-center justify-between">
               <button className="btn" onClick={handleReset}>
