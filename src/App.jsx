@@ -1226,7 +1226,7 @@ const rheostatRampRef = useRef(null);
         <RightDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)}>
 
           <div className="space-y-4">
-            <button className="btn" onClick={() => setShowSettings(true)}>
+            <button className="btn" onClick={() => setShowSettings(true)} data-tour="settings">
               Settings
             </button>
             <div className="card">
@@ -1242,6 +1242,7 @@ const rheostatRampRef = useRef(null);
             <div className="card">
               <div className="label">Start Troubleshooting Scenarios</div>
               <select
+                data-tour="scenarios"
                 aria-label="troubleshooting scenarios"
                 className="w-full border rounded-md px-2 py-2 mt-2"
                 value={scenarioSel}
@@ -1263,7 +1264,7 @@ const rheostatRampRef = useRef(null);
             </div>
             <div className="card">
               <div className="label">Tuning Mode</div>
-              <div className="flex gap-2 mt-2">
+              <div className="flex gap-2 mt-2" data-tour="tuning-toggle">
                 <button
                   className={`btn ${!tuningOn ? "btn-primary" : ""}`}
                   onClick={() => setTuningOn(false)}
@@ -1284,7 +1285,7 @@ const rheostatRampRef = useRef(null);
               {/* Sliders moved to Controls > Fuel/Air Flows section to match tests */}
             </div>
             <CollapsibleSection title="Analyzer">
-              <div className="card">
+              <div className="card" data-tour="analyzer">
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-sm">
@@ -1538,6 +1539,7 @@ const rheostatRampRef = useRef(null);
             <PanelHeader title="Boiler Control Panel" />
             <CollapsibleSection title="Fuel Selector">
               <select
+                data-tour="fuel"
                 aria-label="fuel selector"
                 className="w-full rounded-md px-2 py-2 mt-1 bg-card text-foreground border border-border dark:bg-slate-800 dark:border-slate-600 transition-colors"
                 value={fuelKey}
@@ -1551,12 +1553,13 @@ const rheostatRampRef = useRef(null);
               <div className="mt-1 text-xs text-slate-500">Targets: O₂ {fuel.targets.O2[0]} to {fuel.targets.O2[1]} percent, COair-free ≤ {fuel.targets.COafMax} ppm</div>
             </CollapsibleSection>
             <div className="label mt-4">Boiler Power</div>
-            <div className="flex items-center gap-2 mt-2">
+            <div className="flex items-center gap-2 mt-2" data-tour="power">
               <button className={`btn ${boilerOn ? 'btn-primary' : ''}`} onClick={() => setBoilerOn(true)}>On</button>
               <button className="btn" onClick={() => setBoilerOn(false)}>Off</button>
             </div>
             <div className="label mt-4">Firing Rate (rheostat)</div>
             <input
+              data-tour="firing-rate"
               aria-label="firing rate"
               type="range"
               min={0}
@@ -1626,6 +1629,7 @@ const rheostatRampRef = useRef(null);
                   {[0,10,20,30,40,50,60,70,80,90,100].map((p) => (
                     <button
                       key={p}
+                      data-tour={`cam-${p}`}
                       className={`btn ${rheostat === p ? 'btn-primary' : ''}`}
                       disabled={!camControlsEnabled}
                       onClick={() => {
@@ -1754,7 +1758,7 @@ const rheostatRampRef = useRef(null);
           </GridAutoSizer>
           <GridAutoSizer key="trend" id="trend" className="card overflow-hidden flex flex-col" onRows={(r) => setItemRows("trend", r)} rowHeight={10}>
             <PanelHeader title="Trend" />
-            <div className="flex-1 min-h-0">
+            <div className="flex-1 min-h-0" data-tour="trends">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={history} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? "rgba(148,163,184,0.25)" : themeVars.border} />
@@ -1930,6 +1934,7 @@ const rheostatRampRef = useRef(null);
                 <label className="text-sm">
                   Pump pressure (psi)
                   <input
+                    data-tour="regulator"
                     type="number"
                     className="w-full border rounded-md px-2 py-1 mt-1"
                     value={oilPressure}
