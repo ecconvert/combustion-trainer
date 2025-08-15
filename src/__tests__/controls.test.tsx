@@ -260,23 +260,35 @@ describe('Fuel and Air Flow Controls', () => {
         expect(airFlowSlider).toBeInTheDocument();
 
         // Test fuel flow min
-        fireEvent.input(fuelFlowSlider, { target: { value: '0' } });
+        await act(async () => {
+            fireEvent.input(fuelFlowSlider, { target: { value: '0' } });
+            await vi.advanceTimersByTimeAsync(100);
+        });
         let minWarning = await screen.findByText('MIN');
         expect(minWarning).toBeInTheDocument();
 
         // Test fuel flow max
-        fireEvent.input(fuelFlowSlider, { target: { value: '18' } });
+        await act(async () => {
+            fireEvent.input(fuelFlowSlider, { target: { value: '18' } });
+            await vi.advanceTimersByTimeAsync(100);
+        });
         let maxWarning = await screen.findByText('MAX');
         expect(maxWarning).toBeInTheDocument();
 
         // Test air flow min
-        fireEvent.input(airFlowSlider, { target: { value: '0' } });
+        await act(async () => {
+            fireEvent.input(airFlowSlider, { target: { value: '0' } });
+            await vi.advanceTimersByTimeAsync(100);
+        });
         minWarning = await screen.findAllByText('MIN');
         expect(minWarning.length).toBeGreaterThan(0);
 
 
         // Test air flow max
-        fireEvent.input(airFlowSlider, { target: { value: '200' } });
+        await act(async () => {
+            fireEvent.input(airFlowSlider, { target: { value: '200' } });
+            await vi.advanceTimersByTimeAsync(100);
+        });
         maxWarning = await screen.findAllByText('MAX');
         expect(maxWarning.length).toBeGreaterThan(0);
     }, 60000);
