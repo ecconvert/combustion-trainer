@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Joyride, { CallBackProps, STATUS } from 'react-joyride';
 import { JOYRIDE_STEPS } from './spec';
+import WelcomeSplash from '../components/WelcomeSplash';
 
 interface TutorialState {
   done: boolean;
@@ -22,6 +23,7 @@ const TUTORIAL_VERSION = 1;
 export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps) {
   const [run, setRun] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
+  const [showSplash, setShowSplash] = useState(false);
 
   // Load tutorial state from localStorage
   useEffect(() => {
@@ -33,16 +35,16 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
         
         // Check if this is first visit or if tutorial version changed
         if (runOnFirstVisit && (!tutorial || !tutorial.done || tutorial.version < TUTORIAL_VERSION)) {
-          setRun(true);
+          setShowSplash(true);
         }
       } else if (runOnFirstVisit) {
         // No config exists, definitely first visit
-        setRun(true);
+        setShowSplash(true);
       }
     } catch (error) {
       console.warn('Failed to load tutorial state:', error);
       if (runOnFirstVisit) {
-        setRun(true);
+        setShowSplash(true);
       }
     }
   }, [runOnFirstVisit]);
@@ -81,8 +83,27 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
   // Public method to restart tour
   const startTour = useCallback(() => {
     setStepIndex(0);
+    setShowSplash(true);
+    setRun(false);
+  }, []);
+
+  // Handle splash screen actions
+  const handleStartTour = useCallback(() => {
+    setShowSplash(false);
+    setStepIndex(0);
     setRun(true);
   }, []);
+
+  const handleSkipTour = useCallback(() => {
+    setShowSplash(false);
+    setRun(false);
+    
+    // Mark tutorial as completed
+    updateTutorialState({
+      done: true,
+      version: TUTORIAL_VERSION
+    });
+  }, [updateTutorialState]);
 
   // Expose startTour method globally for settings menu
   useEffect(() => {
@@ -93,45 +114,53 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
   }, [startTour]);
 
   return (
-    <Joyride
-      steps={JOYRIDE_STEPS}
-      run={run}
-      stepIndex={stepIndex}
-      continuous
-      showProgress
-      showSkipButton
-      callback={handleJoyrideCallback}
-      styles={{
-        options: {
-          primaryColor: '#3b82f6',
-          textColor: '#1f2937',
-          backgroundColor: '#ffffff',
-          overlayColor: 'rgba(0, 0, 0, 0.4)',
-          arrowColor: '#ffffff',
-          zIndex: 1000,
-        },
-        tooltip: {
-          fontSize: '14px',
-          padding: '16px',
-        },
-        tooltipContent: {
-          padding: '8px 0',
-        },
-        buttonNext: {
-          backgroundColor: '#3b82f6',
-          fontSize: '14px',
-          padding: '8px 16px',
-        },
-        buttonBack: {
-          color: '#6b7280',
-          fontSize: '14px',
-          padding: '8px 16px',
-        },
-        buttonSkip: {
-          color: '#6b7280',
-          fontSize: '14px',
-        },
-      }}
-    />
+    <>
+      {showSplash && (
+        <WelcomeSplash 
+          onStartTour={handleStartTour}
+          onSkip={handleSkipTour}
+        />
+      )}
+      <Joyride
+        steps={JOYRIDE_STEPS}
+        run={run}
+        stepIndex={stepIndex}
+        continuous
+        showProgress
+        showSkipButton
+        callback={handleJoyrideCallback}
+        styles={{
+          options: {
+            primaryColor: '#3b82f6',
+            textColor: '#1f2937',
+            backgroundColor: '#ffffff',
+            overlayColor: 'rgba(0, 0, 0, 0.4)',
+            arrowColor: '#ffffff',
+            zIndex: 1000,
+          },
+          tooltip: {
+            fontSize: '14px',
+            padding: '16px',
+          },
+          tooltipContent: {
+            padding: '8px 0',
+          },
+          buttonNext: {
+            backgroundColor: '#3b82f6',
+            fontSize: '14px',
+            padding: '8px 16px',
+          },
+          buttonBack: {
+            color: '#6b7280',
+            fontSize: '14px',
+            padding: '8px 16px',
+          },
+          buttonSkip: {
+            color: '#6b7280',
+            fontSize: '14px',
+          },
+        }}
+      />
+    </>
   );
 }
