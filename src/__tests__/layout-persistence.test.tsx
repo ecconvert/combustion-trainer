@@ -10,7 +10,14 @@ test("reset layout clears storage", async () => {
       <App />
     </UIStateProvider>
   );
-  const btn = screen.getByTestId("btn-reset-layout");
-  await userEvent.click(btn);
+  
+  // Open settings menu
+  const settingsBtn = screen.getByLabelText("Settings");
+  await userEvent.click(settingsBtn);
+  
+  // The General section should be selected by default, and the reset layout button should be visible
+  const resetBtn = screen.getByTestId("btn-reset-layout");
+  await userEvent.click(resetBtn);
+  
   expect(localStorage.getItem("ct_layouts_v1")).toBeNull();
 });

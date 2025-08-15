@@ -1,6 +1,6 @@
 import React from "react";
 
-export default function GeneralSection({ values, onChange }) {
+export default function GeneralSection({ values, onChange, onResetLayouts }) {
   return (
     <div className="space-y-4">
       <label className="block text-sm">
@@ -58,6 +58,25 @@ export default function GeneralSection({ values, onChange }) {
           Replay the guided introduction to all features
         </div>
       </div>
+
+      {onResetLayouts && (
+        <div className="border-t pt-4">
+          <label className="block text-sm mb-2">
+            Layout
+          </label>
+          <button
+            type="button"
+            className="btn w-full"
+            data-testid="btn-reset-layout"
+            onClick={onResetLayouts}
+          >
+            Reset Layout
+          </button>
+          <div className="text-xs text-slate-500 mt-1">
+            Restore the default panel layout and positions
+          </div>
+        </div>
+      )}
     </div>
   );
 }

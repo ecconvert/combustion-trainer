@@ -1379,6 +1379,7 @@ const rheostatRampRef = useRef(null);
           history={history}
           saved={saved}
           onExportSaved={exportSavedReadings}
+          onResetLayouts={handleResetLayouts}
         />
 
 
@@ -1387,10 +1388,6 @@ const rheostatRampRef = useRef(null);
           <h1 className="text-2xl font-semibold">Combustion Trainer</h1>
           <div className="ml-auto flex items-center gap-3">
             <button className="btn" onClick={() => setDrawerOpen(true)}>Technician</button>
-            <button className="btn" data-testid="btn-theme-toggle" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
-              Toggle Theme
-            </button>
-            <button className="btn" data-testid="btn-reset-layout" onClick={handleResetLayouts}>Reset Layout</button>
 
             <button
               className="btn"

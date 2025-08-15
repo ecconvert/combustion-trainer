@@ -17,6 +17,7 @@ export default function SettingsMenu({
   history,
   saved,
   onExportSaved,
+  onResetLayouts,
 }) {
   const [local, setLocal] = useState(config);
   const [section, setSection] = useState("general");
@@ -199,6 +200,7 @@ export default function SettingsMenu({
                 <SectionComponent
                   values={local[section]}
                   onChange={(field, value) => handleField(section, field, value)}
+                  onResetLayouts={section === "general" ? onResetLayouts : undefined}
                 />
               )
             )}
