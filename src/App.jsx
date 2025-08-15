@@ -501,7 +501,7 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
   const STABLE_EA = { min: 0.9, max: 1.5 }; // stable flame once running
 
   // ----------------------- Global state -----------------------
-  const [boilerOn, setBoilerOn] = useState(true); // master power switch
+  const [boilerOn, setBoilerOn] = useState(false); // master power switch
   const [rheostat, setRheostat] = useState(0); // firing-rate input 0–100%
   const [minFuel, setMinFuel] = useState(2); // derived from regulator pressure
   const [maxFuel, setMaxFuel] = useState(18);
