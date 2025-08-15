@@ -1,8 +1,8 @@
-# Bug Report: Export Buttons Move - Fixed Infinite Re-render, Remaining Test Issue
+# Bug Report: Export Buttons Move - Fixed Infinite Re-render, New Failing Tests & Timing Issues
 
 ## Summary
 
-This report documents the work done to move the "Export Trend CSV" and "Export Saved Readings" buttons into a new "Export" section within the settings menu. The main infinite re-render bug has been **FIXED**, but one test is still timing out due to a secondary issue.
+This report documents the work done to move the "Export Trend CSV" and "Export Saved Readings" buttons into a new "Export" section within the settings menu. The main infinite re-render bug has been **FIXED**. Additional test failures (timeouts and an assertion ambiguity) have emerged during continued stabilization.
 
 ## Changes Made - COMPLETED ✅
 
@@ -64,18 +64,31 @@ const handleField = (sec, field, value) => {
 
 ### Results of Fix
 - ✅ **No more React warnings**: "Cannot update a component..." error eliminated
-- ✅ **Most tests passing**: 6/7 tests in controls.test.tsx now pass
 - ✅ **Export functionality working**: CSV export buttons successfully moved to settings
 - ✅ **Settings interactions working**: Focus management and export tests pass
+- ✅ **Tuning mode off path** works (sliders hidden test passes)
+- ⚠️ **New timing / selection issues** surfaced in unrelated suites after refactor
 
-## Remaining Issue - SECONDARY BUG ⚠️
+## Remaining Issues - SECONDARY & TERTIARY BUGS ⚠️
 
-### Current Problem
-One test is still timing out:
-- **`src/__tests__/controls.test.tsx`**: `should display sliders and min/max warnings when tuning mode is on`
+### Current Problems (Snapshot from latest run)
+Failing / Problem Areas:
+1. **Tuning Mode / Fuel & Air Flow Controls**
+  - `src/__tests__/controls.test.tsx`: `should display sliders and min/max warnings when tuning mode is on` (timeout 60s)
+  - `src/__tests__/debug-original.test.tsx`: duplicate focused debug test for same scenario (timeout 10s)
+2. **Firing Rate Control Test Ambiguity**
+  - `src/__tests__/controls.test.tsx`: `should enable firing rate slider in RUN_AUTO state and update flows` fails due to multiple matches for text `/50%/` (now appears in several elements: display value + multiple buttons). This is a test selector brittleness introduced by UI changes.
+3. **Troubleshooting Scenario Tests (Settings Interaction Suite)**
+  - Three scenario tests timeout (each ~5s) after selecting scenario from dropdown. Indicates scenario side-effects (gas readings updates) not observed or state updates not flushed.
+4. **Chemistry Draft Test**
+  - Known intentional failure (`computeCombustion` draft effect not implemented yet): assertion 96.4 < 96.4.
+5. **Empty Test Files**
+  - `cam-map-fixed.test.tsx` & `debug-cam.test.tsx` fail with "No test suite found" (likely temporary scaffolding; either add tests or remove/rename).
 
-### Detailed Analysis
-The test hangs specifically at this point:
+Passing but relevant: export relocation tests, layout persistence, theme, tuning mode OFF case.
+
+### Detailed Analysis: Tuning Mode Timeout
+The primary tuning test hangs specifically at this point:
 ```
 ✓ Clicked On button
 ✓ Found both sliders  
@@ -93,19 +106,20 @@ The test successfully:
 
 But then hangs waiting for the "MIN" warning text to appear.
 
-### Root Cause Hypothesis
-The async refactor may have introduced a subtle timing issue where:
-1. The `handlePreview` async calls might interfere with normal tuning mode state updates
-2. A race condition between preview effects and fuel flow state changes
-3. The MIN/MAX warning display logic may be affected by the new async preview scheduling
+### Root Cause Hypotheses (Ranked)
+1. **Conditional Render Path Not Entered**: Sliders or MIN/MAX badge conditions depend on a state flag (e.g. `tuningOn`, min/max boundaries) that isn't updating under fake timers due to deferred preview scheduling.
+2. **State Update Debounce / Ordering**: Asynchronous `onPreview` scheduling (via `useEffect`) may batch with other updates; under fake timers the effect ordering could delay/clobber the min/max evaluation.
+3. **Test Not Triggering Required Transition**: RUN_AUTO or a prerequisite side effect (e.g. analyzer state) not fully ready before slider interaction; missing `await` on an intermediate UI signal.
+4. **Warning Render Logic Regression**: The comparison may now use raw input value vs clamped internal value, preventing equality condition for displaying MIN/MAX.
+5. **Style / Element Change**: Badge text may have changed casing / moved inside a different element causing `findByText('MIN')` to miss (needs case-insensitive or role-based query).
 
-### Technical Details
+### Technical Details (Environment & Signals)
 **Test Environment**: 
 - Vitest with jsdom environment
 - React Testing Library
 - Fake timers enabled
 
-**Failing Test Pattern**:
+**Failing Test Pattern (same for debug variant)**:
 ```tsx
 // This works fine:
 fireEvent.input(fuelFlowSlider, { target: { value: '0' } });
@@ -114,38 +128,75 @@ fireEvent.input(fuelFlowSlider, { target: { value: '0' } });
 let minWarning = await screen.findByText('MIN');
 ```
 
-**Expected Behavior**: 
-When fuel flow is set to 0, it should be clamped to minFuel (2), and since `fuelFlow === minFuel`, the MIN warning should appear.
+**Expected Behavior**: Input < min clamps to `minFuel`; equality triggers MIN badge.
 
-**Actual Behavior**: 
-The MIN warning never appears, causing `findByText('MIN')` to timeout.
+**Actual Behavior**: Slider value change accepted; badge never appears (timeout).
 
-## Next Steps - IMMEDIATE ACTION NEEDED
+**Data Needed**: Actual internal fuelFlow after input, minFuel value, flag controlling badge render. Add temporary console or data-testid instrumentation.
 
-### For Next Developer
-The main infinite re-render bug is **RESOLVED**. Focus on this remaining issue:
+---
 
-1. **Investigate MIN/MAX Warning Logic**: 
-   - Check if the async preview effects interfere with fuel flow state updates
-   - Verify that `setFuelFlow` updates are completing properly in test environment
-   - Look for timing issues between state updates and DOM rendering
+### Firing Rate Test Ambiguity
+Issue: Multiple `/50%/` matches now; test expects unique.
+Resolution Options:
+1. Narrow query: use `getByRole('button', { name: /^50 %$/ })` or `getAllByText(/50%/)` and select context.
+2. Add data-testid to primary 50% display element.
+3. Adjust UI to reduce duplicated literal text (least preferred).
 
-2. **Debug Test Timing**:
-   - Add more detailed logging around the fuel flow state changes
-   - Check if `act()` wrapping is needed around the input events
-   - Consider if fake timers need to be advanced after state changes
+---
 
-3. **Potential Quick Fix**:
-   - Try wrapping the `fireEvent.input` in `act()` 
-   - Add `await act(async () => { await vi.advanceTimersByTimeAsync(100); });` after input events
-   - Use `waitFor()` instead of `findByText()` with custom timeout
+### Scenario Test Timeouts
+Likely the scenario selection triggers async state (maybe via `onPreview`) and expectations run before analyzer values settle.
+Mitigations:
+1. Wrap selection in `act` and advance timers if timers drive updates.
+2. Poll/waitFor specific analyzer metric change rather than immediate asserts.
+3. Add explicit event flush helper (e.g. `await flushPromises()` utility).
 
-### Test Files to Check
-- `src/__tests__/controls.test.tsx` (line ~254: the failing test)
-- `src/__tests__/debug-original.test.tsx` (created for debugging)
-- `src/App.jsx` (lines 1575-1580: MIN/MAX warning logic)
+Instrumentation: log when scenario effect starts/ends; capture analyzer O2 / stack temp before & after.
+
+---
+
+### Empty Test Files
+Decide: implement minimal smoke tests or remove to restore green.
+
+## Next Steps - PRIORITIZED ACTION PLAN
+
+Order of operations to stabilize suite:
+
+1. Instrument Tuning Badge Logic
+  - Add temporary console or `data-testid="fuel-min-badge"` where MIN renders; log fuelFlow, minFuel, tuningOn.
+  - Re-run only tuning tests (`npx vitest run controls.test.tsx -t "tuning mode"`).
+2. Fix Firing Rate Test Selector
+  - Update test to use less ambiguous query OR add testid to primary display.
+3. Add wait/act to Scenario Tests
+  - Wrap selection, use `await waitFor(() => expect(...changed))`.
+4. Decide on Empty Test Files
+  - Remove or populate; removal fastest for green build.
+5. (Optional) Introduce a `flushAsync()` helper
+  ```ts
+  export const flushAsync = () => new Promise(r => setTimeout(r, 0));
+  ```
+  Use after events instead of manual timer advances if microtasks matter.
+6. After stabilization, remove instrumentation.
+
+Stretch: Implement draft effect (chemistry) or mark test with explicit TODO skip.
+
+Risk Notes:
+- Overuse of fake timers can stall `useEffect` chains if real timeouts not advanced.
+- Race between preview scheduling and direct state used for warnings.
+
+Decision Needed: Keep separate debug test (`debug-original.test.tsx`) or merge its coverage back—currently duplicates failing path and doubles runtime.
+
+### Test Files to Check / Modify
+- `src/__tests__/controls.test.tsx` (tuning badge & firing rate test)
+- `src/__tests__/debug-original.test.tsx` (possible removal)
+- `src/__tests__/settings-interactions.test.tsx` (scenario waits)
+- `src/__tests__/chemistry.test.ts` (decide: keep intentional fail or skip)
+- `src/__tests__/cam-map-fixed.test.tsx`, `src/__tests__/debug-cam.test.tsx` (empty suites)
+- `src/App.jsx` (MIN/MAX badge logic lines ~1575-1580; confirm conditions)
 
 ### Current PR Status
-- ✅ **READY FOR REVIEW**: Export buttons successfully moved
-- ✅ **MAIN BUG FIXED**: No more infinite re-render issues  
-- ⚠️ **MINOR ISSUE**: One test needs timing fix (non-blocking for PR approval)
+- ✅ Feature change complete (export buttons relocated)
+- ✅ Infinite re-render fixed
+- ⚠️ Multiple secondary test issues pending (timing, selectors, empty suites)
+- 🚧 Not yet fully green; needs stabilization commit(s) before merge unless partial acceptance allowed.
