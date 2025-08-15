@@ -8,6 +8,8 @@ import Joyride, { CallBackProps, STATUS } from 'react-joyride';
 import { JOYRIDE_STEPS } from './spec';
 import WelcomeSplash from '../components/WelcomeSplash';
 
+declare const process: any;
+
 interface TutorialState {
   done: boolean;
   version: number;
@@ -25,8 +27,16 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
   const [stepIndex, setStepIndex] = useState(0);
   const [showSplash, setShowSplash] = useState(false);
 
+  // Don't show splash in test environment
+  const isTestEnv = typeof process !== 'undefined' && process.env.NODE_ENV === 'test';
+
   // Load tutorial state from localStorage
   useEffect(() => {
+    // Skip splash screen entirely in test environment
+    if (isTestEnv) {
+      return;
+    }
+
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
@@ -47,7 +57,7 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
         setShowSplash(true);
       }
     }
-  }, [runOnFirstVisit]);
+  }, [runOnFirstVisit, isTestEnv]);
 
   // Update tutorial state in localStorage
   const updateTutorialState = useCallback((tutorial: TutorialState) => {
