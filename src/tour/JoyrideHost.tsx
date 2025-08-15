@@ -64,7 +64,9 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
 
   // Handle tour completion or skip
   const handleJoyrideCallback = useCallback((data: CallBackProps) => {
-    const { status, index, type } = data;
+    const { status, index, type, action } = data;
+    
+    console.log('Joyride callback:', { status, index, type, action });
     
     if (status === STATUS.FINISHED || status === STATUS.SKIPPED) {
       setRun(false);
@@ -129,6 +131,9 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
         showProgress
         showSkipButton
         callback={handleJoyrideCallback}
+        disableOverlayClose
+        hideCloseButton={false}
+        spotlightClicks={false}
         styles={{
           options: {
             primaryColor: '#3b82f6',
@@ -141,24 +146,33 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
           tooltip: {
             fontSize: '14px',
             padding: '16px',
+            borderRadius: '8px',
+            maxWidth: '400px',
           },
           tooltipContent: {
             padding: '8px 0',
+          },
+          tooltipTitle: {
+            fontSize: '16px',
+            fontWeight: 'bold',
+            marginBottom: '8px',
           },
           buttonNext: {
             backgroundColor: '#3b82f6',
             fontSize: '14px',
             padding: '8px 16px',
+            borderRadius: '4px',
           },
           buttonBack: {
             color: '#6b7280',
             fontSize: '14px',
             padding: '8px 16px',
+            borderRadius: '4px',
           },
           buttonSkip: {
             color: '#6b7280',
             fontSize: '14px',
-          },
+          }
         }}
       />
     </>
