@@ -38,6 +38,26 @@ export default function GeneralSection({ values, onChange }) {
           <div className="text-xs text-red-600">60–10000</div>
         ) : null}
       </label>
+      
+      <div className="border-t pt-4">
+        <label className="block text-sm mb-2">
+          Onboarding Tour
+        </label>
+        <button
+          type="button"
+          className="btn w-full"
+          onClick={() => {
+            if (window.startCombustionTour) {
+              window.startCombustionTour();
+            }
+          }}
+        >
+          Start Tour
+        </button>
+        <div className="text-xs text-slate-500 mt-1">
+          Replay the guided introduction to all features
+        </div>
+      </div>
     </div>
   );
 }

@@ -40,6 +40,7 @@ import { saveConfig, getDefaultConfig } from "./lib/config";
 import SettingsMenu from "./components/SettingsMenu";
 import AirDrawerIndicator from "./components/AirDrawerIndicator";
 import GridAutoSizer from "./components/GridAutoSizer";
+import JoyrideHost from "./tour/JoyrideHost";
 import { panels, defaultZoneById } from "./panels";
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -1202,6 +1203,7 @@ const rheostatRampRef = useRef(null);
   
   return (
   <div className="min-h-screen w-full bg-background text-foreground">
+      <JoyrideHost />
   <style>{`
         @keyframes flicker { from { transform: scale(1) translateY(0px); opacity: 0.9; } to { transform: scale(1.04) translateY(-2px); opacity: 1; } }
         @keyframes spark { from { transform: translateY(2px) scale(0.9); opacity: .7; } to { transform: translateY(-2px) scale(1.1); opacity: 1; } }
