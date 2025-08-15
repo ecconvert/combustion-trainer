@@ -3,6 +3,8 @@
  * Defines feature mapping and Joyride step configurations.
  */
 
+import React from 'react';
+
 export interface FeatureInfo {
   id: string;
   selector: string;
@@ -94,131 +96,166 @@ export const FEATURE_MAP: FeatureInfo[] = [
 export const JOYRIDE_STEPS = [
   {
     target: 'body',
-    content: `
+    content: (
       <div>
-        <h3 style="margin: 0 0 12px 0; font-size: 18px; font-weight: bold;">🔥 Welcome to Combustion Trainer!</h3>
-        <p style="margin: 0 0 8px 0;">This guided tour will teach you how to tune a boiler for optimal efficiency. You'll learn to select fuel, power up, tune at different firing rates, and export your data.</p>
-        <p style="margin: 0; font-weight: bold;">Let's get started!</p>
+        <h3>🔥 Welcome to Combustion Trainer!</h3>
+        <p>
+          This guided tour will teach you how to tune a boiler for optimal efficiency. 
+          You'll learn to select fuel, power up, tune at different firing rates, and export your data.
+        </p>
+        <p><strong>Let's get started!</strong></p>
       </div>
-    `,
+    ),
     placement: 'center',
     disableBeacon: true,
   },
   {
     target: "[data-tour='fuel']",
-    content: `
+    content: (
       <div>
-        <h3 style="margin: 0 0 12px 0; font-size: 16px; font-weight: bold;">🔧 Step 1: Select Your Fuel</h3>
-        <p style="margin: 0;">Each fuel type (Natural Gas, Propane, Fuel Oil #2) has different combustion characteristics and optimal O₂/CO targets. Choose your fuel to begin.</p>
+        <h4>🔧 Step 1: Select Your Fuel</h4>
+        <p>
+          Each fuel type (Natural Gas, Propane, Fuel Oil #2) has different combustion 
+          characteristics and optimal O<sub>₂</sub>/CO targets. Choose your fuel to begin.
+        </p>
       </div>
-    `,
+    ),
     placement: 'bottom',
   },
   {
     target: "[data-tour='power']",
-    content: `
+    content: (
       <div>
-        <h3 style="margin: 0 0 12px 0; font-size: 16px; font-weight: bold;">⚡ Step 2: Power On the Boiler</h3>
-        <p style="margin: 0;">Click the Power button to start the boiler. Watch the status sequence progress from OFF → PURGE → IGNITION → RUN_AUTO.</p>
+        <h4>⚡ Step 2: Power On the Boiler</h4>
+        <p>
+          Click the <strong>Power</strong> button to start the boiler. Watch the status sequence 
+          progress from <code>OFF → PURGE → IGNITION → RUN_AUTO</code>.
+        </p>
       </div>
-    `,
+    ),
     placement: 'bottom',
   },
   {
     target: "[data-tour='firing-rate']",
-    content: `
+    content: (
       <div>
-        <h3 style="margin: 0 0 12px 0; font-size: 16px; font-weight: bold;">🎚️ Step 3: Set Firing Rate</h3>
-        <p style="margin: 0;">Control the boiler's firing rate from 0-100%. For optimal tuning, we'll work at both 30% and 70% firing rates to cover the operating range.</p>
+        <h4>🎚️ Step 3: Set Firing Rate</h4>
+        <p>
+          Control the boiler's firing rate from 0-100%. For optimal tuning, we'll work at 
+          both <strong>30%</strong> and <strong>70%</strong> firing rates to cover the operating range.
+        </p>
       </div>
-    `,
+    ),
     placement: 'bottom',
   },
   {
     target: "[data-tour='regulator']",
-    content: `
+    content: (
       <div>
-        <h3 style="margin: 0 0 12px 0; font-size: 16px; font-weight: bold;">🔧 Step 4: Adjust Fuel Pressure</h3>
-        <p style="margin: 0;">The pressure regulator controls fuel pressure. Higher pressure provides a wider fuel adjustment range during tuning.</p>
+        <h4>🔧 Step 4: Adjust Fuel Pressure</h4>
+        <p>
+          The pressure regulator controls fuel pressure. Higher pressure provides a wider 
+          fuel adjustment range during tuning.
+        </p>
       </div>
-    `,
+    ),
     placement: 'bottom',
   },
   {
     target: "[data-tour='tuning-toggle']",
-    content: `
+    content: (
       <div>
-        <h3 style="margin: 0 0 12px 0; font-size: 16px; font-weight: bold;">🎯 Step 5: Enable Tuning Mode</h3>
-        <p style="margin: 0;">Turn ON Tuning Mode to manually adjust fuel and air flows. This unlocks the CAM point saving feature for creating your combustion curve.</p>
+        <h4>🎯 Step 5: Enable Tuning Mode</h4>
+        <p>
+          Turn <strong>ON</strong> Tuning Mode to manually adjust fuel and air flows. 
+          This unlocks the CAM point saving feature for creating your combustion curve.
+        </p>
       </div>
-    `,
+    ),
     placement: 'bottom',
   },
   {
     target: "[data-tour='cam-30']",
-    content: `
+    content: (
       <div>
-        <h3 style="margin: 0 0 12px 0; font-size: 16px; font-weight: bold;">📊 Step 6: Tune at 30% Load</h3>
-        <p style="margin: 0;">Click the 30% CAM button, then adjust fuel and air to achieve optimal combustion. Save this point when O₂ and CO readings are stable.</p>
+        <h4>📊 Step 6: Tune at 30% Load</h4>
+        <p>
+          Click the <strong>30% CAM</strong> button, then adjust fuel and air to achieve 
+          optimal combustion. Save this point when O<sub>₂</sub> and CO readings are stable.
+        </p>
       </div>
-    `,
+    ),
     placement: 'bottom',
   },
   {
     target: "[data-tour='cam-70']",
-    content: `
+    content: (
       <div>
-        <h3 style="margin: 0 0 12px 0; font-size: 16px; font-weight: bold;">📊 Step 7: Tune at 70% Load</h3>
-        <p style="margin: 0;">Now click 70% and repeat the tuning process. This higher firing rate will require different fuel/air settings. Save this point too.</p>
+        <h4>📊 Step 7: Tune at 70% Load</h4>
+        <p>
+          Now click <strong>70%</strong> and repeat the tuning process. This higher firing rate 
+          will require different fuel/air settings. Save this point too.
+        </p>
       </div>
-    `,
+    ),
     placement: 'bottom',
   },
   {
     target: "[data-tour='analyzer']",
-    content: `
+    content: (
       <div>
-        <h3 style="margin: 0 0 12px 0; font-size: 16px; font-weight: bold;">🔬 Step 8: Use the Analyzer</h3>
-        <p style="margin: 0;">The combustion analyzer measures O₂, CO, and NOx levels. Click Start → Insert Probe → Save Reading to document your tuning results.</p>
+        <h4>🔬 Step 8: Use the Analyzer</h4>
+        <p>
+          The combustion analyzer measures O<sub>₂</sub>, CO, and NO<sub>x</sub> levels. 
+          Click <strong>Start → Insert Probe → Save Reading</strong> to document your tuning results.
+        </p>
       </div>
-    `,
+    ),
     placement: 'bottom',
   },
   {
     target: "[data-tour='trends']",
-    content: `
+    content: (
       <div>
-        <h3 style="margin: 0 0 12px 0; font-size: 16px; font-weight: bold;">📈 Step 9: Monitor Live Trends</h3>
-        <p style="margin: 0;">The trends chart shows real-time combustion data. You can export CSV data from here when your tuning session is complete.</p>
+        <h4>📈 Step 9: Monitor Live Trends</h4>
+        <p>
+          The trends chart shows real-time combustion data. You can export CSV data from 
+          here when your tuning session is complete.
+        </p>
       </div>
-    `,
+    ),
     placement: 'bottom',
   },
   {
     target: "[data-tour='scenarios']",
-    content: `
+    content: (
       <div>
-        <h3 style="margin: 0 0 12px 0; font-size: 16px; font-weight: bold;">🧪 Step 10: Try Troubleshooting</h3>
-        <p style="margin: 0;">Practice with scenarios like 'Low air, hot stack' or 'High draft, cold stack' to learn how different conditions affect combustion.</p>
+        <h4>🧪 Step 10: Try Troubleshooting</h4>
+        <p>
+          Practice with scenarios like <em>"Low air, hot stack"</em> or <em>"High draft, cold stack"</em> 
+          to learn how different conditions affect combustion.
+        </p>
       </div>
-    `,
+    ),
     placement: 'bottom',
   },
   {
     target: "[data-tour='settings']",
-    content: `
+    content: (
       <div>
-        <h3 style="margin: 0 0 12px 0; font-size: 16px; font-weight: bold;">⚙️ Final Step: Settings & Checklist</h3>
-        <p style="margin: 0 0 8px 0;">Access settings for units, themes, and data export. Quick checklist:</p>
-        <ul style="margin: 0; padding-left: 20px;">
+        <h4>⚙️ Final Step: Settings & Checklist</h4>
+        <p>
+          Access settings for units, themes, and data export. Quick checklist:
+        </p>
+        <ul>
           <li>✓ Fuel selected</li>
-          <li>✓ Boiler reached RUN_AUTO</li>
+          <li>✓ Boiler reached <code>RUN_AUTO</code></li>
           <li>✓ CAM points saved</li>
           <li>✓ Data exported</li>
         </ul>
-        <p style="margin: 8px 0 0 0; font-weight: bold;">Great job completing the tour! 🎉</p>
+        <p><strong>Great job completing the tour! 🎉</strong></p>
       </div>
-    `,
+    ),
     placement: 'bottom',
   },
 ];
