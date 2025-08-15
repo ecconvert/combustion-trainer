@@ -23,6 +23,7 @@ export default function SettingsMenu({
   const [position, setPosition] = useState({ x: 100, y: 100 });
   const [dragging, setDragging] = useState(false);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [previewPayload, setPreviewPayload] = useState(null);
   const modalRef = useRef(null);
 
   useEffect(() => {
@@ -37,6 +38,14 @@ export default function SettingsMenu({
     // Intentionally do not depend on `config` to prevent focus loss while typing
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // Handle preview updates asynchronously to avoid setState during render
+  useEffect(() => {
+    if (previewPayload && onPreview) {
+      onPreview(previewPayload.config, previewPayload.meta);
+      setPreviewPayload(null);
+    }
+  }, [previewPayload, onPreview]);
 
   // ESC to close and basic focus trap
   useEffect(() => {
@@ -76,8 +85,8 @@ export default function SettingsMenu({
   const handleField = (sec, field, value) => {
     setLocal((p) => {
       const next = { ...p, [sec]: { ...p[sec], [field]: value } };
-      // Live preview in parent if provided
-      onPreview && onPreview(next, { section: sec, field });
+      // Schedule preview update to happen after state update
+      setPreviewPayload({ config: next, meta: { section: sec, field } });
       return next;
     });
   };
@@ -87,7 +96,8 @@ export default function SettingsMenu({
     const defaults = getDefaultConfig();
     setLocal((p) => {
       const next = { ...p, [section]: defaults[section] };
-      onPreview && onPreview(next, { section, field: "*" });
+      // Schedule preview update to happen after state update
+      setPreviewPayload({ config: next, meta: { section, field: "*" } });
       return next;
     });
   };
