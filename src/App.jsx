@@ -1281,6 +1281,62 @@ const rheostatRampRef = useRef(null);
                 When ON, adjust fuel and air together and step the cam in 10%
                 intervals.
               </div>
+              {tuningOn && (
+                <div className="mt-4 space-y-4" data-testid="tuning-sliders">
+                  {/* Fuel Flow tuning slider */}
+                  <div>
+                    <label htmlFor="tuning-fuel" className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold block mb-1">Fuel Flow</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        id="tuning-fuel"
+                        type="range"
+                        aria-label="tuning fuel flow"
+                        min={0}
+                        max={maxFuel}
+                        step={0.1}
+                        value={fuelFlow}
+                        onInput={(e) => {
+                          const v = parseFloat(e.target.value);
+                          setFuelFlow(() => clamp(v, minFuel, maxFuel));
+                        }}
+                        className="flex-1"
+                      />
+                      {fuelFlow <= minFuel + 1e-6 && (
+                        <span className="pill bg-amber-500 text-white" title="At minimum fuel flow">MIN</span>
+                      )}
+                      {fuelFlow >= maxFuel - 1e-6 && (
+                        <span className="pill bg-amber-500 text-white" title="At maximum fuel flow">MAX</span>
+                      )}
+                    </div>
+                  </div>
+                  {/* Air Flow tuning slider */}
+                  <div>
+                    <label htmlFor="tuning-air" className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold block mb-1">Air Flow</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        id="tuning-air"
+                        type="range"
+                        aria-label="tuning air flow"
+                        min={0}
+                        max={200}
+                        step={1}
+                        value={airFlow}
+                        onInput={(e) => {
+                          const v = parseFloat(e.target.value);
+                          setAirFlow(() => clamp(v, 0, 200));
+                        }}
+                        className="flex-1"
+                      />
+                      {airFlow <= 0 && (
+                        <span className="pill bg-amber-500 text-white" title="At minimum air flow">MIN</span>
+                      )}
+                      {airFlow >= 200 && (
+                        <span className="pill bg-amber-500 text-white" title="At maximum air flow">MAX</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             <CollapsibleSection title="Analyzer">
               <div className="card">
