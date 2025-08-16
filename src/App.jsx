@@ -1506,7 +1506,7 @@ const rheostatRampRef = useRef(null);
               </div>
             </div>
             {/* Programmer moved directly below visualization */}
-            <div className="mt-6 digital-panel">
+            <div className="mt-6 digital-panel" data-tour="programmer">
               <div className="flex items-center justify-between digital-text">
                 <div>
                   <div className="label" style={{ color: "#064e3b" }}>Programmer (EP160)</div>

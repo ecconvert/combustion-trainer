@@ -139,13 +139,35 @@ export const JOYRIDE_STEPS = [
     placement: 'bottom',
   },
   {
+    target: "[data-tour='programmer']",
+    content: (
+      <div>
+        <h4>🤖 Step 3: Monitor the Programmer</h4>
+        <p>
+          The <strong>Programmer (EP160)</strong> panel shows the current burner state and controls the startup sequence. 
+          This is your "brain" of the boiler system.
+        </p>
+        <p>
+          <strong>Key Information:</strong>
+        </p>
+        <ul className="list-disc list-inside space-y-1 text-sm">
+          <li><strong>State:</strong> Current phase (STANDBY → PREPURGE → TRIAL → RUN_AUTO)</li>
+          <li><strong>LEDs:</strong> T5 Spark, T6 Pilot, T7 Main flame detection</li>
+          <li><strong>Flame Signal:</strong> Real-time flame intensity (20-80 is normal)</li>
+        </ul>
+        <p><strong>👀 Watch for the state to reach "RUN_AUTO" before adjusting firing rate!</strong></p>
+      </div>
+    ),
+    placement: 'top',
+  },
+  {
     target: "[data-tour='firing-rate']",
     content: (
       <div>
-        <h4>🎚️ Step 3: Set Initial Firing Rate</h4>
+        <h4>🎚️ Step 4: Set Initial Firing Rate</h4>
         <p>
-          Once in <code>RUN_AUTO</code>, you can adjust the firing rate. Start low 
-          (around 30%) for initial tuning, then work up to higher rates.
+          Once the programmer shows <code>RUN_AUTO</code>, you can safely adjust the firing rate. 
+          Start low (around 30%) for initial tuning, then work up to higher rates.
         </p>
         <p><strong>Best Practice:</strong> Always tune at multiple firing rates (30% and 70%).</p>
       </div>
@@ -156,7 +178,7 @@ export const JOYRIDE_STEPS = [
     target: "[data-tour='technician']",
     content: (
       <div>
-        <h4>🔧 Step 4: Open Technician Tools</h4>
+        <h4>🔧 Step 5: Open Technician Tools</h4>
         <p>
           Click the <strong>Technician</strong> button to access advanced tuning controls. 
           This opens the technician drawer with specialized tools and settings.
@@ -171,7 +193,7 @@ export const JOYRIDE_STEPS = [
     target: "[data-tour='tuning-toggle']",
     content: (
       <div>
-        <h4>🎯 Step 5: Enable Tuning Mode</h4>
+        <h4>🎯 Step 6: Enable Tuning Mode</h4>
         <p>
           Turn <strong>ON</strong> Tuning Mode to manually adjust fuel and air flows. 
           This unlocks the CAM point saving feature for creating your combustion curve.
@@ -187,7 +209,7 @@ export const JOYRIDE_STEPS = [
     target: "[data-tour='analyzer']",
     content: (
       <div>
-        <h4>🔬 Step 6: Start the Analyzer</h4>
+        <h4>🔬 Step 7: Start the Analyzer</h4>
         <p>
           Click <strong>Start/Zero</strong> to initialize the combustion analyzer. 
           Wait for it to reach <strong>Ready</strong> status before proceeding.
@@ -201,7 +223,7 @@ export const JOYRIDE_STEPS = [
     target: "[data-tour='analyzer']",
     content: (
       <div>
-        <h4>📏 Step 7: Insert Probe & Sample</h4>
+        <h4>📏 Step 8: Insert Probe & Sample</h4>
         <p>
           Once Ready, click <strong>Insert Probe</strong> to begin sampling. The analyzer 
           will measure O<sub>₂</sub>, CO, CO<sub>af</sub>, and NO<sub>x</sub> levels.
@@ -215,7 +237,7 @@ export const JOYRIDE_STEPS = [
     target: "[data-tour='cam-30']",
     content: (
       <div>
-        <h4>📊 Step 8: Tune at 30% Load</h4>
+        <h4>📊 Step 9: Tune at 30% Load</h4>
         <p>
           Click the <strong>30% CAM</strong> button, then adjust fuel and air to achieve 
           optimal combustion (target O<sub>₂</sub> levels per your fuel type).
@@ -230,7 +252,7 @@ export const JOYRIDE_STEPS = [
     target: "[data-tour='cam-70']",
     content: (
       <div>
-        <h4>🔧 Step 9: Tune at 70% Load</h4>
+        <h4>🔧 Step 10: Tune at 70% Load</h4>
         <p>
           Now click <strong>70%</strong> and repeat the tuning process. Higher firing rates 
           typically require different fuel/air ratios for optimal efficiency.
@@ -244,7 +266,7 @@ export const JOYRIDE_STEPS = [
     target: "[data-tour='trends']",
     content: (
       <div>
-        <h4>📈 Step 10: Monitor Live Trends</h4>
+        <h4>📈 Step 11: Monitor Live Trends</h4>
         <p>
           The trends chart shows real-time combustion data. This helps you see how 
           changes affect performance over time.
@@ -258,7 +280,7 @@ export const JOYRIDE_STEPS = [
     target: "[data-tour='scenarios']",
     content: (
       <div>
-        <h4>🧪 Step 11: Practice Troubleshooting</h4>
+        <h4>🧪 Step 12: Practice Troubleshooting</h4>
         <p>
           Try scenarios like <em>"Low air, hot stack"</em> or <em>"Dirty nozzles"</em> 
           to learn how different field conditions affect combustion.
@@ -278,6 +300,7 @@ export const JOYRIDE_STEPS = [
         </p>
         <ul>
           <li>✓ Fuel selected and pressure set</li>
+          <li>✓ Programmer monitored through startup sequence</li>
           <li>✓ Boiler safely started to <code>RUN_AUTO</code></li>
           <li>✓ Technician drawer opened</li>
           <li>✓ Tuning mode enabled</li>
