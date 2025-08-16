@@ -74,9 +74,20 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
 
   // Handle tour completion or skip
   const handleJoyrideCallback = useCallback((data: CallBackProps) => {
-    const { status, index, type, action } = data;
+    const { status, index, type, action, step } = data;
     
     console.log('Joyride callback:', { status, index, type, action });
+    
+    // Handle automatic actions for specific steps
+    if (type === 'step:after' && step?.target === "[data-tour='technician']") {
+      // Automatically open the technician drawer when reaching this step
+      setTimeout(() => {
+        const techButton = document.querySelector("[data-tour='technician']") as HTMLButtonElement;
+        if (techButton) {
+          techButton.click();
+        }
+      }, 500); // Small delay to ensure tour tooltip is positioned first
+    }
     
     if (status === STATUS.FINISHED || status === STATUS.SKIPPED) {
       setRun(false);
@@ -157,7 +168,7 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
         callback={handleJoyrideCallback}
         disableOverlayClose
         hideCloseButton={false}
-        spotlightClicks={false}
+        spotlightClicks={true}
         styles={{
           options: {
             primaryColor: '#3b82f6',

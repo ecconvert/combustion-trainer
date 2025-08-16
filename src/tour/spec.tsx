@@ -161,6 +161,7 @@ export const JOYRIDE_STEPS = [
           Click the <strong>Technician</strong> button to access advanced tuning controls. 
           This opens the technician drawer with specialized tools and settings.
         </p>
+        <p><strong>👆 Go ahead and click it now!</strong> The tour will automatically open the drawer for you.</p>
         <p><strong>Pro Tip:</strong> The technician panel contains all the tools for manual tuning!</p>
       </div>
     ),
