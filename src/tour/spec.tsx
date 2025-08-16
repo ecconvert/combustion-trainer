@@ -125,27 +125,10 @@ export const JOYRIDE_STEPS = [
     placement: 'bottom',
   },
   {
-    target: "[data-tour='regulator']",
-    content: (
-      <div>
-        <h4>🔧 Step 2: Set Fuel Pressure</h4>
-        <p>
-          <strong>Set your regulator pressure before starting!</strong> This controls 
-          the available fuel flow range and must be properly adjusted for safety.
-        </p>
-        <p>
-          <em>Gas:</em> ~3.5 in. w.c. for NG, ~10-11 in. w.c. for LP<br/>
-          <em>Oil:</em> Start with 100 psi pump pressure
-        </p>
-      </div>
-    ),
-    placement: 'bottom',
-  },
-  {
     target: "[data-tour='power']",
     content: (
       <div>
-        <h4>⚡ Step 3: Power On the Boiler</h4>
+        <h4>⚡ Step 2: Power On the Boiler</h4>
         <p>
           Now click <strong>Power → On</strong> to begin the safety startup sequence. 
           Watch the status progression: <code>OFF → PURGE → IGNITION → RUN_AUTO</code>
@@ -159,7 +142,7 @@ export const JOYRIDE_STEPS = [
     target: "[data-tour='firing-rate']",
     content: (
       <div>
-        <h4>🎚️ Step 4: Set Initial Firing Rate</h4>
+        <h4>🎚️ Step 3: Set Initial Firing Rate</h4>
         <p>
           Once in <code>RUN_AUTO</code>, you can adjust the firing rate. Start low 
           (around 30%) for initial tuning, then work up to higher rates.
@@ -168,6 +151,20 @@ export const JOYRIDE_STEPS = [
       </div>
     ),
     placement: 'bottom',
+  },
+  {
+    target: "[data-tour='technician']",
+    content: (
+      <div>
+        <h4>🔧 Step 4: Open Technician Tools</h4>
+        <p>
+          Click the <strong>Technician</strong> button to access advanced tuning controls. 
+          This opens the technician drawer with specialized tools and settings.
+        </p>
+        <p><strong>Pro Tip:</strong> The technician panel contains all the tools for manual tuning!</p>
+      </div>
+    ),
+    placement: 'left',
   },
   {
     target: "[data-tour='tuning-toggle']",
@@ -179,15 +176,16 @@ export const JOYRIDE_STEPS = [
           This unlocks the CAM point saving feature for creating your combustion curve.
         </p>
         <p><strong>Safety Note:</strong> Only adjust fuel/air when burner is running stable.</p>
+        <p><em>Note: CAM interval buttons (0%, 10%, 20%, etc.) will appear when tuning mode is enabled!</em></p>
       </div>
     ),
-    placement: 'bottom',
+    placement: 'left',
   },
   {
     target: "[data-tour='analyzer']",
     content: (
       <div>
-        <h4>� Step 6: Start the Analyzer</h4>
+        <h4>🔬 Step 6: Start the Analyzer</h4>
         <p>
           Click <strong>Start/Zero</strong> to initialize the combustion analyzer. 
           Wait for it to reach <strong>Ready</strong> status before proceeding.
@@ -195,13 +193,13 @@ export const JOYRIDE_STEPS = [
         <p><strong>Tip:</strong> Always zero the analyzer before taking readings!</p>
       </div>
     ),
-    placement: 'bottom',
+    placement: 'left',
   },
   {
     target: "[data-tour='analyzer']",
     content: (
       <div>
-        <h4>🔬 Step 7: Insert Probe & Sample</h4>
+        <h4>📏 Step 7: Insert Probe & Sample</h4>
         <p>
           Once Ready, click <strong>Insert Probe</strong> to begin sampling. The analyzer 
           will measure O<sub>₂</sub>, CO, CO<sub>af</sub>, and NO<sub>x</sub> levels.
@@ -209,7 +207,7 @@ export const JOYRIDE_STEPS = [
         <p><strong>Wait for stable readings</strong> before making adjustments!</p>
       </div>
     ),
-    placement: 'bottom',
+    placement: 'left',
   },
   {
     target: "[data-tour='cam-30']",
@@ -221,15 +219,16 @@ export const JOYRIDE_STEPS = [
           optimal combustion (target O<sub>₂</sub> levels per your fuel type).
         </p>
         <p><strong>Save this point</strong> when readings are stable and within targets.</p>
+        <p><em>The CAM buttons appear when tuning mode is ON for easy 10% interval tuning!</em></p>
       </div>
     ),
-    placement: 'bottom',
+    placement: 'left',
   },
   {
     target: "[data-tour='cam-70']",
     content: (
       <div>
-        <h4>� Step 9: Tune at 70% Load</h4>
+        <h4>🔧 Step 9: Tune at 70% Load</h4>
         <p>
           Now click <strong>70%</strong> and repeat the tuning process. Higher firing rates 
           typically require different fuel/air ratios for optimal efficiency.
@@ -237,7 +236,7 @@ export const JOYRIDE_STEPS = [
         <p><strong>Save this point too</strong> - you're building your combustion curve!</p>
       </div>
     ),
-    placement: 'bottom',
+    placement: 'left',
   },
   {
     target: "[data-tour='trends']",
@@ -265,7 +264,7 @@ export const JOYRIDE_STEPS = [
         <p><strong>Real-world skill:</strong> Diagnosing problems from analyzer readings!</p>
       </div>
     ),
-    placement: 'bottom',
+    placement: 'left',
   },
   {
     target: "[data-tour='settings']",
@@ -278,6 +277,8 @@ export const JOYRIDE_STEPS = [
         <ul>
           <li>✓ Fuel selected and pressure set</li>
           <li>✓ Boiler safely started to <code>RUN_AUTO</code></li>
+          <li>✓ Technician drawer opened</li>
+          <li>✓ Tuning mode enabled</li>
           <li>✓ Analyzer started and calibrated</li>
           <li>✓ CAM points saved at multiple loads</li>
           <li>✓ Data exported for records</li>
@@ -286,6 +287,6 @@ export const JOYRIDE_STEPS = [
         <p><em>Use Settings to restart this tour anytime.</em></p>
       </div>
     ),
-    placement: 'bottom',
+    placement: 'left',
   },
 ];

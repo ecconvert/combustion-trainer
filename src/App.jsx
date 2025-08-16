@@ -1387,7 +1387,7 @@ const rheostatRampRef = useRef(null);
         <div className="max-w-7xl mx-auto flex items-center gap-4">
           <h1 className="text-2xl font-semibold">Combustion Trainer</h1>
           <div className="ml-auto flex items-center gap-3">
-            <button className="btn" onClick={() => setDrawerOpen(true)}>Technician</button>
+            <button className="btn" data-tour="technician" onClick={() => setDrawerOpen(true)}>Technician</button>
 
             <button
               className="btn"

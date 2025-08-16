@@ -87,9 +87,24 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
         done: true,
         version: TUTORIAL_VERSION
       });
-    } else if (type === 'step:after') {
-      setStepIndex(index + 1);
+    } else if (status === STATUS.ERROR) {
+      console.warn('Joyride error at step:', index);
+      // Stop the tour on error
+      setRun(false);
+      setStepIndex(0);
+    } else if (action === 'close') {
+      // Handle close button (X) click
+      setRun(false);
+      setStepIndex(0);
+      
+      // Mark tutorial as completed when closed
+      updateTutorialState({
+        done: true,
+        version: TUTORIAL_VERSION
+      });
     }
+    // Note: React Joyride manages stepIndex internally when continuous=true
+    // We don't need to manually update stepIndex for next/prev actions
   }, [updateTutorialState]);
 
   // Public method to restart tour
@@ -136,7 +151,6 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
       <Joyride
         steps={JOYRIDE_STEPS}
         run={run}
-        stepIndex={stepIndex}
         continuous
         showProgress
         showSkipButton
