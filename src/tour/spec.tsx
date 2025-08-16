@@ -145,17 +145,21 @@ export const JOYRIDE_STEPS = [
     target: "[data-tour='programmer']",
     content: (
       <div>
-        <h4>🤖 Step 3: Monitor the Programmer</h4>
+        <h4>� Step 3: Monitor the Programmer (EP160)</h4>
         <p>
           The <strong>Programmer (EP160)</strong> panel shows the current burner state and controls the startup sequence. 
           This is your "brain" of the boiler system.
+        </p>
+        <p>
+          <strong>⚡ Fast-Forward Enabled!</strong> We're speeding up the startup sequence for this tutorial. 
+          Normally this takes 30-60 seconds, but we'll show it in just a few seconds.
         </p>
         <p>
           <strong>🚀 Watch the automatic startup sequence:</strong>
         </p>
         <ul className="list-disc list-inside space-y-1 text-sm">
           <li><strong>State:</strong> STANDBY → PREPURGE → TRIAL → RUN_AUTO</li>
-          <li><strong>LEDs:</strong> T5 Spark, T6 Pilot, T7 Main flame detection</li>
+          <li><strong>LEDs:</strong> Watch T5 Spark ⚡, T6 Pilot 🔥, T7 Main flame 🔥</li>
           <li><strong>Flame Signal:</strong> Real-time flame intensity (20-80 is normal)</li>
         </ul>
         <p><strong>👀 The tour started the boiler - watch for RUN_AUTO status!</strong></p>

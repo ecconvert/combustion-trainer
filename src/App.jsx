@@ -505,6 +505,7 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
   const [rheostat, setRheostat] = useState(0); // firing-rate input 0–100%
   const [minFuel, setMinFuel] = useState(2); // derived from regulator pressure
   const [maxFuel, setMaxFuel] = useState(18);
+  const [simSpeedMultiplier, setSimSpeedMultiplier] = useState(1); // for tour fast-forward
 
   // User-adjustable flow inputs (molar basis)
   const [fuelFlow, setFuelFlow] = useState(5); // fuel flow (arbitrary mol/min scale)
@@ -776,22 +777,30 @@ useEffect(() => {
   useEffect(() => { ambientFRef.current = ambientF; }, [ambientF]);
   const setpointFRef = useRef(setpointF);
   useEffect(() => { setpointFRef.current = setpointF; }, [setpointF]);
+  const simSpeedMultiplierRef = useRef(simSpeedMultiplier);
+  useEffect(() => { simSpeedMultiplierRef.current = simSpeedMultiplier; }, [simSpeedMultiplier]);
 
   // Expose boiler control functions globally for tour
   useEffect(() => {
     window.setBoilerOn = setBoilerOn;
     window.getBoilerOn = () => boilerOn;
+    window.setSimSpeed = setSimSpeedMultiplier;
+    window.getSimSpeed = () => simSpeedMultiplier;
     return () => {
       delete window.setBoilerOn;
       delete window.getBoilerOn;
+      delete window.setSimSpeed;
+      delete window.getSimSpeed;
     };
-  }, [setBoilerOn, boilerOn]);
+  }, [setBoilerOn, boilerOn, setSimSpeedMultiplier, simSpeedMultiplier]);
 
   // Main 10 Hz loop that advances the burner state machine and simulated sensors
   useEffect(() => {
     const id = setInterval(() => {
       const dtms = 100; // loop interval in milliseconds
-      stateTimeRef.current += dtms; // track elapsed time in current state
+      const speedMultiplier = simSpeedMultiplierRef.current;
+      const effectiveDtms = dtms * speedMultiplier; // apply speed multiplier
+      stateTimeRef.current += effectiveDtms; // track elapsed time in current state
 
       // --- Get latest values from refs ---
       const currentBoilerOn = boilerOnRef.current;
@@ -873,7 +882,7 @@ useEffect(() => {
           stateTimeRef.current = 0;
         } else if (currentFlameSignal < 10) {
           // delay timer for flame failure
-          flameOutTimerRef.current += dtms;
+          flameOutTimerRef.current += effectiveDtms;
           if (flameOutTimerRef.current >= EP160.FFRT_SEC * 1000) {
             setT7Main(false);
             setBurnerState("LOCKOUT");

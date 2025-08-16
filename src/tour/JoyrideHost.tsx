@@ -105,6 +105,11 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
         }
       }, 200);
       return; // Don't process other actions while pausing
+    } else if (type === 'step:after' && step?.target === "[data-tour='programmer']") {
+      // Enable fast-forward for startup sequence during tour
+      if ((window as any).setSimSpeed) {
+        (window as any).setSimSpeed(8); // 8x speed for startup sequence
+      }
     }
     
     if (status === STATUS.FINISHED || status === STATUS.SKIPPED) {
@@ -116,6 +121,11 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
       if (originalBoilerState !== null && (window as any).setBoilerOn) {
         (window as any).setBoilerOn(originalBoilerState);
         setOriginalBoilerState(null);
+      }
+      
+      // Reset simulation speed to normal
+      if ((window as any).setSimSpeed) {
+        (window as any).setSimSpeed(1);
       }
       
       // Mark tutorial as completed
