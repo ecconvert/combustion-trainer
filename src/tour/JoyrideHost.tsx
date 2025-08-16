@@ -26,6 +26,7 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
   const [run, setRun] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [showSplash, setShowSplash] = useState(false);
+  const [pauseForAnimation, setPauseForAnimation] = useState(false);
 
   // Don't show splash in test environment
   const isTestEnv = typeof process !== 'undefined' && process.env.NODE_ENV === 'test';
@@ -80,18 +81,25 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
     
     // Handle automatic actions for specific steps
     if (type === 'step:after' && step?.target === "[data-tour='technician']") {
-      // Automatically open the technician drawer when reaching this step
+      // Pause the tour and open the technician drawer
+      setPauseForAnimation(true);
       setTimeout(() => {
         const techButton = document.querySelector("[data-tour='technician']") as HTMLButtonElement;
         if (techButton) {
           techButton.click();
+          // Wait for drawer animation to complete before resuming tour
+          setTimeout(() => {
+            setPauseForAnimation(false);
+          }, 400); // 300ms animation + 100ms buffer
         }
-      }, 500); // Small delay to ensure tour tooltip is positioned first
+      }, 200);
+      return; // Don't process other actions while pausing
     }
     
     if (status === STATUS.FINISHED || status === STATUS.SKIPPED) {
       setRun(false);
       setStepIndex(0);
+      setPauseForAnimation(false);
       
       // Mark tutorial as completed
       updateTutorialState({
@@ -103,10 +111,12 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
       // Stop the tour on error
       setRun(false);
       setStepIndex(0);
+      setPauseForAnimation(false);
     } else if (action === 'close') {
       // Handle close button (X) click
       setRun(false);
       setStepIndex(0);
+      setPauseForAnimation(false);
       
       // Mark tutorial as completed when closed
       updateTutorialState({
@@ -123,6 +133,7 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
     setStepIndex(0);
     setShowSplash(true);
     setRun(false);
+    setPauseForAnimation(false);
   }, []);
 
   // Handle splash screen actions
@@ -130,6 +141,7 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
     setShowSplash(false);
     setStepIndex(0);
     setRun(true);
+    setPauseForAnimation(false);
   }, []);
 
   const handleSkipTour = useCallback(() => {
@@ -161,7 +173,7 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
       )}
       <Joyride
         steps={JOYRIDE_STEPS}
-        run={run}
+        run={run && !pauseForAnimation}
         continuous
         showProgress
         showSkipButton

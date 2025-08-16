@@ -181,6 +181,7 @@ export const JOYRIDE_STEPS = [
       </div>
     ),
     placement: 'left',
+    disableBeacon: true,
   },
   {
     target: "[data-tour='analyzer']",
