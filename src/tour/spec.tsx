@@ -130,13 +130,16 @@ export const JOYRIDE_STEPS = [
       <div>
         <h4>⚡ Step 2: Power On the Boiler</h4>
         <p>
-          Now click <strong>Power → On</strong> to begin the safety startup sequence. 
-          Watch the status progression: <code>OFF → PURGE → IGNITION → RUN_AUTO</code>
+          <strong>We'll start this boiler for you!</strong> The tour will automatically 
+          turn on the boiler power so you can see the complete startup sequence.
         </p>
-        <p><strong>Notice:</strong> The system automatically purges before attempting ignition!</p>
+        <p>
+          In real life, you would click <code>On</code> here to energize the boiler control system.
+        </p>
+        <p><strong>Note:</strong> If you cancel the tour, the boiler will return to its original state.</p>
       </div>
     ),
-    placement: 'bottom',
+    placement: 'top',
   },
   {
     target: "[data-tour='programmer']",
@@ -148,14 +151,14 @@ export const JOYRIDE_STEPS = [
           This is your "brain" of the boiler system.
         </p>
         <p>
-          <strong>Key Information:</strong>
+          <strong>🚀 Watch the automatic startup sequence:</strong>
         </p>
         <ul className="list-disc list-inside space-y-1 text-sm">
-          <li><strong>State:</strong> Current phase (STANDBY → PREPURGE → TRIAL → RUN_AUTO)</li>
+          <li><strong>State:</strong> STANDBY → PREPURGE → TRIAL → RUN_AUTO</li>
           <li><strong>LEDs:</strong> T5 Spark, T6 Pilot, T7 Main flame detection</li>
           <li><strong>Flame Signal:</strong> Real-time flame intensity (20-80 is normal)</li>
         </ul>
-        <p><strong>👀 Watch for the state to reach "RUN_AUTO" before adjusting firing rate!</strong></p>
+        <p><strong>👀 The tour started the boiler - watch for RUN_AUTO status!</strong></p>
       </div>
     ),
     placement: 'top',

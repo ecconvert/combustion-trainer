@@ -777,6 +777,16 @@ useEffect(() => {
   const setpointFRef = useRef(setpointF);
   useEffect(() => { setpointFRef.current = setpointF; }, [setpointF]);
 
+  // Expose boiler control functions globally for tour
+  useEffect(() => {
+    window.setBoilerOn = setBoilerOn;
+    window.getBoilerOn = () => boilerOn;
+    return () => {
+      delete window.setBoilerOn;
+      delete window.getBoilerOn;
+    };
+  }, [setBoilerOn, boilerOn]);
+
   // Main 10 Hz loop that advances the burner state machine and simulated sensors
   useEffect(() => {
     const id = setInterval(() => {

@@ -27,6 +27,7 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
   const [stepIndex, setStepIndex] = useState(0);
   const [showSplash, setShowSplash] = useState(false);
   const [pauseForAnimation, setPauseForAnimation] = useState(false);
+  const [originalBoilerState, setOriginalBoilerState] = useState<boolean | null>(null);
 
   // Don't show splash in test environment
   const isTestEnv = typeof process !== 'undefined' && process.env.NODE_ENV === 'test';
@@ -80,7 +81,17 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
     console.log('Joyride callback:', { status, index, type, action });
     
     // Handle automatic actions for specific steps
-    if (type === 'step:after' && step?.target === "[data-tour='technician']") {
+    if (type === 'step:after' && step?.target === "[data-tour='power']") {
+      // Save original boiler state and automatically turn on boiler for tour
+      if (originalBoilerState === null && (window as any).getBoilerOn) {
+        setOriginalBoilerState((window as any).getBoilerOn());
+      }
+      setTimeout(() => {
+        if ((window as any).setBoilerOn) {
+          (window as any).setBoilerOn(true);
+        }
+      }, 200);
+    } else if (type === 'step:after' && step?.target === "[data-tour='technician']") {
       // Pause the tour and open the technician drawer
       setPauseForAnimation(true);
       setTimeout(() => {
@@ -101,6 +112,12 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
       setStepIndex(0);
       setPauseForAnimation(false);
       
+      // Restore original boiler state if tour is cancelled or completed
+      if (originalBoilerState !== null && (window as any).setBoilerOn) {
+        (window as any).setBoilerOn(originalBoilerState);
+        setOriginalBoilerState(null);
+      }
+      
       // Mark tutorial as completed
       updateTutorialState({
         done: true,
@@ -108,15 +125,27 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
       });
     } else if (status === STATUS.ERROR) {
       console.warn('Joyride error at step:', index);
-      // Stop the tour on error
+      // Stop the tour on error and restore boiler state
       setRun(false);
       setStepIndex(0);
       setPauseForAnimation(false);
+      
+      // Restore original boiler state
+      if (originalBoilerState !== null && (window as any).setBoilerOn) {
+        (window as any).setBoilerOn(originalBoilerState);
+        setOriginalBoilerState(null);
+      }
     } else if (action === 'close') {
       // Handle close button (X) click
       setRun(false);
       setStepIndex(0);
       setPauseForAnimation(false);
+      
+      // Restore original boiler state when tour is cancelled
+      if (originalBoilerState !== null && (window as any).setBoilerOn) {
+        (window as any).setBoilerOn(originalBoilerState);
+        setOriginalBoilerState(null);
+      }
       
       // Mark tutorial as completed when closed
       updateTutorialState({
@@ -126,7 +155,7 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
     }
     // Note: React Joyride manages stepIndex internally when continuous=true
     // We don't need to manually update stepIndex for next/prev actions
-  }, [updateTutorialState]);
+  }, [updateTutorialState, originalBoilerState]);
 
   // Public method to restart tour
   const startTour = useCallback(() => {
@@ -134,6 +163,7 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
     setShowSplash(true);
     setRun(false);
     setPauseForAnimation(false);
+    setOriginalBoilerState(null); // Reset boiler state tracking
   }, []);
 
   // Handle splash screen actions
@@ -142,6 +172,7 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
     setStepIndex(0);
     setRun(true);
     setPauseForAnimation(false);
+    setOriginalBoilerState(null); // Reset boiler state tracking
   }, []);
 
   const handleSkipTour = useCallback(() => {
