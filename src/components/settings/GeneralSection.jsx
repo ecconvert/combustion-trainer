@@ -1,6 +1,6 @@
 import React from "react";
 
-export default function GeneralSection({ values, onChange, onResetLayouts }) {
+export default function GeneralSection({ values, onChange, onResetLayouts, onCloseSettings }) {
   return (
     <div className="space-y-4">
       <label className="block text-sm">
@@ -49,6 +49,10 @@ export default function GeneralSection({ values, onChange, onResetLayouts }) {
           onClick={() => {
             if (window.startCombustionTour) {
               window.startCombustionTour();
+            }
+            // Close the settings menu for a smoother experience
+            if (onCloseSettings) {
+              onCloseSettings();
             }
           }}
         >

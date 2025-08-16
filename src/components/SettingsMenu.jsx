@@ -201,6 +201,7 @@ export default function SettingsMenu({
                   values={local[section]}
                   onChange={(field, value) => handleField(section, field, value)}
                   onResetLayouts={section === "general" ? onResetLayouts : undefined}
+                  onCloseSettings={section === "general" ? onCancel : undefined}
                 />
               )
             )}
