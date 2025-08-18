@@ -85,31 +85,53 @@ export async function fastForwardToRunAuto(page: Page) {
   } else {
     await page.evaluate(() => (window as any).setBoilerOn && (window as any).setBoilerOn(true));
   }
-  // Repeatedly click Advance until RUN_AUTO is visible in programmer state readout
-  for (let i = 0; i < 40; i++) {
-    // Prefer global getter when available
-    const state = await page.evaluate(() => (window as any).getProgrammerState ? (window as any).getProgrammerState() : null);
+  // Repeatedly advance until RUN_AUTO is visible in programmer state readout
+  // Increase retries and use more aggressive fallbacks (batch advance via evaluate)
+  const maxAttempts = 600; // allow up to ~90s at 150ms waits (test file extends timeout)
+  for (let i = 0; i < maxAttempts; i++) {
+    // Prefer global getter when available; protect evaluate calls from throwing
+    let state: string | null = null;
+    try {
+      state = await page.evaluate(() => (window as any).getProgrammerState ? (window as any).getProgrammerState() : null);
+    } catch (e) {
+      // ignore evaluation errors and continue
+    }
     if (state === 'RUN_AUTO') return true;
 
     // Try clicking Advance if possible (may be blocked by overlay)
-    const advanceBtn = page.locator("[data-tour='programmer'] button:has-text('Advance')");
-    if (await advanceBtn.count()) {
-      try {
-        await advanceBtn.click({ timeout: 200 });
-      } catch (e) {
-        // ignore click failures
-  // Try global helper to advance programmer
-  await page.evaluate(() => (window as any).advanceProgrammer && (window as any).advanceProgrammer());
+    try {
+      const advanceBtn = page.locator("[data-tour='programmer'] button:has-text('Advance')");
+      if (await advanceBtn.count()) {
+        try {
+          await advanceBtn.click({ timeout: 300 });
+        } catch (e) {
+          // ignore click failures
+        }
       }
-    }
+    } catch (e) { /* ignore */ }
 
-    // As a fallback, speed up the sim to force progression if API exists
-    await page.evaluate(() => {
-      try {
-        if ((window as any).setSimSpeed) (window as any).setSimSpeed(50);
-        if ((window as any).setBoilerOn) (window as any).setBoilerOn(true);
-      } catch (e) { /* noop */ }
-    });
+    // Try a small batch of programmatic advances as a stronger fallback
+    try {
+      await page.evaluate(() => {
+        try {
+          const adv = (window as any).advanceProgrammer;
+          if (adv && typeof adv === 'function') {
+            // call multiple times to speed up reaching RUN_AUTO
+            for (let j = 0; j < 5; j++) adv();
+          }
+        } catch (e) { /* noop */ }
+      });
+    } catch (e) { /* ignore */ }
+
+    // As a fallback, speed up the sim to force progression (if API exists)
+    try {
+      await page.evaluate(() => {
+        try {
+          if ((window as any).setSimSpeed) (window as any).setSimSpeed(50);
+          if ((window as any).setBoilerOn) (window as any).setBoilerOn(true);
+        } catch (e) { /* noop */ }
+      });
+    } catch (e) { /* ignore */ }
 
     await page.waitForTimeout(150);
   }

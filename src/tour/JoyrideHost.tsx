@@ -151,31 +151,46 @@ export default function JoyrideHost({ runOnFirstVisit = true }: { runOnFirstVisi
 
   // Watch for RUN_AUTO when fast-forward is active
   useEffect(() => {
-    let raf: number | null = null;
-    const tick = () => {
+    const restoreIfReady = () => {
       try {
-        if ((window as any).getProgrammerState) {
-          const st = (window as any).getProgrammerState();
-          if (st === 'RUN_AUTO') {
-            if ((window as any).setSimSpeed) {
-              const toRestore = previousSpeedRef.current ?? 1;
-              (window as any).setSimSpeed(toRestore);
-            }
-            activatedFastForwardRef.current = false;
-            setFastForwardActive(false);
-            previousSpeedRef.current = null;
-            forceTick();
-            return;
+        if (!activatedFastForwardRef.current) return false;
+        const gp = (window as any).getProgrammerState;
+        if (gp && gp() === 'RUN_AUTO') {
+          if ((window as any).setSimSpeed) {
+            const toRestore = previousSpeedRef.current ?? 1;
+            (window as any).setSimSpeed(toRestore);
           }
+          activatedFastForwardRef.current = false;
+          setFastForwardActive(false);
+          previousSpeedRef.current = null;
+          forceTick();
+          return true;
         }
-      } catch (err) {
-        // ignore
-      }
-      if (activatedFastForwardRef.current) raf = requestAnimationFrame(tick);
+      } catch { /* ignore */ }
+      return false;
     };
-    if (fastForwardActive && activatedFastForwardRef.current) raf = requestAnimationFrame(tick);
-    return () => { if (raf) cancelAnimationFrame(raf); };
-  }, [fastForwardActive]);
+
+    // Expose a test-only manual trigger to force restoration deterministically
+    (window as any).__tourMaybeRestoreFF = restoreIfReady;
+
+    if (fastForwardActive && activatedFastForwardRef.current) {
+      // Use both rAF and an interval (belt & suspenders) for reliability in headless runs
+      let raf: number | null = null;
+      const tick = () => {
+        if (!restoreIfReady() && activatedFastForwardRef.current) {
+          raf = requestAnimationFrame(tick);
+        }
+      };
+      raf = requestAnimationFrame(tick);
+      const id = setInterval(() => { restoreIfReady(); }, 200);
+      return () => {
+        if (raf) cancelAnimationFrame(raf);
+        clearInterval(id);
+        delete (window as any).__tourMaybeRestoreFF;
+      };
+    }
+    return () => { delete (window as any).__tourMaybeRestoreFF; };
+  }, [fastForwardActive, forceTick]);
 
   useEffect(() => {
     return () => {
@@ -207,12 +222,20 @@ export default function JoyrideHost({ runOnFirstVisit = true }: { runOnFirstVisi
         steps={JOYRIDE_STEPS as any}
         run={run && !pauseForAnimation}
         continuous
+        scrollToFirstStep
         showProgress
         showSkipButton
         callback={handleJoyrideCallback}
         disableOverlayClose
         hideCloseButton={false}
         spotlightClicks
+        // floaterProps uses Popper modifiers; cast to any to avoid strict prop typing
+        floaterProps={(({
+          modifiers: [
+            { name: 'preventOverflow', options: { altAxis: true, tether: false, padding: 8, rootBoundary: 'viewport' } },
+            { name: 'flip', options: { fallbackPlacements: ['top', 'bottom', 'right', 'left'] } }
+          ]
+        }) as any)}
         styles={{
           options: {
             primaryColor: '#3b82f6',
