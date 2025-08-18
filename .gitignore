@@ -36,3 +36,10 @@ dist-ssr
 
 # test coverage output
 coverage/
+
+# pnpm
+.pnpm-store/
+
+# build outputs
+build/
+.vite/
