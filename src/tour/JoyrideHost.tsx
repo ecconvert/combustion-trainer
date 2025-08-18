@@ -3,9 +3,10 @@
  * Integrates with localStorage for first-visit detection and tour completion tracking.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Joyride, { CallBackProps, STATUS } from 'react-joyride';
 import { JOYRIDE_STEPS } from './spec';
+import { FAST_FORWARD_MULTIPLIER, STARTUP_STEP_SELECTOR } from './constants';
 import WelcomeSplash from '../components/WelcomeSplash';
 
 declare const process: any;
@@ -28,6 +29,10 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
   const [showSplash, setShowSplash] = useState(false);
   const [pauseForAnimation, setPauseForAnimation] = useState(false);
   const [originalBoilerState, setOriginalBoilerState] = useState<boolean | null>(null);
+  // Track whether we activated fast-forward so we only restore if we set it
+  const activatedFastForwardRef = useRef(false);
+  // Remember previous simulation speed so we can restore it
+  const previousSpeedRef = useRef<number | null>(null);
 
   // Don't show splash in test environment
   const isTestEnv = typeof process !== 'undefined' && process.env.NODE_ENV === 'test';
@@ -105,10 +110,20 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
         }
       }, 200);
       return; // Don't process other actions while pausing
-    } else if (type === 'step:after' && step?.target === "[data-tour='programmer']") {
+    } else if (type === 'step:after' && step?.target === STARTUP_STEP_SELECTOR) {
       // Enable fast-forward for startup sequence during tour
-      if ((window as any).setSimSpeed) {
-        (window as any).setSimSpeed(8); // 8x speed for startup sequence
+      if ((window as any).setSimSpeed && (window as any).getSimSpeed) {
+        try {
+          const current = (window as any).getSimSpeed();
+          // Only activate if not already at desired multiplier
+          if (current !== FAST_FORWARD_MULTIPLIER) {
+            previousSpeedRef.current = current;
+            (window as any).setSimSpeed(FAST_FORWARD_MULTIPLIER);
+            activatedFastForwardRef.current = true;
+          }
+        } catch (err) {
+          console.warn('Fast-forward activation failed:', err);
+        }
       }
     }
     
@@ -123,9 +138,16 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
         setOriginalBoilerState(null);
       }
       
-      // Reset simulation speed to normal
-      if ((window as any).setSimSpeed) {
-        (window as any).setSimSpeed(1);
+      // Reset simulation speed to previous value if we activated it
+      if ((window as any).setSimSpeed && activatedFastForwardRef.current) {
+        const toRestore = previousSpeedRef.current ?? 1;
+        try {
+          (window as any).setSimSpeed(toRestore);
+        } catch (err) {
+          console.warn('Failed to restore sim speed:', err);
+        }
+        activatedFastForwardRef.current = false;
+        previousSpeedRef.current = null;
       }
       
       // Mark tutorial as completed
@@ -166,6 +188,27 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
     // Note: React Joyride manages stepIndex internally when continuous=true
     // We don't need to manually update stepIndex for next/prev actions
   }, [updateTutorialState, originalBoilerState]);
+
+  // Clean up on unmount: restore sim speed and boiler state if necessary
+  useEffect(() => {
+    return () => {
+      if (activatedFastForwardRef.current && (window as any).setSimSpeed) {
+        const toRestore = previousSpeedRef.current ?? 1;
+        try {
+          (window as any).setSimSpeed(toRestore);
+        } catch (err) {
+          console.warn('Failed to restore sim speed on unmount:', err);
+        }
+      }
+      if (originalBoilerState !== null && (window as any).setBoilerOn) {
+        try {
+          (window as any).setBoilerOn(originalBoilerState);
+        } catch (err) {
+          console.warn('Failed to restore boiler state on unmount:', err);
+        }
+      }
+    };
+  }, [originalBoilerState]);
 
   // Public method to restart tour
   const startTour = useCallback(() => {
