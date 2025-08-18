@@ -1452,21 +1452,7 @@ const rheostatRampRef = useRef(null);
         </div>
       </header>
 
-      {/* Small introduction card added via shadcn/ui pattern (inline) */}
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="rounded-lg border bg-card p-4 shadow-sm">
-          <div className="mb-2">
-            <div className="font-semibold text-lg">Welcome to Combustion Trainer</div>
-            <div className="text-sm text-slate-500">This interactive tutorial will walk you through a safe boiler startup and tuning workflow.</div>
-          </div>
-          <div className="mt-2">
-            <p className="text-sm">Use the guided tour (Settings → Start Guided Tour) to follow step-by-step instructions. During the tutorial we may speed up the startup so you don't wait — a Fast-Forward badge will indicate when we do.</p>
-          </div>
-          <div className="mt-4 text-sm">
-            <a className="btn btn-primary" href="#" onClick={(e) => { e.preventDefault(); window.startCombustionTour && window.startCombustionTour(); }}>Start Guided Tour</a>
-          </div>
-        </div>
-      </div>
+  {/* Intro card removed (splash + tour covers onboarding) */}
 
       <main className="max-w-7xl mx-auto p-6">
         <ResponsiveGridLayout
