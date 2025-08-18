@@ -75,13 +75,42 @@ export async function capture(page: Page, name: string, fullPage = false) {
 export async function fastForwardToRunAuto(page: Page) {
   // Ensure power on
   const powerOn = page.locator("[data-tour='power'] button:has-text('On')");
-  if (await powerOn.count()) await powerOn.click();
+  if (await powerOn.count()) {
+    try {
+      await powerOn.click({ timeout: 1000 });
+    } catch (err) {
+      // Overlay may intercept pointer events during Joyride; fallback to global setter
+      await page.evaluate(() => (window as any).setBoilerOn && (window as any).setBoilerOn(true));
+    }
+  } else {
+    await page.evaluate(() => (window as any).setBoilerOn && (window as any).setBoilerOn(true));
+  }
   // Repeatedly click Advance until RUN_AUTO is visible in programmer state readout
-  for (let i = 0; i < 20; i++) {
-    const stateText = await page.locator("[data-tour='programmer']").innerText();
-    if (/RUN_AUTO/.test(stateText)) return true;
+  for (let i = 0; i < 40; i++) {
+    // Prefer global getter when available
+    const state = await page.evaluate(() => (window as any).getProgrammerState ? (window as any).getProgrammerState() : null);
+    if (state === 'RUN_AUTO') return true;
+
+    // Try clicking Advance if possible (may be blocked by overlay)
     const advanceBtn = page.locator("[data-tour='programmer'] button:has-text('Advance')");
-    if (await advanceBtn.count()) await advanceBtn.click();
+    if (await advanceBtn.count()) {
+      try {
+        await advanceBtn.click({ timeout: 200 });
+      } catch (e) {
+        // ignore click failures
+  // Try global helper to advance programmer
+  await page.evaluate(() => (window as any).advanceProgrammer && (window as any).advanceProgrammer());
+      }
+    }
+
+    // As a fallback, speed up the sim to force progression if API exists
+    await page.evaluate(() => {
+      try {
+        if ((window as any).setSimSpeed) (window as any).setSimSpeed(50);
+        if ((window as any).setBoilerOn) (window as any).setBoilerOn(true);
+      } catch (e) { /* noop */ }
+    });
+
     await page.waitForTimeout(150);
   }
   return false;

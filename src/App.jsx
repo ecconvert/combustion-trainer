@@ -786,11 +786,23 @@ useEffect(() => {
     window.getBoilerOn = () => boilerOn;
     window.setSimSpeed = setSimSpeedMultiplier;
     window.getSimSpeed = () => simSpeedMultiplier;
+    // Expose programmer/burner state for tour fast-forward auto-exit logic
+    window.getProgrammerState = () => burnerStateRef.current;
+    // Expose a test helper to advance the programmer state machine
+    const adv = () => {
+      try {
+        if (typeof advanceStep === 'function') { advanceStep(); return true; }
+      } catch { }
+      return false;
+    };
+    window.advanceProgrammer = adv;
     return () => {
       delete window.setBoilerOn;
       delete window.getBoilerOn;
       delete window.setSimSpeed;
       delete window.getSimSpeed;
+      delete window.getProgrammerState;
+      delete window.advanceProgrammer;
     };
   }, [setBoilerOn, boilerOn, setSimSpeedMultiplier, simSpeedMultiplier]);
 

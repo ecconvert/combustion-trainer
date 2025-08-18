@@ -106,7 +106,7 @@ export const JOYRIDE_STEPS = [
         <p><strong>Let's begin with a safe, methodical startup!</strong></p>
       </div>
     ),
-    placement: 'center',
+  placement: 'center' as any,
     disableBeacon: true,
   },
   {
@@ -122,7 +122,7 @@ export const JOYRIDE_STEPS = [
         <p>Choose your fuel to establish the baseline parameters.</p>
       </div>
     ),
-    placement: 'bottom',
+  placement: 'bottom' as any,
   },
   {
     target: "[data-tour='power']",
@@ -139,7 +139,7 @@ export const JOYRIDE_STEPS = [
         <p><strong>Note:</strong> If you cancel the tour, the boiler will return to its original state.</p>
       </div>
     ),
-    placement: 'top',
+  placement: 'top' as any,
   },
   {
     target: "[data-tour='programmer']",
@@ -165,7 +165,7 @@ export const JOYRIDE_STEPS = [
         <p><strong>👀 The tour started the boiler - watch for RUN_AUTO status!</strong></p>
       </div>
     ),
-    placement: 'top',
+  placement: 'top' as any,
   },
   {
     target: "[data-tour='firing-rate']",
@@ -179,7 +179,7 @@ export const JOYRIDE_STEPS = [
         <p><strong>Best Practice:</strong> Always tune at multiple firing rates (30% and 70%).</p>
       </div>
     ),
-    placement: 'bottom',
+  placement: 'bottom' as any,
   },
   {
     target: "[data-tour='technician']",
@@ -194,7 +194,7 @@ export const JOYRIDE_STEPS = [
         <p><strong>Pro Tip:</strong> The technician panel contains all the tools for manual tuning!</p>
       </div>
     ),
-    placement: 'left',
+  placement: 'left' as any,
   },
   {
     target: "[data-tour='tuning-toggle']",
@@ -209,7 +209,7 @@ export const JOYRIDE_STEPS = [
         <p><em>Note: CAM interval buttons (0%, 10%, 20%, etc.) will appear when tuning mode is enabled!</em></p>
       </div>
     ),
-    placement: 'left',
+  placement: 'left' as any,
     disableBeacon: true,
   },
   {
@@ -224,7 +224,7 @@ export const JOYRIDE_STEPS = [
         <p><strong>Tip:</strong> Always zero the analyzer before taking readings!</p>
       </div>
     ),
-    placement: 'left',
+  placement: 'left' as any,
   },
   {
     target: "[data-tour='analyzer']",
@@ -238,7 +238,7 @@ export const JOYRIDE_STEPS = [
         <p><strong>Wait for stable readings</strong> before making adjustments!</p>
       </div>
     ),
-    placement: 'left',
+  placement: 'left' as any,
   },
   {
     target: "[data-tour='cam-30']",
@@ -253,7 +253,7 @@ export const JOYRIDE_STEPS = [
         <p><em>The CAM buttons appear when tuning mode is ON for easy 10% interval tuning!</em></p>
       </div>
     ),
-    placement: 'left',
+  placement: 'left' as any,
   },
   {
     target: "[data-tour='cam-70']",
@@ -281,7 +281,7 @@ export const JOYRIDE_STEPS = [
         <p><strong>Professional Tip:</strong> Watch for stable, consistent readings!</p>
       </div>
     ),
-    placement: 'bottom',
+  placement: 'bottom' as any,
   },
   {
     target: "[data-tour='scenarios']",
@@ -295,7 +295,7 @@ export const JOYRIDE_STEPS = [
         <p><strong>Real-world skill:</strong> Diagnosing problems from analyzer readings!</p>
       </div>
     ),
-    placement: 'left',
+  placement: 'left' as any,
   },
   {
     target: "[data-tour='settings']",
@@ -319,6 +319,6 @@ export const JOYRIDE_STEPS = [
         <p><em>Use Settings to restart this tour anytime.</em></p>
       </div>
     ),
-    placement: 'left',
+  placement: 'left' as any,
   },
 ];
