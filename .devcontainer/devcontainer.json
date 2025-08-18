@@ -1,0 +1,27 @@
+{
+  "name": "combustion-trainer",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/common-utils:2": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-azuretools.vscode-docker",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "github.copilot"
+      ],
+      "settings": { "editor.formatOnSave": true }
+    }
+  },
+  "remoteUser": "node",
+  "updateRemoteUserUID": true,
+  "postCreateCommand": "sudo corepack enable && corepack prepare pnpm@latest --activate && (pnpm i || npm ci || npm i)",
+  "forwardPorts": [5173, 3000],
+  "portsAttributes": {
+    "5173": { "label": "Vite" },
+    "3000": { "label": "App" }
+  }
+}
