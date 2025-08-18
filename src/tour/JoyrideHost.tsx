@@ -65,6 +65,21 @@ export default function JoyrideHost({ runOnFirstVisit = true }: { runOnFirstVisi
   const handleJoyrideCallback = useCallback((data: CallBackProps) => {
     const { status, type, step, action } = data;
 
+    // When power step is shown, save original state and turn boiler on
+    if (run && type === 'step:after' && step?.target === "[data-tour='power']") {
+      if ((window as any).getBoilerOn && (window as any).setBoilerOn) {
+        try {
+          const currentState = (window as any).getBoilerOn();
+          setOriginalBoilerState(currentState);
+          if (!currentState) {
+            (window as any).setBoilerOn(true);
+          }
+        } catch (err) {
+          console.warn('Boiler startup for tour failed:', err);
+        }
+      }
+    }
+
     // When programmer/startup step is shown, enable fast-forward
     if ((type === 'step:after' || type === 'step:before') && step?.target === STARTUP_STEP_SELECTOR) {
       if ((window as any).setSimSpeed && (window as any).getSimSpeed) {
@@ -132,7 +147,7 @@ export default function JoyrideHost({ runOnFirstVisit = true }: { runOnFirstVisi
       }
       updateTutorialState({ done: true, version: TUTORIAL_VERSION });
     }
-  }, [originalBoilerState, updateTutorialState]);
+  }, [run, originalBoilerState, updateTutorialState]);
 
   // Watch for RUN_AUTO when fast-forward is active
   useEffect(() => {

@@ -13,7 +13,7 @@ export default defineConfig({
     { name: "webkit", use: { ...devices["Desktop Safari"] } },
   ],
   webServer: {
-    command: "npm run dev",
+    command: "npm run dev -- --mode test",
     url: "http://localhost:5173",
     reuseExistingServer: !process.env.CI,
   },

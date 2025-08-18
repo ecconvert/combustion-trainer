@@ -786,6 +786,13 @@ useEffect(() => {
     window.getBoilerOn = () => boilerOn;
     window.setSimSpeed = setSimSpeedMultiplier;
     window.getSimSpeed = () => simSpeedMultiplier;
+    // Test helper: forcibly set rheostat (firing rate) bypassing disabled state for deterministic e2e
+    window.setRheostat = (val) => {
+      try {
+        const n = Math.max(0, Math.min(100, parseInt(val)));
+        setRheostat(n);
+      } catch { /* ignore */ }
+    };
     // Expose programmer/burner state for tour fast-forward auto-exit logic
     window.getProgrammerState = () => burnerStateRef.current;
     // Expose a test helper to advance the programmer state machine
@@ -801,6 +808,7 @@ useEffect(() => {
       delete window.getBoilerOn;
       delete window.setSimSpeed;
       delete window.getSimSpeed;
+  delete window.setRheostat;
       delete window.getProgrammerState;
       delete window.advanceProgrammer;
     };

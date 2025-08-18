@@ -6,6 +6,9 @@ test('tour fast-forward activates on programmer step and shows badge', async ({ 
   await page.waitForLoadState('networkidle');
 
   await startTour(page);
+  await advanceJoyride(page);
+  await advanceJoyride(page);
+  await advanceJoyride(page);
 
   const hit = await waitForJoyrideStep(page, (text) => /Programmer \(EP160\)|Monitor the Programmer|Programmer/.test(text));
   expect(hit, 'Programmer step appeared').toBeTruthy();
