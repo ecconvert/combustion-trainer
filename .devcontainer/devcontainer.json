@@ -3,10 +3,19 @@
   "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
   "features": {
     "ghcr.io/devcontainers/features/git:1": {},
-    "ghcr.io/devcontainers/features/common-utils:2": {}
+    "ghcr.io/devcontainers/features/common-utils:2": {},
     "ghcr.io/devcontainers/features/github-cli:1": {}
-
   },
+  "remoteEnv": {
+    "GITHUB_PERSONAL_ACCESS_TOKEN": "${localEnv:GITHUB_PERSONAL_ACCESS_TOKEN}",
+    "GEMINI_API_KEY": "${localEnv:GEMINI_API_KEY}"
+  },
+  "containerEnv": {
+    "GITHUB_PERSONAL_ACCESS_TOKEN": "${localEnv:GITHUB_PERSONAL_ACCESS_TOKEN}",
+    "GEMINI_API_KEY": "${localEnv:GEMINI_API_KEY}"
+  },
+
+
   "customizations": {
     "vscode": {
       "extensions": [
@@ -20,7 +29,8 @@
   },
   "remoteUser": "node",
   "updateRemoteUserUID": true,
-  "postCreateCommand": "sudo corepack enable && corepack prepare pnpm@latest --activate && (pnpm i || npm ci || npm i)",
+  "postCreateCommand": "sudo npm i -g pnpm && (pnpm i || npm ci || npm i)",
+  "postStartCommand": "bash .devcontainer/setup-google.sh",
   "forwardPorts": [5173, 3000],
   "portsAttributes": {
     "5173": { "label": "Vite" },

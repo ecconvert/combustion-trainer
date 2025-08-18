@@ -43,3 +43,9 @@ coverage/
 # build outputs
 build/
 .vite/
+
+# Playwright / E2E artifacts
+test-results/
+playwright-report/
+e2e/screenshots/
+
