@@ -7,6 +7,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Joyride, { CallBackProps, STATUS } from 'react-joyride';
 import { JOYRIDE_STEPS } from './spec';
 import { FAST_FORWARD_MULTIPLIER, STARTUP_STEP_SELECTOR } from './constants';
+import FastForwardBadge from '../components/FastForwardBadge';
 import WelcomeSplash from '../components/WelcomeSplash';
 
 declare const process: any;
@@ -110,7 +111,7 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
         }
       }, 200);
       return; // Don't process other actions while pausing
-    } else if (type === 'step:after' && step?.target === STARTUP_STEP_SELECTOR) {
+  } else if ((type === 'step:after' || type === 'step:before') && step?.target === STARTUP_STEP_SELECTOR) {
       // Enable fast-forward for startup sequence during tour
       if ((window as any).setSimSpeed && (window as any).getSimSpeed) {
         try {
@@ -120,6 +121,8 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
             previousSpeedRef.current = current;
             (window as any).setSimSpeed(FAST_FORWARD_MULTIPLIER);
             activatedFastForwardRef.current = true;
+            // trigger a re-render so badge becomes visible
+            forceTick();
           }
         } catch (err) {
           console.warn('Fast-forward activation failed:', err);
@@ -146,7 +149,9 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
         } catch (err) {
           console.warn('Failed to restore sim speed:', err);
         }
-        activatedFastForwardRef.current = false;
+  activatedFastForwardRef.current = false;
+  // trigger a re-render so badge hides
+  forceTick();
         previousSpeedRef.current = null;
       }
       
@@ -247,6 +252,10 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
     };
   }, [startTour]);
 
+  // fastForwardActive state mirrors activatedFastForwardRef for rendering
+  const [, setTick] = useState(0);
+  const forceTick = useCallback(() => setTick(t => t + 1), []);
+
   return (
     <>
       {showSplash && (
@@ -306,6 +315,7 @@ export default function JoyrideHost({ runOnFirstVisit = true }: JoyrideHostProps
           }
         }}
       />
+  <FastForwardBadge visible={!!activatedFastForwardRef.current} multiplier={FAST_FORWARD_MULTIPLIER} />
     </>
   );
 }
