@@ -41,6 +41,7 @@ import AirDrawerIndicator from "./components/AirDrawerIndicator";
 import GridAutoSizer from "./components/GridAutoSizer";
 import { useTour } from "./hooks/useTour";
 import { usePanelManagement } from "./hooks/usePanelManagement";
+import useLayoutManager from "./hooks/useLayoutManager";
 import { useAppState } from "./hooks/useAppState";
 import { useSimulationLoop } from "./hooks/useSimulationLoop";
 import useSettings from "./hooks/useSettings";
