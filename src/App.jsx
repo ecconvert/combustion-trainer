@@ -81,7 +81,8 @@ const defaultLayouts = {
     { i: "readouts", x: 7, y: 0,  w: 5,  h: 12, minW: 3, minH:  6 },
     { i: "trend",    x: 7, y: 12, w: 5,  h: 16, minW: 3, minH: 10 },
     { i: "meter",    x: 7, y: 28, w: 5,  h: 12, minW: 3, minH:  8 },
-  { i: "tuning",   x: 0, y: 46, w: 7,  h: 18, minW: 4, minH: 10 },
+    // Place tuning panel in the right column by default (immediately under meter)
+    { i: "tuning",   x: 7, y: 40, w: 5,  h: 22, minW: 3, minH: 14 },
   ],
   md: [
     { i: "viz",      x: 0, y: 0,  w: 6,  h: 26 },
@@ -89,7 +90,7 @@ const defaultLayouts = {
     { i: "readouts", x: 6, y: 0,  w: 4,  h: 12 },
     { i: "trend",    x: 6, y: 12, w: 4,  h: 16 },
     { i: "meter",    x: 6, y: 28, w: 4,  h: 12 },
-  { i: "tuning",   x: 0, y: 46, w: 6,  h: 18 },
+    { i: "tuning",   x: 6, y: 40, w: 4,  h: 22 },
   ],
   sm: [
     { i: "viz",      x: 0, y: 0,  w: 5,  h: 26 },
@@ -97,7 +98,7 @@ const defaultLayouts = {
     { i: "readouts", x: 5, y: 0,  w: 3,  h: 12 },
     { i: "trend",    x: 5, y: 12, w: 3,  h: 16 },
     { i: "meter",    x: 5, y: 28, w: 3,  h: 12 },
-  { i: "tuning",   x: 0, y: 46, w: 5,  h: 18 },
+    { i: "tuning",   x: 5, y: 40, w: 3,  h: 24 },
   ],
   xs: [
     { i: "viz",      x: 0, y: 0,  w: 6, h: 24 },
@@ -105,7 +106,7 @@ const defaultLayouts = {
     { i: "readouts", x: 0, y: 42, w: 6, h: 10 },
     { i: "trend",    x: 0, y: 52, w: 6, h: 16 },
     { i: "meter",    x: 0, y: 68, w: 6, h: 10 },
-  { i: "tuning",   x: 0, y: 78, w: 6, h: 18 },
+    { i: "tuning",   x: 0, y: 78, w: 6, h: 24 },
   ],
   xxs: [
     { i: "viz",      x: 0, y: 0,  w: 4, h: 24 },
@@ -113,7 +114,7 @@ const defaultLayouts = {
     { i: "readouts", x: 0, y: 42, w: 4, h: 10 },
     { i: "trend",    x: 0, y: 52, w: 4, h: 16 },
     { i: "meter",    x: 0, y: 68, w: 4, h: 10 },
-  { i: "tuning",   x: 0, y: 78, w: 4, h: 18 },
+    { i: "tuning",   x: 0, y: 78, w: 4, h: 26 },
   ],
 };
 
@@ -1280,13 +1281,40 @@ useEffect(() => {
       const next = { ...prev };
       Object.keys(next).forEach((bp) => {
         const arr = Array.isArray(next[bp]) ? next[bp].slice() : [];
-        if (!arr.some((it) => it.i === 'tuning')) {
+        const template = (defaultLayouts[bp] || []).find((it) => it.i === 'tuning');
+        const has = arr.find((it) => it.i === 'tuning');
+        if (!has) {
+          // Insert new tuning panel using template positioned at bottom to avoid overlap, then rely on user drag if needed
           const yMax = arr.reduce((m, it) => Math.max(m, it.y + (it.h || 0)), 0);
-          const template = (defaultLayouts[bp] || []).find((it) => it.i === 'tuning');
           const newItem = template ? { ...template, y: yMax } : { i: 'tuning', x: 0, y: yMax, w: 6, h: 18 };
           arr.push(newItem);
           next[bp] = arr;
           changed = true;
+        } else if (has && template) {
+          // Migration: if existing tuning panel still at legacy left-column coords (x 0) or width differs from new template, gently move toward template
+          const legacyLike = has.x === 0 && (has.w >= 5 || has.w === prev?.[bp]?.find?.(i=>i.i==='controls')?.w);
+          const needsResize = has.w !== template.w || has.h < template.h * 0.8; // expand if notably smaller
+          const needsMove = has.x !== template.x;
+          if (legacyLike || needsResize || needsMove) {
+            const updated = { ...has };
+            // Only adopt new size/position if it will not collide; perform naive collision check and push down if needed
+            updated.x = template.x;
+            updated.w = template.w;
+            updated.h = Math.max(has.h, template.h); // don't shrink user height
+            // Determine target y: prefer template.y but adjust downward if overlapping existing items in target column
+            let targetY = template.y;
+            const collides = (item, x, w, y, h) => !(item.x + item.w <= x || x + w <= item.x || item.y + item.h <= y || y + h <= item.y);
+            // If collision, move just below the lowest overlapping item
+            while (arr.some(it => it.i !== 'tuning' && collides(it, updated.x, updated.w, targetY, updated.h))) {
+              const blockers = arr.filter(it => it.i !== 'tuning' && collides(it, updated.x, updated.w, targetY, updated.h));
+              const pushDown = Math.max(...blockers.map(b => b.y + b.h));
+              targetY = pushDown; // stack below blockers
+            }
+            updated.y = targetY;
+            // Replace in array
+            next[bp] = arr.map(it => it.i === 'tuning' ? updated : it);
+            changed = true;
+          }
         }
       });
       return changed ? next : prev;
@@ -2180,7 +2208,7 @@ const rheostatRampRef = useRef(null);
             )}
           </GridAutoSizer>
           {tuningOn && (
-            <GridAutoSizer key="tuning" id="tuning" data-testid="panel-tuning" className="card overflow-hidden" onRows={(r) => setItemRows("tuning", r)} rowHeight={10}>
+            <GridAutoSizer key="tuning" id="tuning" data-testid="panel-tuning" className="card" onRows={(r) => setItemRows("tuning", r)} rowHeight={10}>
               <PanelHeader title="Tuning Controls" />
               <div className="mt-1 text-xs text-slate-500">
                 Adjust cam curve points and navigate standardized firing intervals.
