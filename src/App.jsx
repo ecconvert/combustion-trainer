@@ -350,6 +350,8 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
     setpointFRef,
     fuelFlowRef,
     airFlowRef,
+    rheostatRef,
+    simStackFRef,
     
     // Derived computations
     effectiveFuel,
@@ -969,8 +971,7 @@ useEffect(() => {
   // Keep latest steady-state and stack temperature in refs for a stable analyzer smoother
   const steadyRef = useRef(steady);
   useEffect(() => { steadyRef.current = steady; }, [steady]);
-  const simStackRef = useRef(simStackF);
-  useEffect(() => { simStackRef.current = simStackF; }, [simStackF]);
+  // simStackFRef now provided by useAppState hook
 
   // Analyzer smoothing loop (runs continuously; does not reset on every render)
   useEffect(() => {
@@ -978,7 +979,7 @@ useEffect(() => {
     const dt = 0.2; // s
     const id = setInterval(() => {
       const s = steadyRef.current;
-      const stackTarget = simStackRef.current;
+      const stackTarget = simStackFRef.current;
       setDispLocal((prev) => {
         const nextO2 = lerp(prev.O2, s.O2_pct, dt / tauO2);
         const nextCO = lerp(prev.CO, s.CO_ppm, dt / tauCO);
@@ -1042,9 +1043,9 @@ useEffect(() => {
   // Log history for trend chart
   const [history, setHistory] = useState([]);
   const dispRef = useRef(disp);
-  const rheostatRef = useRef(rheostat);
+  // rheostatRef now provided by useAppState hook
   useEffect(() => { dispRef.current = disp; }, [disp]);
-  useEffect(() => { rheostatRef.current = rheostat; }, [rheostat]);
+  // rheostat ref sync now handled by useAppState hook
   useEffect(() => {
     const id = setInterval(() => {
       const now = Date.now();

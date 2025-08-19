@@ -65,23 +65,6 @@ export function useAppState() {
   // Derived fuel object
   const fuel = useMemo(() => FUELS[fuelKey] || FUELS["Natural Gas"], [fuelKey]);
   const isGas = fuel.type === "gas";
-  const isOil = fuel.type === "oil";
-
-  // ----------------------- Metering system state -----------------------
-  const [meterTab, setMeterTab] = useState("Gas"); // which meter UI is visible
-  const [gasDialSize, setGasDialSize] = useState(1); // cubic ft per dial revolution
-  const [gasRunning, setGasRunning] = useState(false); // manual timing running?
-  const [gasLaps, setGasLaps] = useState([]); // recorded revolution times
-  
-  // Gas meter timer ref
-  const gasStartRef = useRef(null);
-
-  // Oil metering parameters
-  const [nozzleGPH100, setNozzleGPH100] = useState(0.75); // nozzle rating at 100 psi
-  const [oilPressure, setOilPressure] = useState(100); // pump pressure
-
-  // ----------------------- Regulator pressure state -----------------------
-  const [regPress, setRegPress] = useState(3.5); // in. w.c. for NG baseline; reset on fuel change
 
   // ----------------------- Performance references -----------------------
   // Create refs for performance-critical state that needs to be accessed in intervals
@@ -94,6 +77,8 @@ export function useAppState() {
   const setpointFRef = useRef(setpointF);
   const fuelFlowRef = useRef(fuelFlow);
   const airFlowRef = useRef(airFlow);
+  const rheostatRef = useRef(rheostat);
+  const simStackFRef = useRef(simStackF);
 
   // Update refs when state changes
   useEffect(() => { boilerOnRef.current = boilerOn; }, [boilerOn]);
@@ -105,6 +90,8 @@ export function useAppState() {
   useEffect(() => { setpointFRef.current = setpointF; }, [setpointF]);
   useEffect(() => { fuelFlowRef.current = fuelFlow; }, [fuelFlow]);
   useEffect(() => { airFlowRef.current = airFlow; }, [airFlow]);
+  useEffect(() => { rheostatRef.current = rheostat; }, [rheostat]);
+  useEffect(() => { simStackFRef.current = simStackF; }, [simStackF]);
 
   // ----------------------- Derived computations -----------------------
   // Combustion calculations
@@ -126,37 +113,6 @@ export function useAppState() {
   // Gas flow calculations for meters
   const gasCamCFH = useMemo(() => (isGas ? Math.max(0, fuelFlow) : 0), [isGas, fuelFlow]);
   const gasBurnerCFH = useMemo(() => (isGas ? Math.max(0, effectiveFuel) : 0), [isGas, effectiveFuel]);
-  
-  // Gas meter statistics
-  const gasAvg = useMemo(() => {
-    if (gasLaps.length === 0) return 0;
-    return gasLaps.reduce((sum, t) => sum + t, 0) / gasLaps.length;
-  }, [gasLaps]);
-  
-  const gasCFH = useMemo(
-    () => (gasAvg > 0 ? (3600 * gasDialSize) / gasAvg : 0),
-    [gasAvg, gasDialSize],
-  );
-  
-  const gasMBH = useMemo(() => gasCFH * fuel.HHV / 1000, [gasCFH, fuel]);
-  
-  const gasMeterRevSec = useMemo(
-    () => (gasBurnerCFH > 0 ? (3600 * gasDialSize) / gasBurnerCFH : 0),
-    [gasBurnerCFH, gasDialSize]
-  );
-  const gasMBH_model = useMemo(() => gasBurnerCFH * fuel.HHV / 1000, [gasBurnerCFH, fuel]);
-
-  // Oil flow calculations
-  const oilGPH = useMemo(
-    () => nozzleGPH100 * Math.sqrt(oilPressure / 100),
-    [nozzleGPH100, oilPressure],
-  );
-  const oilMBH = useMemo(() => oilGPH * fuel.HHV / 1000, [oilGPH, fuel]);
-  
-  // Always-tracking mapping vs actual burner flow for oil
-  const oilCamGPH = useMemo(() => (isOil ? Math.max(0, fuelFlow) : 0), [isOil, fuelFlow]);
-  const oilBurnerGPH = useMemo(() => (isOil ? Math.max(0, effectiveFuel) : 0), [isOil, effectiveFuel]);
-  const oilSecPerGal = useMemo(() => (oilBurnerGPH > 0 ? 3600 / oilBurnerGPH : 0), [oilBurnerGPH]);
 
   // ----------------------- State coordination actions -----------------------
   // Reset burner system
@@ -170,29 +126,6 @@ export function useAppState() {
     setLockoutPending(false);
     stateTimeRef.current = 0;
   }, [boilerOn]);
-
-  // Gas meter control functions
-  const startGasClock = useCallback(() => {
-    setGasRunning(true);
-    gasStartRef.current = performance.now();
-    setGasLaps([]);
-  }, []);
-
-  const lapGasClock = useCallback(() => {
-    if (!gasRunning) return;
-    const now = performance.now();
-    const dt = (now - gasStartRef.current) / 1000;
-    setGasLaps((l) => [...l, dt]);
-    gasStartRef.current = now;
-  }, [gasRunning]);
-
-  const stopGasClock = useCallback(() => setGasRunning(false), []);
-
-  const resetGasClock = useCallback(() => {
-    setGasRunning(false);
-    setGasLaps([]);
-    gasStartRef.current = null;
-  }, []);
 
   // Scenario application
   const applyScenario = useCallback((scenario) => {
@@ -262,28 +195,8 @@ export function useAppState() {
     setFuelKey,
     fuel,
     isGas,
-    isOil,
     scenarioSel,
     setScenarioSel,
-
-    // Metering system
-    meterTab,
-    setMeterTab,
-    gasDialSize,
-    setGasDialSize,
-    gasRunning,
-    setGasRunning,
-    gasLaps,
-    setGasLaps,
-    gasStartRef,
-    nozzleGPH100,
-    setNozzleGPH100,
-    oilPressure,
-    setOilPressure,
-
-    // Regulator pressure
-    regPress,
-    setRegPress,
 
     // Performance refs
     boilerOnRef,
@@ -295,29 +208,17 @@ export function useAppState() {
     setpointFRef,
     fuelFlowRef,
     airFlowRef,
+    rheostatRef,
+    simStackFRef,
 
     // Derived computations
     disp,
     effectiveFuel,
     gasCamCFH,
     gasBurnerCFH,
-    gasAvg,
-    gasCFH,
-    gasMBH,
-    gasMeterRevSec,
-    gasMBH_model,
-    oilGPH,
-    oilMBH,
-    oilCamGPH,
-    oilBurnerGPH,
-    oilSecPerGal,
 
     // Coordination actions
     resetBurner,
-    startGasClock,
-    lapGasClock,
-    stopGasClock,
-    resetGasClock,
     applyScenario,
     saveReading
   };
