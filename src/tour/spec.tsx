@@ -221,17 +221,17 @@ export const JOYRIDE_STEPS = [
     target: "[data-tour='analyzer']",
     content: (
       <div>
-        <h4>🔬 Step 7: Start the Analyzer</h4>
+        <h4>🔬 Step 7: Analyzer (Preview)</h4>
         <p>
-          Click <strong>Start/Zero</strong> to initialize (zero) the combustion analyzer. The analyzer first enters a <code>ZERO</code> phase where it measures clean ambient air to establish a baseline (oxygen reference and sensor offsets).
+          Click <strong>Start/Zero</strong> to begin the analyzer's baseline (ZERO) phase. This simulates warming and offset calibration.
         </p>
         <p>
-          When it changes to <strong>READY</strong>, zeroing is complete, the electronics are stable, and it's safe to insert the probe into the flue. <strong>READY = baseline captured, not yet sampling.</strong>
+          <em>Heads up:</em> A full analyzer workflow (distinct READY indication and probe handling guidance) isn't fully implemented yet. This step is a preview and will be expanded in a future update.
         </p>
         <p>
-          State flow: <code>OFF → ZERO → READY → SAMPLING → (optional HOLD) → SAMPLING</code>.
+          For now, you can proceed after the ZERO progress completes. A dedicated READY state and clearer probe insertion instruction are coming soon.
         </p>
-        <p><strong>Tip:</strong> Always wait for <strong>READY</strong> before inserting the probe—early sampling can give misleading CO / O₂ values.</p>
+        <p className="text-xs text-slate-500">Planned future sequence: <code>OFF → ZERO → READY → SAMPLING → (HOLD) → SAMPLING</code>.</p>
       </div>
     ),
   placement: 'left' as any,
