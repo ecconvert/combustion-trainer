@@ -41,6 +41,7 @@ import useLayoutManager from "../hooks/useLayoutManager";
 import useDataHistory from "../hooks/useDataHistory";
 import useBurnerProgrammer from "../hooks/useBurnerProgrammer";
 import useSettings from "../hooks/useSettings";
+import useTuningMode from "../hooks/useTuningMode";
 import AirDrawerIndicator from "../components/AirDrawerIndicator";
 import GridAutoSizer from "../components/GridAutoSizer";
 import { panels, defaultZoneById } from "../panels";
@@ -695,6 +696,9 @@ useEffect(() => {
     handleResizeStop,
   } = layoutManager;
 
+  // ----------------------- Tuning Mode Management -----------------------
+  const tuningMode = useTuningMode(tuningOn, setLayouts, defaultLayouts);
+
   // ----------------------- Data History Management -----------------------
   const dataHistory = useDataHistory({ 
     config, 
@@ -744,47 +748,6 @@ useEffect(() => {
     IGNITABLE_EA,
     STABLE_EA,
   } = burnerProgrammer;
-
-  useEffect(() => {
-    if (!tuningOn) return;
-    setLayouts((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      Object.keys(next).forEach((bp) => {
-        const arr = Array.isArray(next[bp]) ? next[bp].slice() : [];
-        const template = (defaultLayouts[bp] || []).find((it) => it.i === 'tuning');
-        const has = arr.find((it) => it.i === 'tuning');
-        if (!has) {
-          const yMax = arr.reduce((m, it) => Math.max(m, it.y + (it.h || 0)), 0);
-          const newItem = template ? { ...template, y: yMax } : { i: 'tuning', x: 0, y: yMax, w: 6, h: 18 };
-          arr.push(newItem);
-          next[bp] = arr;
-          changed = true;
-        } else if (has && template) {
-          const legacyLike = has.x === 0 && (has.w >= 5 || has.w === prev?.[bp]?.find?.(i=>i.i==='controls')?.w);
-          const needsResize = has.w !== template.w || has.h < template.h * 0.8;
-          const needsMove = has.x !== template.x;
-          if (legacyLike || needsResize || needsMove) {
-            const updated = { ...has };
-            updated.x = template.x;
-            updated.w = template.w;
-            updated.h = Math.max(has.h, template.h);
-            let targetY = template.y;
-            const collides = (item, x, w, y, h) => !(item.x + item.w <= x || x + w <= item.x || item.y + item.h <= y || y + h <= item.y);
-            while (arr.some(it => it.i !== 'tuning' && collides(it, updated.x, updated.w, targetY, updated.h))) {
-              const blockers = arr.filter(it => it.i !== 'tuning' && collides(it, updated.x, updated.w, targetY, updated.h));
-              const pushDown = Math.max(...blockers.map(b => b.y + b.h));
-              targetY = pushDown;
-            }
-            updated.y = targetY;
-            next[bp] = arr.map(it => it.i === 'tuning' ? updated : it);
-            changed = true;
-          }
-        }
-      });
-      return changed ? next : prev;
-    });
-  }, [tuningOn, setLayouts]);
 
 const rheostatRampRef = useRef(null);
 
