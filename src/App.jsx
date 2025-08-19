@@ -1410,10 +1410,26 @@ const rheostatRampRef = useRef(null);
                     Save Reading
                   </button>
                 </div>
-                <div className="mt-2 text-xs text-slate-500">
-                  Zero in room air to capture combustion air temperature. Then
-                  insert probe to sample.
-                </div>
+                {(() => {
+                  const help: Record<string,string> = {
+                    OFF: 'Analyzer is powered down. Click Start to begin zeroing (ambient baseline).',
+                    ZERO: 'ZERO: Establishing baseline in ambient air – wait, then click Finish Zero when stable.',
+                    READY: 'READY: Baseline captured, electronics stable. Safe to Insert Probe into the flue.',
+                    SAMPLING: 'SAMPLING: Probe in flue; readings updating in real time. Wait for stability before saving.',
+                    HOLD: 'HOLD: Sampling paused – gas path isolated. Resume to continue updating readings.'
+                  };
+                  const msg = help[anState] || '';
+                  return (
+                    <div
+                      className="mt-2 text-xs text-slate-500"
+                      data-testid="analyzer-state-help"
+                      aria-live="polite"
+                      role="status"
+                    >
+                      {msg}
+                    </div>
+                  );
+                })()}
               </div>
             </CollapsibleSection>
           </div>
