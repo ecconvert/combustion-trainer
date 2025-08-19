@@ -33,6 +33,7 @@ import Led from "../components/ui/Led";
 import Flame from "../components/effects/Flame";
 import Spark from "../components/effects/Spark";
 import Smoke from "../components/effects/Smoke";
+import AppHeader from "./components/AppHeader";
 import { saveConfig, getDefaultConfig } from "../lib/config";
 import SettingsMenu from "../components/SettingsMenu";
 import AirDrawerIndicator from "../components/AirDrawerIndicator";
@@ -1486,36 +1487,13 @@ const rheostatRampRef = useRef(null);
         onResetLayouts={handleResetLayouts}
       />
 
-
-      <header className="px-6 py-4 border-b bg-card border-border sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto flex items-center gap-4">
-          <h1 className="text-2xl font-semibold">Combustion Trainer</h1>
-          <div className="ml-auto flex items-center gap-3">
-            <button className="btn" data-tour="technician" onClick={() => setDrawerOpen(true)}>Technician</button>
-
-            <button
-              className="btn"
-              aria-label="Settings"
-              onClick={() => {
-                configBeforeSettings.current = JSON.parse(JSON.stringify(config));
-                setShowSettings(true);
-              }}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                className="w-5 h-5"
-              >
-                <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" />
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.09a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      </header>
+      <AppHeader
+        onOpenDrawer={() => setDrawerOpen(true)}
+        onOpenSettings={() => {
+          configBeforeSettings.current = JSON.parse(JSON.stringify(config));
+          setShowSettings(true);
+        }}
+      />
 
       <main className="max-w-7xl mx-auto p-6">
         <ResponsiveGridLayout
