@@ -287,6 +287,80 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
   
   // ----------------------- Core State Management -----------------------
   const appState = useAppState();
+  const {
+    // Core simulation state
+    boilerOn,
+    setBoilerOn,
+    rheostat,
+    setRheostat,
+    minFuel,
+    setMinFuel,
+    maxFuel,
+    setMaxFuel,
+    fuelFlow,
+    setFuelFlow,
+    airFlow,
+    setAirFlow,
+    ambientF,
+    setAmbientF,
+    
+    // Burner state
+    burnerState,
+    setBurnerState,
+    simStackF,
+    setSimStackF,
+    setpointF,
+    setSetpointF,
+    stateTimeRef,
+    
+    // Analyzer state
+    saved,
+    setSaved,
+    t5Spark,
+    setT5Spark,
+    t6Pilot,
+    setT6Pilot,
+    t7Main,
+    setT7Main,
+    flameSignal,
+    setFlameSignal,
+    stateCountdown,
+    setStateCountdown,
+    flameOutTimerRef,
+    lockoutReason,
+    setLockoutReason,
+    lockoutPending,
+    setLockoutPending,
+    
+    // Fuel and scenarios
+    fuelKey,
+    setFuelKey,
+    fuel,
+    isGas,
+    scenarioSel,
+    setScenarioSel,
+    
+    // Performance refs
+    boilerOnRef,
+    burnerStateRef,
+    fuelRef,
+    flameSignalRef,
+    lockoutPendingRef,
+    ambientFRef,
+    setpointFRef,
+    fuelFlowRef,
+    airFlowRef,
+    
+    // Derived computations
+    effectiveFuel,
+    gasCamCFH,
+    gasBurnerCFH,
+    
+    // Coordination actions
+    resetBurner,
+    applyScenario,
+    saveReading
+  } = appState;
   
   const [config, setConfig] = useState(initialConfig || getDefaultConfig());
   const configBeforeSettings = useRef(null);
@@ -433,7 +507,6 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
     }
   };
   // Scenario selection state and handler
-  const [scenarioSel, setScenarioSel] = useState("");
   const handleScenarioChange = useCallback((e) => {
     const val = e.target.value;
     setScenarioSel(val);
@@ -442,11 +515,8 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
     }
   }, []);
   // ----------------------- Fuel selection -----------------------
-  const [fuelKey, setFuelKey] = useState("Natural Gas"); // currently selected fuel key
-  const fuel = FUELS[fuelKey]; // lookup fuel properties
   // Helper booleans for conditional UI/logic
   const isOil = fuelKey === "Fuel Oil #2" || fuelKey === "Biodiesel";
-  const isGas = !isOil;
 
   // Programmer timing constants derived from a common Fireye EP-160 sequence
   const EP160 = { PURGE_HF_SEC: 30, LOW_FIRE_MIN_SEC: 30, LOW_FIRE_DRIVE_SEC: 5, PTFI_SEC: 10, MTFI_SPARK_OFF_SEC: 10, MTFI_PILOT_OFF_SEC: 15, POST_PURGE_SEC: 15, FFRT_SEC: 4 };
@@ -454,34 +524,11 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
   const IGNITABLE_EA = { min: 0.85, max: 1.6 }; // flame can light within this EA window
   const STABLE_EA = { min: 0.9, max: 1.5 }; // stable flame once running
 
-  // ----------------------- Global state -----------------------
-  const [boilerOn, setBoilerOn] = useState(false); // master power switch
-  const [rheostat, setRheostat] = useState(0); // firing-rate input 0–100%
-  const [minFuel, setMinFuel] = useState(2); // derived from regulator pressure
-  const [maxFuel, setMaxFuel] = useState(18);
-
-  // User-adjustable flow inputs (molar basis)
-  const [fuelFlow, setFuelFlow] = useState(5); // fuel flow (arbitrary mol/min scale)
-  const [airFlow, setAirFlow] = useState(60); // combustion air flow (mol/min)
-  const [ambientF, setAmbientF] = useState(70); // surrounding temperature
-
-  // ----------------------- Burner simulator state machine -----------------------
-  const [burnerState, setBurnerState] = useState("OFF"); // current programmer state
-  const [simStackF, setSimStackF] = useState(150); // simulated stack temperature
-  const [setpointF, setSetpointF] = useState(350); // stack temperature target
-  const stateTimeRef = useRef(0); // milliseconds elapsed in current state
-
-  // ----------------------- Analyzer state machine -----------------------
-  const [saved, setSaved] = useState(loadSaved); // logged analyzer readings
-  const [t5Spark, setT5Spark] = useState(false); // output relay states for animation
-  const [t6Pilot, setT6Pilot] = useState(false);
-  const [t7Main, setT7Main] = useState(false);
-  const [flameSignal, setFlameSignal] = useState(0); // simulated flame scanner strength
-  const [stateCountdown, setStateCountdown] = useState(null); // seconds remaining in timed states
-  const flameOutTimerRef = useRef(0); // tracks flame failure detection time
+  // ----------------------- Extracted to useAppState hook -----------------------
+  // Core state, burner state, analyzer state, fuel selection all now managed by useAppState
+  
+  // ----------------------- Remaining local state -----------------------
   const chamberRef = useRef(null); // chamber container for sizing overlays
-  const [lockoutReason, setLockoutReason] = useState("");
-  const [lockoutPending, setLockoutPending] = useState(false);
 
   // ----------------------- Metering panel -----------------------
   const [meterTab, setMeterTab] = useState("Gas"); // which meter UI is visible
@@ -500,18 +547,7 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
   );
   const gasMBH = useMemo(() => gasCFH * fuel.HHV / 1000, [gasCFH, fuel]);
 
-  // Mapped vs actual burner gas flow
-  const effectiveFuel = useMemo(
-    () => (t7Main ? fuelFlow : (t6Pilot ? Math.min(fuelFlow, Math.max(0.5, minFuel * 0.5)) : 0)),
-    [t7Main, t6Pilot, fuelFlow, minFuel]
-  );
-
-  // Always track cam/reg mapping regardless of flame state
-  const gasCamCFH = useMemo(() => (isGas ? Math.max(0, fuelFlow) : 0), [isGas, fuelFlow]);
-  // Actual burner flow (zero when valves closed or flame out)
-  const gasBurnerCFH = useMemo(() => (isGas ? Math.max(0, effectiveFuel) : 0), [isGas, effectiveFuel]);
-
-  // Derived gas meter statistics for the running burner
+  // Derived gas meter statistics for the running burner (using hook-provided gasBurnerCFH)
   const gasMeterRevSec = useMemo(
     () => (gasBurnerCFH > 0 ? (3600 * gasDialSize) / gasBurnerCFH : 0),
     [gasBurnerCFH, gasDialSize]
@@ -709,27 +745,6 @@ useEffect(() => {
   useEffect(() => {
     setFuelFlow((v) => clamp(v, minFuel, maxFuel));
   }, [minFuel, maxFuel]);
-
-  const fuelFlowRef = useRef(fuelFlow);
-  useEffect(() => { fuelFlowRef.current = fuelFlow; }, [fuelFlow]);
-  const airFlowRef = useRef(airFlow);
-  useEffect(() => { airFlowRef.current = airFlow; }, [airFlow]);
-
-  // Refs for state machine to avoid stale closures in setInterval
-  const boilerOnRef = useRef(boilerOn);
-  useEffect(() => { boilerOnRef.current = boilerOn; }, [boilerOn]);
-  const burnerStateRef = useRef(burnerState);
-  useEffect(() => { burnerStateRef.current = burnerState; }, [burnerState]);
-  const fuelRef = useRef(fuel);
-  useEffect(() => { fuelRef.current = fuel; }, [fuel]);
-  const flameSignalRef = useRef(flameSignal);
-  useEffect(() => { flameSignalRef.current = flameSignal; }, [flameSignal]);
-  const lockoutPendingRef = useRef(lockoutPending);
-  useEffect(() => { lockoutPendingRef.current = lockoutPending; }, [lockoutPending]);
-  const ambientFRef = useRef(ambientF);
-  useEffect(() => { ambientFRef.current = ambientF; }, [ambientF]);
-  const setpointFRef = useRef(setpointF);
-  useEffect(() => { setpointFRef.current = setpointF; }, [setpointF]);
 
   // ----------------------- Tour system -----------------------
   const tour = useTour({
@@ -946,8 +961,11 @@ useEffect(() => {
     [fuel, effectiveFuel, airFlow, simStackF, ambientF],
   );
 
-  // Analyzer displayed values with sensor lag and states
-  const [disp, setDisp] = useState({ O2: 20.9, CO2: 0, CO: 0, COaf: 0, NOx: 0, StackF: 70, Eff: 0 });
+  // Analyzer displayed values with sensor lag and states (local state for now)
+  const [dispLocal, setDispLocal] = useState({ O2: 20.9, CO2: 0, CO: 0, COaf: 0, NOx: 0, StackF: 70, Eff: 0 });
+  // Use dispLocal as disp for compatibility
+  const disp = dispLocal;
+  
   // Keep latest steady-state and stack temperature in refs for a stable analyzer smoother
   const steadyRef = useRef(steady);
   useEffect(() => { steadyRef.current = steady; }, [steady]);
@@ -961,7 +979,7 @@ useEffect(() => {
     const id = setInterval(() => {
       const s = steadyRef.current;
       const stackTarget = simStackRef.current;
-      setDisp((prev) => {
+      setDispLocal((prev) => {
         const nextO2 = lerp(prev.O2, s.O2_pct, dt / tauO2);
         const nextCO = lerp(prev.CO, s.CO_ppm, dt / tauCO);
         const nextNOx = lerp(prev.NOx, s.NOx_ppm, dt / tauNOx);
@@ -1048,14 +1066,7 @@ useEffect(() => {
     return () => clearInterval(id);
   }, [config.analyzer.samplingSec, config.general.trendLength]);
 
-  const saveReading = useCallback((snapshot) => {
-    const row = { id: crypto.randomUUID(), t: Date.now(), ...snapshot };
-    setSaved((prev) => {
-      const next = [row, ...prev];
-      persistSaved(next);
-      return next;
-    });
-  }, []);
+  // saveReading function now provided by useAppState hook
 
   const exportSavedReadings = useCallback(() => {
     if (!saved.length) return;
