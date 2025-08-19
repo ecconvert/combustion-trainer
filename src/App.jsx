@@ -43,6 +43,7 @@ import GridAutoSizer from "./components/GridAutoSizer";
 import { useTour } from "./hooks/useTour";
 import { usePanelManagement } from "./hooks/usePanelManagement";
 import { useAppState } from "./hooks/useAppState";
+import { useSimulationLoop } from "./hooks/useSimulationLoop";
 import { panels } from "./panels";
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
