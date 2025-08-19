@@ -42,7 +42,8 @@ import SettingsMenu from "./components/SettingsMenu";
 import AirDrawerIndicator from "./components/AirDrawerIndicator";
 import GridAutoSizer from "./components/GridAutoSizer";
 import { useTour } from "./hooks/useTour";
-import { panels, defaultZoneById } from "./panels";
+import { usePanelManagement } from "./hooks/usePanelManagement";
+import { panels } from "./panels";
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
 const useIsomorphicLayoutEffect =
@@ -68,7 +69,6 @@ const seriesConfig = [
 ];
 
 const RGL_LS_KEY = "ct_layouts_v2";
-const ZONES_KEY = "ct_zones_v1";
 const SAVED_KEY = "ct_saved_v1";
 
 const rglBreakpoints = { lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 };
@@ -155,27 +155,6 @@ function saveLayouts(layouts) {
     }
   }
 }
-
-function loadZones() {
-  try {
-    return JSON.parse(localStorage.getItem(ZONES_KEY)) || defaultZoneById;
-  } catch (e) {
-    if (isDev) {
-      console.error("Failed to load zones from localStorage:", e);
-    }
-    return defaultZoneById;
-  }
-}
-function saveZones(z) {
-  try {
-    localStorage.setItem(ZONES_KEY, JSON.stringify(z));
-  } catch (e) {
-    if (isDev) {
-      console.error("Failed to save zones to localStorage:", e);
-    }
-  }
-}
-
 
 function loadSaved() {
   try {
@@ -371,18 +350,10 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
     localStorage.removeItem("ct_layouts_v1");
     setLayouts(normalizeLayouts(defaultLayouts));
   };
-  const dock = useCallback((id, zone) => {
-    setZones((prev) => {
-      const next = { ...prev, [id]: zone };
-      saveZones(next);
-      return next;
-    });
-  }, []);
-  const [zones, setZones] = useState(loadZones());
-  const mainItems = useMemo(
-    () => Object.keys(panels).filter((id) => zones[id] === "main"),
-    [zones],
-  );
+
+  // ----------------------- Panel Management -----------------------
+  const panelManagement = usePanelManagement();
+  const { zones, mainItems, dock, panels: panelDefs } = panelManagement;
   useEffect(() => {
     try {
       const v2 = localStorage.getItem(RGL_LS_KEY);
@@ -400,36 +371,7 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
       }
     }
   }, []);
-  useEffect(() => {
-    try {
-      const zonesRaw = localStorage.getItem(ZONES_KEY);
-      const zonesObj = zonesRaw ? JSON.parse(zonesRaw) : null;
-      if (!zonesObj || zonesObj.saved == null) {
-        const next = { ...(zonesObj || {}), saved: "techDrawer" };
-        localStorage.setItem(ZONES_KEY, JSON.stringify(next));
-      }
-      const layoutsRaw = localStorage.getItem(RGL_LS_KEY);
-      if (layoutsRaw) {
-        const parsed = JSON.parse(layoutsRaw);
-        let changed = false;
-        Object.keys(parsed).forEach((bp) => {
-          const arr = parsed[bp];
-          const filtered = arr.filter((it) => it.i !== "saved");
-          if (filtered.length !== arr.length) {
-            parsed[bp] = filtered;
-            changed = true;
-          }
-        });
-        if (changed) {
-          localStorage.setItem(RGL_LS_KEY, JSON.stringify(parsed));
-        }
-      }
-    } catch (e) {
-      if (isDev) {
-        console.error("Failed to migrate saved panel:", e);
-      }
-    }
-  }, []);
+
   const [isDarkMode, setIsDarkMode] = useState(false);
   const applyTheme = (theme) => {
     const html = document.documentElement;
