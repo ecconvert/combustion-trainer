@@ -34,6 +34,7 @@ import Flame from "../components/effects/Flame";
 import Spark from "../components/effects/Spark";
 import Smoke from "../components/effects/Smoke";
 import AppHeader from "./components/AppHeader";
+import AppFooter from "./components/AppFooter";
 import { saveConfig, getDefaultConfig } from "../lib/config";
 import SettingsMenu from "../components/SettingsMenu";
 import AirDrawerIndicator from "../components/AirDrawerIndicator";
@@ -1517,7 +1518,7 @@ const rheostatRampRef = useRef(null);
         </ResponsiveGridLayout>
       </main>
 
-      <footer className="max-w-7xl mx-auto p-6 text-xs text-slate-500">Educational model. For classroom intuition only.</footer>
+      <AppFooter />
     </div>
   );
 }
