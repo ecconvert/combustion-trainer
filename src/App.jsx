@@ -1172,6 +1172,9 @@ useEffect(() => {
   // Analyzer simple state machine
   const [anState, setAnState] = useState("OFF");
   const [probeInFlue, setProbeInFlue] = useState(false);
+  // ZERO progress state for stabilization UI
+  const [zeroProgress, setZeroProgress] = useState(0);
+  const ZERO_DURATION_MS = 6000; // 6s stabilization demo
   const startAnalyzer = () => setAnState("ZERO");
   const finishZero = () => setAnState("READY");
   const insertProbe = () => {
@@ -1210,7 +1213,7 @@ const rheostatRampRef = useRef(null);
 
   // Smoothly ramp rheostat to 0 when shutting down (power off, postpurge, or lockout)
   useEffect(() => {
-    const shouldRampDown = (!boilerOn) || burnerState === "POSTPURGE" || burnerState === "LOCKOUT" || burnerState === "OFF";
+  const shouldRampDown = (!boilerOn) || burnerState === "POSTPURGE" || burnerState === "LOCKOUT" || burnerState === "OFF";
 
     // Start ramp if needed and not already running
     if (shouldRampDown && rheostat > 0 && !rheostatRampRef.current) {
@@ -1241,6 +1244,23 @@ const rheostatRampRef = useRef(null);
       }
     };
   }, [burnerState, boilerOn, rheostat]);
+  // ZERO stabilization timer effect
+  useEffect(() => {
+    let id = null;
+    if (anState === 'ZERO') {
+      const start = Date.now();
+      setZeroProgress(0);
+      id = setInterval(() => {
+        const elapsed = Date.now() - start;
+        const pct = Math.min(100, Math.round((elapsed / ZERO_DURATION_MS) * 100));
+        setZeroProgress(pct);
+      }, 100);
+    } else {
+      // reset when leaving ZERO
+      setZeroProgress(0);
+    }
+    return () => { if (id) clearInterval(id); };
+  }, [anState]);
   // Force slider position to follow programmer during purge states
   useEffect(() => {
     if (burnerState === "PREPURGE_HI" || burnerState === "DRIVE_HI") {
@@ -1368,9 +1388,10 @@ const rheostatRampRef = useRef(null);
                     Start
                   </button>
                   <button
-                    className="btn"
+                    className={"btn" + (anState === 'ZERO' && zeroProgress >= 100 ? ' ring-2 ring-cyan-300 animate-pulse' : '')}
                     onClick={finishZero}
                     disabled={anState !== "ZERO"}
+                    data-testid="btn-finish-zero"
                   >
                     Finish Zero
                   </button>
@@ -1411,7 +1432,7 @@ const rheostatRampRef = useRef(null);
                   </button>
                 </div>
                 {(() => {
-                  const help: Record<string,string> = {
+                  const help = {
                     OFF: 'Analyzer is powered down. Click Start to begin zeroing (ambient baseline).',
                     ZERO: 'ZERO: Establishing baseline in ambient air – wait, then click Finish Zero when stable.',
                     READY: 'READY: Baseline captured, electronics stable. Safe to Insert Probe into the flue.',
@@ -1420,14 +1441,40 @@ const rheostatRampRef = useRef(null);
                   };
                   const msg = help[anState] || '';
                   return (
-                    <div
-                      className="mt-2 text-xs text-slate-500"
-                      data-testid="analyzer-state-help"
-                      aria-live="polite"
-                      role="status"
-                    >
-                      {msg}
-                    </div>
+                    <>
+                      {/* ZERO progress bar (visible only during ZERO) */}
+                      {anState === 'ZERO' && (
+                        <div className="mt-2">
+                          <div
+                            className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden"
+                            aria-hidden={false}
+                          >
+                            <div
+                              role="progressbar"
+                              aria-label="Analyzer zero stabilization progress"
+                              aria-valuemin="0"
+                              aria-valuemax="100"
+                              aria-valuenow={zeroProgress}
+                              style={{ width: `${zeroProgress}%` }}
+                              className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-width duration-100 ease-linear"
+                              data-testid="analyzer-zero-fill"
+                            />
+                          </div>
+                          <div className="text-[10px] mt-1 text-slate-500" data-testid="analyzer-zero-percent">
+                            Stabilizing baseline… {zeroProgress}%
+                          </div>
+                        </div>
+                      )}
+
+                      <div
+                        className="mt-2 text-xs text-slate-500"
+                        data-testid="analyzer-state-help"
+                        aria-live="polite"
+                        role="status"
+                      >
+                        {msg}
+                      </div>
+                    </>
                   );
                 })()}
               </div>
