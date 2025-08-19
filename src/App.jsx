@@ -41,7 +41,7 @@ import { saveConfig, getDefaultConfig } from "./lib/config";
 import SettingsMenu from "./components/SettingsMenu";
 import AirDrawerIndicator from "./components/AirDrawerIndicator";
 import GridAutoSizer from "./components/GridAutoSizer";
-import JoyrideHost from "./tour/JoyrideHost";
+import { useTour } from "./hooks/useTour";
 import { panels, defaultZoneById } from "./panels";
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -512,7 +512,6 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
   const [rheostat, setRheostat] = useState(0); // firing-rate input 0–100%
   const [minFuel, setMinFuel] = useState(2); // derived from regulator pressure
   const [maxFuel, setMaxFuel] = useState(18);
-  const [simSpeedMultiplier, setSimSpeedMultiplier] = useState(1); // for tour fast-forward
 
   // User-adjustable flow inputs (molar basis)
   const [fuelFlow, setFuelFlow] = useState(5); // fuel flow (arbitrary mol/min scale)
@@ -784,42 +783,18 @@ useEffect(() => {
   useEffect(() => { ambientFRef.current = ambientF; }, [ambientF]);
   const setpointFRef = useRef(setpointF);
   useEffect(() => { setpointFRef.current = setpointF; }, [setpointF]);
+
+  // ----------------------- Tour system -----------------------
+  const tour = useTour({
+    boilerOn,
+    setBoilerOn,
+    setRheostat,
+    burnerStateRef
+  });
+
+  const { simSpeedMultiplier, setSimSpeedMultiplier, setAdvanceStep, TourComponent } = tour;
   const simSpeedMultiplierRef = useRef(simSpeedMultiplier);
   useEffect(() => { simSpeedMultiplierRef.current = simSpeedMultiplier; }, [simSpeedMultiplier]);
-
-  // Expose boiler control functions globally for tour
-  useEffect(() => {
-    window.setBoilerOn = setBoilerOn;
-    window.getBoilerOn = () => boilerOn;
-    window.setSimSpeed = setSimSpeedMultiplier;
-    window.getSimSpeed = () => simSpeedMultiplier;
-    // Test helper: forcibly set rheostat (firing rate) bypassing disabled state for deterministic e2e
-    window.setRheostat = (val) => {
-      try {
-        const n = Math.max(0, Math.min(100, parseInt(val)));
-        setRheostat(n);
-      } catch { /* ignore */ }
-    };
-    // Expose programmer/burner state for tour fast-forward auto-exit logic
-    window.getProgrammerState = () => burnerStateRef.current;
-    // Expose a test helper to advance the programmer state machine
-    const adv = () => {
-      try {
-        if (typeof advanceStep === 'function') { advanceStep(); return true; }
-      } catch { }
-      return false;
-    };
-    window.advanceProgrammer = adv;
-    return () => {
-      delete window.setBoilerOn;
-      delete window.getBoilerOn;
-      delete window.setSimSpeed;
-      delete window.getSimSpeed;
-  delete window.setRheostat;
-      delete window.getProgrammerState;
-      delete window.advanceProgrammer;
-    };
-  }, [setBoilerOn, boilerOn, setSimSpeedMultiplier, simSpeedMultiplier]);
 
   // Main 10 Hz loop that advances the burner state machine and simulated sensors
   useEffect(() => {
@@ -1093,6 +1068,11 @@ useEffect(() => {
     // Fallback legacy path (should not normally hit)
     if (s === "PREPURGE_HI") { stateTimeRef.current = EP160.PURGE_HF_SEC * 1000; return; }
   };
+
+  // Register advanceStep function with tour system
+  useEffect(() => {
+    setAdvanceStep(advanceStep);
+  }, [setAdvanceStep]);
 
   // Log history for trend chart
   const [history, setHistory] = useState([]);
@@ -1407,7 +1387,7 @@ const rheostatRampRef = useRef(null);
   
   return (
   <div className="min-h-screen w-full bg-background text-foreground">
-      <JoyrideHost />
+      <TourComponent />
   <style>{`
         @keyframes flicker { from { transform: scale(1) translateY(0px); opacity: 0.9; } to { transform: scale(1.04) translateY(-2px); opacity: 1; } }
         @keyframes spark { from { transform: translateY(2px) scale(0.9); opacity: .7; } to { transform: translateY(-2px) scale(1.1); opacity: 1; } }
