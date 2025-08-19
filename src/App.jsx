@@ -365,7 +365,40 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
     saveReading
   } = appState;
   
+  // Create initial config and simulation speed ref
   const [config, setConfig] = useState(initialConfig || getDefaultConfig());
+  const simSpeedMultiplierRef = useRef(config.general?.fastForward ? 10 : 1);
+  
+  // ----------------------- Simulation Loop Management -----------------------
+  const simulationLoop = useSimulationLoop({
+    // State refs for performance
+    simSpeedMultiplierRef,
+    stateTimeRef,
+    boilerOnRef,
+    burnerStateRef,
+    fuelRef,
+    fuelFlowRef,
+    airFlowRef,
+    flameSignalRef,
+    lockoutPendingRef,
+    ambientFRef,
+    setpointFRef,
+    
+    // State setters from useAppState  
+    setBurnerState,
+    setSimStackF,
+    setT5Spark,
+    setT6Pilot,
+    setT7Main,
+    setFlameSignal,
+    setStateCountdown,
+    setLockoutReason,
+    setLockoutPending,
+    
+    // Current state values
+    flameOutTimerRef,
+  });
+  
   const configBeforeSettings = useRef(null);
 
   // Settings modal visibility
@@ -758,7 +791,7 @@ useEffect(() => {
   });
 
   const { simSpeedMultiplier, setSimSpeedMultiplier, setAdvanceStep, TourComponent } = tour;
-  const simSpeedMultiplierRef = useRef(simSpeedMultiplier);
+  // simSpeedMultiplierRef created earlier, sync with tour value
   useEffect(() => { simSpeedMultiplierRef.current = simSpeedMultiplier; }, [simSpeedMultiplier]);
 
   // Main 10 Hz loop that advances the burner state machine and simulated sensors
