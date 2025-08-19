@@ -176,6 +176,11 @@ export const JOYRIDE_STEPS = [
           Once the programmer shows <code>RUN_AUTO</code>, you can safely adjust the firing rate. 
           Start low (around 30%) for initial tuning, then work up to higher rates.
         </p>
+        <p>
+          <strong>🎯 Watch the demonstration!</strong> We're showing you how different firing rates 
+          affect the flame, airflow, and combustion readings. Notice how the visualization changes 
+          as we ramp from 20% to 60% and back down.
+        </p>
         <p><strong>Best Practice:</strong> Always tune at multiple firing rates (30% and 70%).</p>
       </div>
     ),

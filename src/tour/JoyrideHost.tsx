@@ -98,6 +98,47 @@ export default function JoyrideHost({ runOnFirstVisit = true }: { runOnFirstVisi
       }
     }
 
+    // When firing rate step is shown, demonstrate ramping effects
+    if (type === 'step:after' && step?.target === "[data-tour='firing-rate']") {
+      if ((window as any).setRheostat) {
+        try {
+          // Start a demonstration ramp from 20% to 60% and back
+          let currentRate = 20;
+          let direction = 1; // 1 for up, -1 for down
+          let rampCount = 0;
+          const maxRamps = 2; // Complete 2 full cycles
+          
+          const rampInterval = setInterval(() => {
+            (window as any).setRheostat(currentRate);
+            
+            currentRate += direction * 5; // 5% increments
+            
+            // Reverse direction at bounds
+            if (currentRate >= 60) {
+              direction = -1;
+            } else if (currentRate <= 20) {
+              direction = 1;
+              rampCount++;
+            }
+            
+            // Stop after completing cycles and settle at 30%
+            if (rampCount >= maxRamps) {
+              clearInterval(rampInterval);
+              setTimeout(() => {
+                (window as any).setRheostat(30);
+              }, 500);
+            }
+          }, 800); // Change every 800ms for visible effect
+          
+          // Clean up interval on component unmount or tour end
+          const cleanupFiringRateDemo = () => clearInterval(rampInterval);
+          (window as any).__cleanupFiringRateDemo = cleanupFiringRateDemo;
+        } catch (err) {
+          console.warn('Firing rate demonstration failed:', err);
+        }
+      }
+    }
+
     // Handle technician drawer pausing behavior
     if (type === 'step:after' && step?.target === "[data-tour='technician']") {
       setPauseForAnimation(true);
@@ -135,6 +176,12 @@ export default function JoyrideHost({ runOnFirstVisit = true }: { runOnFirstVisi
         previousSpeedRef.current = null;
       }
 
+      // Clean up firing rate demo if active
+      if ((window as any).__cleanupFiringRateDemo) {
+        (window as any).__cleanupFiringRateDemo();
+        delete (window as any).__cleanupFiringRateDemo;
+      }
+
       updateTutorialState({ done: true, version: TUTORIAL_VERSION });
     }
 
@@ -145,6 +192,13 @@ export default function JoyrideHost({ runOnFirstVisit = true }: { runOnFirstVisi
         (window as any).setBoilerOn(originalBoilerState);
         setOriginalBoilerState(null);
       }
+      
+      // Clean up firing rate demo if active
+      if ((window as any).__cleanupFiringRateDemo) {
+        (window as any).__cleanupFiringRateDemo();
+        delete (window as any).__cleanupFiringRateDemo;
+      }
+      
       updateTutorialState({ done: true, version: TUTORIAL_VERSION });
     }
   }, [run, originalBoilerState, updateTutorialState]);
@@ -186,6 +240,11 @@ export default function JoyrideHost({ runOnFirstVisit = true }: { runOnFirstVisi
       }
       if (originalBoilerState !== null && (window as any).setBoilerOn) {
         try { (window as any).setBoilerOn(originalBoilerState); } catch { }
+      }
+      // Clean up firing rate demo on unmount
+      if ((window as any).__cleanupFiringRateDemo) {
+        (window as any).__cleanupFiringRateDemo();
+        delete (window as any).__cleanupFiringRateDemo;
       }
     };
   }, [originalBoilerState]);
