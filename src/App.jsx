@@ -70,93 +70,7 @@ const seriesConfig = [
   { key: 'Eff', name: 'Eff %', yAxisId: 'left' },
 ];
 
-const RGL_LS_KEY = "ct_layouts_v2";
 const SAVED_KEY = "ct_saved_v1";
-
-const rglBreakpoints = { lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 };
-const rglCols        = { lg:   12,  md:  10,  sm:   8,  xs:   6,  xxs:  4 };
-
-const defaultLayouts = {
-  lg: [
-    { i: "viz",      x: 0, y: 0,  w: 7,  h: 26, minW: 4, minH: 12 },
-    { i: "controls", x: 0, y: 26, w: 7,  h: 20, minW: 4, minH: 10 },
-    { i: "readouts", x: 7, y: 0,  w: 5,  h: 12, minW: 3, minH:  6 },
-    { i: "trend",    x: 7, y: 12, w: 5,  h: 16, minW: 3, minH: 10 },
-    { i: "meter",    x: 7, y: 28, w: 5,  h: 12, minW: 3, minH:  8 },
-    // Place tuning panel in the right column by default (immediately under meter)
-    { i: "tuning",   x: 7, y: 40, w: 5,  h: 22, minW: 3, minH: 14 },
-  ],
-  md: [
-    { i: "viz",      x: 0, y: 0,  w: 6,  h: 26 },
-    { i: "controls", x: 0, y: 26, w: 6,  h: 20 },
-    { i: "readouts", x: 6, y: 0,  w: 4,  h: 12 },
-    { i: "trend",    x: 6, y: 12, w: 4,  h: 16 },
-    { i: "meter",    x: 6, y: 28, w: 4,  h: 12 },
-    { i: "tuning",   x: 6, y: 40, w: 4,  h: 22 },
-  ],
-  sm: [
-    { i: "viz",      x: 0, y: 0,  w: 5,  h: 26 },
-    { i: "controls", x: 0, y: 26, w: 5,  h: 20 },
-    { i: "readouts", x: 5, y: 0,  w: 3,  h: 12 },
-    { i: "trend",    x: 5, y: 12, w: 3,  h: 16 },
-    { i: "meter",    x: 5, y: 28, w: 3,  h: 12 },
-    { i: "tuning",   x: 5, y: 40, w: 3,  h: 24 },
-  ],
-  xs: [
-    { i: "viz",      x: 0, y: 0,  w: 6, h: 24 },
-    { i: "controls", x: 0, y: 24, w: 6, h: 18 },
-    { i: "readouts", x: 0, y: 42, w: 6, h: 10 },
-    { i: "trend",    x: 0, y: 52, w: 6, h: 16 },
-    { i: "meter",    x: 0, y: 68, w: 6, h: 10 },
-    { i: "tuning",   x: 0, y: 78, w: 6, h: 24 },
-  ],
-  xxs: [
-    { i: "viz",      x: 0, y: 0,  w: 4, h: 24 },
-    { i: "controls", x: 0, y: 24, w: 4, h: 18 },
-    { i: "readouts", x: 0, y: 42, w: 4, h: 10 },
-    { i: "trend",    x: 0, y: 52, w: 4, h: 16 },
-    { i: "meter",    x: 0, y: 68, w: 4, h: 10 },
-    { i: "tuning",   x: 0, y: 78, w: 4, h: 26 },
-  ],
-};
-
-function fitToCols(items, cols) {
-  return items.map((it) => {
-    const w = Math.min(it.w ?? 1, cols);
-    const x = Math.min(it.x ?? 0, Math.max(0, cols - w));
-    return { ...it, w, x };
-  });
-}
-function normalizeLayouts(layouts) {
-  const out = {};
-  Object.entries(rglCols).forEach(([bp, cols]) => {
-    const arr = layouts?.[bp] ?? [];
-    out[bp] = fitToCols(arr, cols);
-  });
-  return out;
-}
-function loadLayouts() {
-  try {
-    const raw = localStorage.getItem(RGL_LS_KEY);
-    const parsed = raw ? JSON.parse(raw) : defaultLayouts;
-    return normalizeLayouts(parsed);
-  } catch (e) {
-    if (isDev) {
-      console.error("Failed to load layouts from localStorage:", e);
-    }
-    return normalizeLayouts(defaultLayouts);
-  }
-}
-
-function saveLayouts(layouts) {
-  try {
-    localStorage.setItem(RGL_LS_KEY, JSON.stringify(layouts));
-  } catch (e) {
-    if (isDev) {
-      console.error("Failed to save layouts to localStorage:", e);
-    }
-  }
-}
 
 function loadSaved() {
   try {
@@ -415,66 +329,31 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
   
   // Settings modal visibility
   const unitSystem = config.units.system;
-  const [layouts, setLayouts] = useState(loadLayouts());
-  const [autoSizeLock, setAutoSizeLock] = useState(false);
-  const lastRowsRef = useRef({});
-  const [breakpoint, setBreakpoint] = useState('lg');
+
+  // Initialize layout manager hook
+  const layoutManager = useLayoutManager();
+  const { 
+    rglBreakpoints,
+    rglCols,
+    defaultLayouts,
+    layouts,
+    setLayouts,
+    autoSizeLock,
+    setAutoSizeLock,
+    breakpoint,
+    setBreakpoint,
+    handleLayoutChange,
+    setItemRows,
+    handleResetLayouts
+  } = layoutManager;
 
   useIsomorphicLayoutEffect(() => {
     applyTheme(theme);
   }, [theme]);
 
-
-  const handleLayoutChange = (_current, allLayouts) => {
-    setLayouts(allLayouts);
-    saveLayouts(allLayouts);
-  };
-  // helper to set height for a panel in current breakpoint layout
-  const setItemRows = useCallback((key, rows) => {
-    if (autoSizeLock) return; // avoid feedback loop while dragging/resizing
-    if (lastRowsRef.current[key] === rows) return;
-    lastRowsRef.current[key] = rows;
-    setLayouts((prev) => {
-      const bp = breakpoint;
-      const arr = prev[bp] || [];
-      const idx = arr.findIndex((it) => it.i === key);
-      if (idx === -1) return prev;
-      const cur = arr[idx];
-      if (cur.h === rows) return prev;
-      const nextArr = [...arr];
-      nextArr[idx] = { ...cur, h: rows };
-      const copy = { ...prev, [bp]: nextArr };
-      saveLayouts(copy);
-      return copy;
-    });
-  }, [autoSizeLock, breakpoint]);
-
-  const handleResetLayouts = () => {
-    localStorage.removeItem(RGL_LS_KEY);
-    localStorage.removeItem("ct_layouts_v1");
-    setLayouts(normalizeLayouts(defaultLayouts));
-  };
-
   // ----------------------- Panel Management -----------------------
   const panelManagement = usePanelManagement();
   const { zones, mainItems, dock, panels: panelDefs } = panelManagement;
-  useEffect(() => {
-    try {
-      const v2 = localStorage.getItem(RGL_LS_KEY);
-      const v1 = localStorage.getItem("ct_layouts_v1");
-      console.log("Value of v1 from localStorage:", v1);
-      if (!v2 && v1) {
-        const parsed = JSON.parse(v1);
-        const normalized = normalizeLayouts(parsed);
-        localStorage.setItem(RGL_LS_KEY, JSON.stringify(normalized));
-        localStorage.removeItem("ct_layouts_v1");
-      }
-    } catch (e) {
-      if (isDev) {
-        console.error("Failed to migrate old layouts:", e);
-      }
-    }
-  }, []);
 
   // Calculate isDarkMode from hook-provided theme  
   const isDarkMode = useMemo(() => {
