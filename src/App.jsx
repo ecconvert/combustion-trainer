@@ -475,18 +475,23 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
     }
   }, []);
 
-  const [isDarkMode, setIsDarkMode] = useState(false);
-  const applyTheme = (theme) => {
+  // Calculate isDarkMode from hook-provided theme  
+  const isDarkMode = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return theme === 'dark' || (theme === 'system' && prefersDark);
+  }, [theme]);
+
+  const applyTheme = (themeValue) => {
     const html = document.documentElement;
     const body = document.body;
     const rootEl = document.getElementById('root');
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const isDark = theme === 'dark' || (theme === 'system' && prefersDark);
+    const isDark = themeValue === 'dark' || (themeValue === 'system' && prefersDark);
     // Keep all potential ancestors in sync so Tailwind's dark: variant cannot get stuck
     [html, body, rootEl].forEach((el) => el && el.classList.toggle('dark', isDark));
     // Ensure native form controls (select, inputs) follow current theme
     html.style.setProperty('color-scheme', isDark ? 'dark' : 'light');
-    setIsDarkMode(isDark);
   };
   // Extract CSS variables to drive 3rd-party components (e.g., charts)
   const themeVars = useMemo(() => {
