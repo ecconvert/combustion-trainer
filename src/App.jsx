@@ -72,27 +72,6 @@ const seriesConfig = [
 
 const SAVED_KEY = "ct_saved_v1";
 
-function loadSaved() {
-  try {
-    const raw = localStorage.getItem(SAVED_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch (e) {
-    if (isDev) {
-      console.error("Failed to load saved readings:", e);
-    }
-    return [];
-  }
-}
-function persistSaved(next) {
-  try {
-    localStorage.setItem(SAVED_KEY, JSON.stringify(next));
-  } catch (e) {
-    if (isDev) {
-      console.error("Failed to persist saved readings:", e);
-    }
-  }
-}
-
 function Flame({ phi, intensity, pilot = false }) {
   let color = "#48b3ff"; // lean -> blue
   if (phi > 1.05 && phi < 1.2) color = "#ff8c00"; // near stoich -> orange
@@ -224,13 +203,11 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
     setBurnerState,
     simStackF,
     setSimStackF,
-    setpointF,
     setSetpointF,
     stateTimeRef,
     
     // Analyzer state
     saved,
-    setSaved,
     t5Spark,
     setT5Spark,
     t6Pilot,
@@ -244,7 +221,6 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
     flameOutTimerRef,
     lockoutReason,
     setLockoutReason,
-    lockoutPending,
     setLockoutPending,
     
     // Fuel and scenarios
@@ -275,8 +251,6 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
     gasBurnerCFH,
     
     // Coordination actions
-    resetBurner,
-    applyScenario,
     saveReading
   } = appState;
   
@@ -338,9 +312,7 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
     defaultLayouts,
     layouts,
     setLayouts,
-    autoSizeLock,
     setAutoSizeLock,
-    breakpoint,
     setBreakpoint,
     handleLayoutChange,
     setItemRows,
@@ -353,7 +325,7 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
 
   // ----------------------- Panel Management -----------------------
   const panelManagement = usePanelManagement();
-  const { zones, mainItems, dock, panels: panelDefs } = panelManagement;
+  const { mainItems, dock } = panelManagement;
 
   // Calculate isDarkMode from hook-provided theme  
   const isDarkMode = useMemo(() => {
@@ -642,7 +614,7 @@ useEffect(() => {
     burnerStateRef
   });
 
-  const { simSpeedMultiplier, setSimSpeedMultiplier, setAdvanceStep, TourComponent } = tour;
+  const { simSpeedMultiplier, setAdvanceStep, TourComponent } = tour;
   // simSpeedMultiplierRef created earlier, sync with tour value
   useEffect(() => { simSpeedMultiplierRef.current = simSpeedMultiplier; }, [simSpeedMultiplier]);
 
