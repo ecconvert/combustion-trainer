@@ -22,7 +22,7 @@ const SAVED_KEY = "ct_saved_v1";
 function loadSaved() {
   try {
     const saved = JSON.parse(localStorage.getItem(SAVED_KEY)) || [];
-    return saved.slice(-100); // keep only the most recent 100
+    return Array.isArray(saved) ? saved.slice(-100) : []; // keep only the most recent 100
   } catch (e) {
     console.error("Failed to load saved data:", e);
     return [];
@@ -100,7 +100,18 @@ export function useAppState() {
       return computeCombustion(fuelFlow, airFlow, fuel, f2c(simStackF), f2c(ambientF));
     } catch (e) {
       console.warn("Combustion calculation failed:", e);
-      return { O2: 0, CO2: 0, CO: 0, NOx: 0, phi: 1, temperature: simStackF };
+      return { 
+        O2_pct: 20.9, 
+        CO2_pct: 0, 
+        CO_ppm: 0, 
+        CO_airfree: 0,
+        NOx_ppm: 0, 
+        stackTempF: simStackF,
+        excessAir: 1.0,
+        efficiency: 0,
+        flameTempF: simStackF,
+        warnings: { soot: false, overTemp: false, underTemp: false }
+      };
     }
   }, [fuelFlow, airFlow, fuel, simStackF, ambientF]);
 
