@@ -29,6 +29,10 @@ import { buildSafeCamMap } from "../lib/cam";
 import CollapsibleSection from "../components/CollapsibleSection";
 import RightDrawer from "../components/RightDrawer";
 import { useUIState } from "../components/UIStateContext";
+import Led from "../components/ui/Led";
+import Flame from "../components/effects/Flame";
+import Spark from "../components/effects/Spark";
+import Smoke from "../components/effects/Smoke";
 import { saveConfig, getDefaultConfig } from "../lib/config";
 import SettingsMenu from "../components/SettingsMenu";
 import AirDrawerIndicator from "../components/AirDrawerIndicator";
@@ -179,98 +183,6 @@ function persistSaved(next) {
       console.error("Failed to persist saved readings:", e);
     }
   }
-}
-
-function Flame({ phi, intensity, pilot = false }) {
-  let color = "#48b3ff"; // lean -> blue
-  if (phi > 1.05 && phi < 1.2) color = "#ff8c00"; // near stoich -> orange
-  if (phi >= 1.2) color = "#ffd54d"; // rich -> yellow
-  let size = clamp(40 + intensity * 60, 30, 120);
-
-  if (pilot) {
-    color = "#ff8c00"; // pilot flame bright orange
-    size = clamp(20 + intensity * 40, 10, 60);
-  }
-
-  return (
-    <div
-      aria-label="flame"
-      className="mx-auto rounded-full opacity-90 shadow-inner"
-      style={{ 
-        width: size,
-        height: size * (pilot ? 1.1 : 1.2),
-        background: `radial-gradient(circle at 50% 60%, ${color}, transparent 60%)`,
-        filter: "blur(1px)",
-        animation: "flicker 0.18s infinite alternate",
-      }}
-    />
-  );
-}
-
-/**
- * Small animated spark used during ignition.
- */
-function Spark() {
-  return (
-    <div
-      aria-label="spark"
-      className="absolute"
-      style={{ 
-        width: 14,
-        height: 14,
-        borderRadius: "50%",
-        background: "radial-gradient(circle, #fff59d, rgba(255,193,7,0.9) 40%, rgba(255,193,7,0) 70%)",
-        filter: "blur(0.5px)",
-        animation: "spark 0.08s infinite alternate",
-      }}
-    />
-  );
-}
-
-/**
- * Puff of smoke displayed when CO levels indicate soot production.
- */
-function Smoke() {
-  return (
-    <div
-      aria-label="smoke"
-      className="absolute bottom-1/2 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none"
-    >
-      <div
-        className="w-4 h-4 rounded-full bg-gray-400 opacity-60"
-        style={{ animation: "smoke 1.5s infinite" }}
-      />
-      <div
-        className="w-3 h-3 rounded-full bg-gray-400 opacity-40 mt-1"
-        style={{ animation: "smoke 1.5s infinite 0.3s" }}
-      />
-      <div
-        className="w-5 h-5 rounded-full bg-gray-300 opacity-30 mt-1"
-        style={{ animation: "smoke 1.5s infinite 0.6s" }}
-      />
-    </div>
-  );
-}
-
-
-/**
- * Simple status LED with label.
- *
- * @param {Object} props
- * @param {boolean} props.on - Whether the LED is lit.
- * @param {string} props.label - Text label shown to the right.
- * @param {string} [props.color="limegreen"] - Light color when on.
- */
-function Led({ on, label, color = "limegreen" }) {
-  return (
-    <div className="flex items-center gap-2">
-      <div
-        className="w-3 h-3 rounded-full"
-        style={{ background: on ? color : "#cbd5e1", boxShadow: on ? `0 0 10px ${color}` : "none" }}
-      />
-      <span className="text-xs text-slate-600">{label}</span>
-    </div>
-  );
 }
 
 function PanelHeader({ title, right, dockAction }) {
