@@ -38,6 +38,7 @@ import AppFooter from "./components/AppFooter";
 import { saveConfig, getDefaultConfig } from "../lib/config";
 import SettingsMenu from "../components/SettingsMenu";
 import useAnalyzer from "../hooks/useAnalyzer";
+import useLayoutManager from "../hooks/useLayoutManager";
 import AirDrawerIndicator from "../components/AirDrawerIndicator";
 import GridAutoSizer from "../components/GridAutoSizer";
 import { panels, defaultZoneById } from "../panels";
@@ -208,10 +209,7 @@ export default function AppLayout({ initialConfig, children }) {
   // Settings modal visibility
   const unitSystem = config.units.system;
   const [showSettings, setShowSettings] = useState(false);
-  const [layouts, setLayouts] = useState(loadLayouts());
-  const [autoSizeLock, setAutoSizeLock] = useState(false);
   const lastRowsRef = useRef({});
-  const [breakpoint, setBreakpoint] = useState('lg');
 
   const [theme, setTheme] = useState(() => {
     try {
@@ -240,43 +238,9 @@ export default function AppLayout({ initialConfig, children }) {
   }, [theme]);
 
 
-  const handleLayoutChange = (_current, allLayouts) => {
-    setLayouts(allLayouts);
-    saveLayouts(allLayouts);
-  };
   // helper to set height for a panel in current breakpoint layout
-  const setItemRows = useCallback((key, rows) => {
-    if (autoSizeLock) return; // avoid feedback loop while dragging/resizing
-    if (lastRowsRef.current[key] === rows) return;
-    lastRowsRef.current[key] = rows;
-    setLayouts((prev) => {
-      const bp = breakpoint;
-      const arr = prev[bp] || [];
-      const idx = arr.findIndex((it) => it.i === key);
-      if (idx === -1) return prev;
-      const cur = arr[idx];
-      if (cur.h === rows) return prev;
-      const nextArr = [...arr];
-      nextArr[idx] = { ...cur, h: rows };
-      const copy = { ...prev, [bp]: nextArr };
-      saveLayouts(copy);
-      return copy;
-    });
-  }, [autoSizeLock, breakpoint]);
+  // (now handled by useLayoutManager hook)
 
-  const handleResetLayouts = () => {
-    localStorage.removeItem(RGL_LS_KEY);
-    localStorage.removeItem("ct_layouts_v1");
-    setLayouts(normalizeLayouts(defaultLayouts));
-  };
-  const dock = useCallback((id, zone) => {
-    setZones((prev) => {
-      const next = { ...prev, [id]: zone };
-      saveZones(next);
-      return next;
-    });
-  }, []);
-  const [zones, setZones] = useState(loadZones());
   const mainItems = useMemo(
     () => Object.keys(panels).filter((id) => zones[id] === "main"),
     [zones],
@@ -1035,6 +999,30 @@ useEffect(() => {
     getHelpText,
   } = analyzer;
 
+  // ----------------------- Layout Management -----------------------
+  const layoutManager = useLayoutManager();
+  const {
+    rglBreakpoints,
+    rglCols,
+    defaultLayouts,
+    layouts,
+    setLayouts,
+    autoSizeLock,
+    setAutoSizeLock,
+    breakpoint,
+    setBreakpoint,
+    zones,
+    setZones,
+    handleLayoutChange,
+    setItemRows,
+    handleResetLayouts,
+    dock,
+    handleDragStart,
+    handleDragStop,
+    handleResizeStart,
+    handleResizeStop,
+  } = layoutManager;
+
   const tuningActive = tuningOn;
 
   useEffect(() => {
@@ -1434,10 +1422,10 @@ const rheostatRampRef = useRef(null);
           layouts={layouts}
           onBreakpointChange={(bp) => setBreakpoint(bp)}
           onLayoutChange={handleLayoutChange}
-          onDragStart={() => setAutoSizeLock(true)}
-          onDragStop={() => setAutoSizeLock(false)}
-          onResizeStart={() => setAutoSizeLock(true)}
-          onResizeStop={() => setAutoSizeLock(false)}
+          onDragStart={handleDragStart}
+          onDragStop={handleDragStop}
+          onResizeStart={handleResizeStart}
+          onResizeStop={handleResizeStop}
           rowHeight={10}
           margin={[16, 16]}
           draggableHandle=".drag-handle"
