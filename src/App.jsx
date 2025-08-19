@@ -43,6 +43,7 @@ import AirDrawerIndicator from "./components/AirDrawerIndicator";
 import GridAutoSizer from "./components/GridAutoSizer";
 import { useTour } from "./hooks/useTour";
 import { usePanelManagement } from "./hooks/usePanelManagement";
+import { useAppState } from "./hooks/useAppState";
 import { panels } from "./panels";
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -283,6 +284,10 @@ function PanelHeader({ title, right, dockAction }) {
 
 export default function CombustionTrainer({ initialConfig } = { initialConfig: undefined }) {
   const { drawerOpen, setDrawerOpen, seriesVisibility, setSeriesVisibility } = useUIState();
+  
+  // ----------------------- Core State Management -----------------------
+  const appState = useAppState();
+  
   const [config, setConfig] = useState(initialConfig || getDefaultConfig());
   const configBeforeSettings = useRef(null);
 
