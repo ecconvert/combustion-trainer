@@ -151,46 +151,30 @@ export default function JoyrideHost({ runOnFirstVisit = true }: { runOnFirstVisi
 
   // Watch for RUN_AUTO when fast-forward is active
   useEffect(() => {
-    const restoreIfReady = () => {
-      try {
-        if (!activatedFastForwardRef.current) return false;
-        const gp = (window as any).getProgrammerState;
-        if (gp && gp() === 'RUN_AUTO') {
+    const handleProgState = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      if (activatedFastForwardRef.current && customEvent.detail?.state === 'RUN_AUTO') {
+        try {
           if ((window as any).setSimSpeed) {
             const toRestore = previousSpeedRef.current ?? 1;
             (window as any).setSimSpeed(toRestore);
           }
+        } catch (e) {
+          console.warn('Failed to restore sim speed on RUN_AUTO', e);
+        } finally {
           activatedFastForwardRef.current = false;
           setFastForwardActive(false);
           previousSpeedRef.current = null;
           forceTick();
-          return true;
         }
-      } catch { /* ignore */ }
-      return false;
+      }
     };
 
-    // Expose a test-only manual trigger to force restoration deterministically
-    (window as any).__tourMaybeRestoreFF = restoreIfReady;
-
-    if (fastForwardActive && activatedFastForwardRef.current) {
-      // Use both rAF and an interval (belt & suspenders) for reliability in headless runs
-      let raf: number | null = null;
-      const tick = () => {
-        if (!restoreIfReady() && activatedFastForwardRef.current) {
-          raf = requestAnimationFrame(tick);
-        }
-      };
-      raf = requestAnimationFrame(tick);
-      const id = setInterval(() => { restoreIfReady(); }, 200);
-      return () => {
-        if (raf) cancelAnimationFrame(raf);
-        clearInterval(id);
-        delete (window as any).__tourMaybeRestoreFF;
-      };
-    }
-    return () => { delete (window as any).__tourMaybeRestoreFF; };
-  }, [fastForwardActive, forceTick]);
+    window.addEventListener('programmerStateChanged', handleProgState);
+    return () => {
+      window.removeEventListener('programmerStateChanged', handleProgState);
+    };
+  }, [forceTick]);
 
   useEffect(() => {
     return () => {
@@ -219,6 +203,7 @@ export default function JoyrideHost({ runOnFirstVisit = true }: { runOnFirstVisi
     <>
       {showSplash && <WelcomeSplash onStartTour={handleStartTour} onSkip={handleSkipTour} />}
       <Joyride
+        data-testid="joyride-host-instance"
         steps={JOYRIDE_STEPS as any}
         run={run && !pauseForAnimation}
         continuous

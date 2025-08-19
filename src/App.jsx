@@ -840,31 +840,32 @@ useEffect(() => {
       const _airStoich = _O2_needed / 0.21;
       const EA_now = Math.max(0.1, currentAirFlow / Math.max(0.001, _airStoich));
 
+      let nextBurnerState = currentBurnerState;
       // ---- Programmer state machine ----
       // Each branch represents a step in the ignition sequence.
       if (!currentBoilerOn) {
         // If power is cut, jump to postpurge to clear the chamber
         if (currentBurnerState !== "OFF" && currentBurnerState !== "POSTPURGE") {
           setT5Spark(false); setT6Pilot(false); setT7Main(false);
-          setBurnerState("POSTPURGE");
+          nextBurnerState = "POSTPURGE";
           stateTimeRef.current = 0;
         }
       } else if (currentBurnerState === "OFF") {
-        setBurnerState("DRIVE_HI");
+        nextBurnerState = "DRIVE_HI";
         stateTimeRef.current = 0;
       } else if (currentBurnerState === "DRIVE_HI") {
         // brief high-fire drive to open air damper
-        if (stateTimeRef.current >= 1000) { setBurnerState("PREPURGE_HI"); stateTimeRef.current = 0; }
+        if (stateTimeRef.current >= 1000) { nextBurnerState = "PREPURGE_HI"; stateTimeRef.current = 0; }
       } else if (currentBurnerState === "PREPURGE_HI") {
         // high-fire purge clears the chamber
-        if (stateTimeRef.current >= EP160.PURGE_HF_SEC * 1000) { setBurnerState("DRIVE_LOW"); stateTimeRef.current = 0; }
+        if (stateTimeRef.current >= EP160.PURGE_HF_SEC * 1000) { nextBurnerState = "DRIVE_LOW"; stateTimeRef.current = 0; }
       } else if (currentBurnerState === "DRIVE_LOW") {
         // move to low-fire for minimum purge
-        if (stateTimeRef.current >= EP160.LOW_FIRE_DRIVE_SEC * 1000) { setBurnerState("LOW_PURGE_MIN"); stateTimeRef.current = 0; }
+        if (stateTimeRef.current >= EP160.LOW_FIRE_DRIVE_SEC * 1000) { nextBurnerState = "LOW_PURGE_MIN"; stateTimeRef.current = 0; }
       } else if (currentBurnerState === "LOW_PURGE_MIN") {
         if (stateTimeRef.current >= EP160.LOW_FIRE_MIN_SEC * 1000) {
           // begin pilot trial for ignition (PTFI)
-          setBurnerState("PTFI");
+          nextBurnerState = "PTFI";
           setT5Spark(true); setT6Pilot(true); setT7Main(false);
           stateTimeRef.current = 0;
         }
@@ -873,12 +874,12 @@ useEffect(() => {
         if (stateTimeRef.current >= EP160.PTFI_SEC * 1000) {
           if (currentFlameSignal >= 10) {
             setT7Main(true); // main flame on
-            setBurnerState("MTFI");
+            nextBurnerState = "MTFI";
             stateTimeRef.current = 0;
           } else {
             // flame not proven → lockout
             setT5Spark(false); setT6Pilot(false); setT7Main(false);
-            setBurnerState("LOCKOUT");
+            nextBurnerState = "LOCKOUT";
             setLockoutReason("PTFI FLAME FAIL");
             stateTimeRef.current = 0;
           }
@@ -888,7 +889,7 @@ useEffect(() => {
         if (stateTimeRef.current >= EP160.MTFI_SPARK_OFF_SEC * 1000) setT5Spark(false);
         if (stateTimeRef.current >= EP160.MTFI_PILOT_OFF_SEC * 1000) {
           setT6Pilot(false);
-          setBurnerState("RUN_AUTO");
+          nextBurnerState = "RUN_AUTO";
           stateTimeRef.current = 0;
         }
       } else if (currentBurnerState === "RUN_AUTO") {
@@ -896,7 +897,7 @@ useEffect(() => {
         if (EA_now < IGNITABLE_EA.min || EA_now > IGNITABLE_EA.max) {
           // EA out of range causes immediate flame blowout
           setT7Main(false);
-          setBurnerState("POSTPURGE");
+          nextBurnerState = "POSTPURGE";
           setLockoutReason("FLAME BLOWOUT (EA out of range)");
           setLockoutPending(true);
           stateTimeRef.current = 0;
@@ -905,7 +906,7 @@ useEffect(() => {
           flameOutTimerRef.current += effectiveDtms;
           if (flameOutTimerRef.current >= EP160.FFRT_SEC * 1000) {
             setT7Main(false);
-            setBurnerState("LOCKOUT");
+            nextBurnerState = "LOCKOUT";
             setLockoutReason("FLAME FAIL");
             stateTimeRef.current = 0;
           }
@@ -916,13 +917,22 @@ useEffect(() => {
         // continue fan to clear gases, then either lockout or off
         if (stateTimeRef.current >= EP160.POST_PURGE_SEC * 1000) {
           if (currentLockoutPending) {
-            setBurnerState("LOCKOUT");
+            nextBurnerState = "LOCKOUT";
           } else {
-            setBurnerState("OFF");
+            nextBurnerState = "OFF";
           }
           setLockoutPending(false);
           setStateCountdown(null);
           stateTimeRef.current = 0;
+        }
+      }
+
+      if (nextBurnerState !== currentBurnerState) {
+        setBurnerState(nextBurnerState);
+        try {
+          window.dispatchEvent(new CustomEvent('programmerStateChanged', { detail: { state: nextBurnerState } }));
+        } catch (e) {
+          if (isDev) console.error('Failed to dispatch programmer event', e);
         }
       }
 

@@ -11,6 +11,6 @@ describe('FastForwardBadge', () => {
   it('renders and shows multiplier when visible=true', () => {
     render(<FastForwardBadge visible={true} multiplier={8} />);
     expect(screen.getByRole('status')).toBeInTheDocument();
-    expect(screen.getByText(/Speed ×8/)).toBeInTheDocument();
+    expect(screen.getByText(/Startup accelerated ×8/)).toBeInTheDocument();
   });
 });

@@ -34,25 +34,17 @@ test('tour fast-forward auto-restores when programmer reaches RUN_AUTO', async (
   await capture(page, 'tour-ff-badge');
 
   // Drive the programmer to RUN_AUTO using UI advance button
-  const reached = await fastForwardToRunAuto(page);
-  expect(reached, 'reached RUN_AUTO').toBeTruthy();
+  await fastForwardToRunAuto(page);
+
   // Ensure programmer is actually in RUN_AUTO and then wait for the badge to hide
   // and sim speed restore (allow generous time for UI to react).
   const isRunAuto = await page.evaluate(() => (window as any).getProgrammerState && (window as any).getProgrammerState() === 'RUN_AUTO');
   expect(isRunAuto, 'programmer reached RUN_AUTO').toBeTruthy();
 
-  // Wait until badge hides and sim speed restored (polling to avoid flakiness)
-  let hidden = false;
-  const maxPolls = 200; // ~30s at 150ms interval
-  for (let i = 0; i < maxPolls; i++) {
-    const count = await badge.count();
-    const restored = await page.evaluate(() => {
-      try { (window as any).__tourMaybeRestoreFF && (window as any).__tourMaybeRestoreFF(); } catch {}
-      return (window as any).getSimSpeed && (window as any).getSimSpeed();
-    });
-    if ((count === 0 || restored === 1) && restored === 1) { hidden = true; break; }
-    await page.waitForTimeout(150);
-  }
-  expect(hidden, 'badge hidden and speed restored').toBeTruthy();
+  // Wait until badge hides and sim speed restored
+  await expect(badge).toBeHidden();
+  const restoredSpeed = await page.evaluate(() => (window as any).getSimSpeed && (window as any).getSimSpeed());
+  expect(restoredSpeed).toBe(1);
+
   await capture(page, 'tour-ff-restored');
 });

@@ -85,6 +85,20 @@ export async function fastForwardToRunAuto(page: Page) {
   } else {
     await page.evaluate(() => (window as any).setBoilerOn && (window as any).setBoilerOn(true));
   }
+
+  // Listen for the programmerStateChanged event to resolve the promise.
+  await page.evaluate(() => {
+    return new Promise<void>(resolve => {
+      window.addEventListener('programmerStateChanged', function handler(event: Event) {
+        const customEvent = event as CustomEvent;
+        if (customEvent.detail.state === 'RUN_AUTO') {
+          window.removeEventListener('programmerStateChanged', handler);
+          resolve();
+        }
+      });
+    });
+  });
+
   // Repeatedly advance until RUN_AUTO is visible in programmer state readout
   // Increase retries and use more aggressive fallbacks (batch advance via evaluate)
   const maxAttempts = 600; // allow up to ~90s at 150ms waits (test file extends timeout)
