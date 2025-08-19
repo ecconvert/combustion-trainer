@@ -1720,7 +1720,7 @@ const rheostatRampRef = useRef(null);
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-2 mb-4">
+                  <div className="grid grid-cols-2 gap-2 mb-4" data-testid="tuning-static-values">
                     <div data-flow-row>
                       <div className="label">Fuel Flow ({FUELS[fuelKey].unit}, scaled)</div>
                       <div className="value">{fuelFlow.toFixed(2)}</div>
