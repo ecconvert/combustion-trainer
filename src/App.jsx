@@ -44,6 +44,7 @@ import { useTour } from "./hooks/useTour";
 import { usePanelManagement } from "./hooks/usePanelManagement";
 import { useAppState } from "./hooks/useAppState";
 import { useSimulationLoop } from "./hooks/useSimulationLoop";
+import useSettings from "./hooks/useSettings";
 import { panels } from "./panels";
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
