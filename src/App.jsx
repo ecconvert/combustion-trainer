@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 /**
  * Main simulator UI for the Combustion Trainer.
  *
@@ -80,6 +81,7 @@ const defaultLayouts = {
     { i: "readouts", x: 7, y: 0,  w: 5,  h: 12, minW: 3, minH:  6 },
     { i: "trend",    x: 7, y: 12, w: 5,  h: 16, minW: 3, minH: 10 },
     { i: "meter",    x: 7, y: 28, w: 5,  h: 12, minW: 3, minH:  8 },
+  { i: "tuning",   x: 0, y: 46, w: 7,  h: 18, minW: 4, minH: 10 },
   ],
   md: [
     { i: "viz",      x: 0, y: 0,  w: 6,  h: 26 },
@@ -87,6 +89,7 @@ const defaultLayouts = {
     { i: "readouts", x: 6, y: 0,  w: 4,  h: 12 },
     { i: "trend",    x: 6, y: 12, w: 4,  h: 16 },
     { i: "meter",    x: 6, y: 28, w: 4,  h: 12 },
+  { i: "tuning",   x: 0, y: 46, w: 6,  h: 18 },
   ],
   sm: [
     { i: "viz",      x: 0, y: 0,  w: 5,  h: 26 },
@@ -94,6 +97,7 @@ const defaultLayouts = {
     { i: "readouts", x: 5, y: 0,  w: 3,  h: 12 },
     { i: "trend",    x: 5, y: 12, w: 3,  h: 16 },
     { i: "meter",    x: 5, y: 28, w: 3,  h: 12 },
+  { i: "tuning",   x: 0, y: 46, w: 5,  h: 18 },
   ],
   xs: [
     { i: "viz",      x: 0, y: 0,  w: 6, h: 24 },
@@ -101,6 +105,7 @@ const defaultLayouts = {
     { i: "readouts", x: 0, y: 42, w: 6, h: 10 },
     { i: "trend",    x: 0, y: 52, w: 6, h: 16 },
     { i: "meter",    x: 0, y: 68, w: 6, h: 10 },
+  { i: "tuning",   x: 0, y: 78, w: 6, h: 18 },
   ],
   xxs: [
     { i: "viz",      x: 0, y: 0,  w: 4, h: 24 },
@@ -108,6 +113,7 @@ const defaultLayouts = {
     { i: "readouts", x: 0, y: 42, w: 4, h: 10 },
     { i: "trend",    x: 0, y: 52, w: 4, h: 16 },
     { i: "meter",    x: 0, y: 68, w: 4, h: 10 },
+  { i: "tuning",   x: 0, y: 78, w: 4, h: 18 },
   ],
 };
 
@@ -1185,6 +1191,107 @@ useEffect(() => {
   const resumeAnalyzer = () => setAnState("SAMPLING");
   // Tuning assistant
   const tuningActive = tuningOn;
+  // Analyzer advanced menu / UI overlay state (incremental implementation toward full simulator PRD)
+  const [anMenuOpen, setAnMenuOpen] = useState(false);
+  const [anMenuScreen, setAnMenuScreen] = useState('MAIN'); // MAIN | MEASUREMENTS | FUEL | LIVE | RECORDS | SETTINGS | DIAGNOSIS
+  const [anMenuIndex, setAnMenuIndex] = useState(0);
+  const [selectedMeasurement, setSelectedMeasurement] = useState(null); // e.g. 'Flue Gas Analysis'
+  const [selectedFuel, setSelectedFuel] = useState(null);
+
+  const mainMenuItems = [
+    'Measurements',
+    'Measurement Records',
+    'Device Settings',
+    'Instrument Diagnosis',
+  ];
+  const measurementItems = [
+    'Flue Gas Analysis',
+    'Draught Measurement',
+    'Differential Pressure',
+    'CO Ambient',
+  ];
+  const fuelItems = [
+    'Natural Gas',
+    'Light Oil',
+    'Wood Pellets',
+  ];
+
+  const handleMenuNav = (dir) => {
+    if (!anMenuOpen) return;
+    const list = anMenuScreen === 'MAIN' ? mainMenuItems
+      : anMenuScreen === 'MEASUREMENTS' ? measurementItems
+      : anMenuScreen === 'FUEL' ? fuelItems
+      : [];
+    if (!list.length) return;
+    setAnMenuIndex((i) => {
+      const next = (i + (dir === 'up' ? -1 : 1) + list.length) % list.length;
+      return next;
+    });
+  };
+  const handleMenuOk = () => {
+    if (!anMenuOpen) return;
+    if (anMenuScreen === 'MAIN') {
+      const sel = mainMenuItems[anMenuIndex];
+      if (sel === 'Measurements') { setAnMenuScreen('MEASUREMENTS'); setAnMenuIndex(0); }
+      else if (sel === 'Measurement Records') { setAnMenuScreen('RECORDS'); }
+      else if (sel === 'Device Settings') { setAnMenuScreen('SETTINGS'); }
+      else if (sel === 'Instrument Diagnosis') { setAnMenuScreen('DIAGNOSIS'); }
+    } else if (anMenuScreen === 'MEASUREMENTS') {
+      const sel = measurementItems[anMenuIndex];
+      setSelectedMeasurement(sel);
+      if (sel === 'Flue Gas Analysis') {
+        setAnMenuScreen('FUEL');
+        setAnMenuIndex(0);
+      } else {
+        // Placeholder: other measurement types not yet simulated
+        setAnMenuScreen('LIVE');
+      }
+    } else if (anMenuScreen === 'FUEL') {
+      const sel = fuelItems[anMenuIndex];
+      setSelectedFuel(sel);
+      setAnMenuScreen('LIVE');
+    } else if (anMenuScreen === 'LIVE') {
+      // OK could toggle probe insert when READY
+      if (anState === 'READY' && !probeInFlue) insertProbe();
+    }
+  };
+  const handleMenuEsc = () => {
+    if (!anMenuOpen) return;
+    if (anMenuScreen === 'MAIN') { setAnMenuOpen(false); return; }
+    if (anMenuScreen === 'MEASUREMENTS') { setAnMenuScreen('MAIN'); setAnMenuIndex(0); return; }
+    if (anMenuScreen === 'FUEL') { setAnMenuScreen('MEASUREMENTS'); setAnMenuIndex(0); return; }
+    if (anMenuScreen === 'LIVE') { setAnMenuScreen('MAIN'); return; }
+    if (['RECORDS','SETTINGS','DIAGNOSIS'].includes(anMenuScreen)) { setAnMenuScreen('MAIN'); return; }
+  };
+
+  // Auto-open main menu when READY for the first time (non-intrusive: keep old flow available)
+  useEffect(() => {
+    if (anState === 'READY' && !anMenuOpen && anMenuScreen === 'MAIN' && !probeInFlue) {
+      // do not force open; user can click Menu. Leaving commented optional auto-open.
+      // setAnMenuOpen(true);
+    }
+  }, [anState, anMenuOpen, anMenuScreen, probeInFlue]);
+
+  // Dynamically inject tuning panel into existing user layouts (backward compatible)
+  useEffect(() => {
+    if (!tuningOn) return;
+    setLayouts((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      Object.keys(next).forEach((bp) => {
+        const arr = Array.isArray(next[bp]) ? next[bp].slice() : [];
+        if (!arr.some((it) => it.i === 'tuning')) {
+          const yMax = arr.reduce((m, it) => Math.max(m, it.y + (it.h || 0)), 0);
+          const template = (defaultLayouts[bp] || []).find((it) => it.i === 'tuning');
+          const newItem = template ? { ...template, y: yMax } : { i: 'tuning', x: 0, y: yMax, w: 6, h: 18 };
+          arr.push(newItem);
+          next[bp] = arr;
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [tuningOn, setLayouts]);
 
   const ea = steady.excessAir; const phi = 1 / Math.max(0.01, ea);
   const stackTempDisplay = unitSystem === "imperial" ? Math.round(simStackF) : Math.round(f2c(simStackF));
@@ -1356,7 +1463,7 @@ const rheostatRampRef = useRef(null);
               {/* Sliders moved to Controls > Fuel/Air Flows section to match tests */}
             </div>
             <CollapsibleSection title="Analyzer">
-              <div className="card" data-tour="analyzer">
+              <div className="card relative" data-tour="analyzer">
                 <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
                   <div className="flex items-center flex-wrap text-sm leading-snug min-w-0">
                     <span className="font-medium mr-1">State:</span>
@@ -1388,6 +1495,13 @@ const rheostatRampRef = useRef(null);
                     data-testid="btn-finish-zero"
                   >
                     Finish Zero
+                  </button>
+                  <button
+                    className="btn"
+                    onClick={() => { if (anState !== 'OFF') { setAnMenuOpen((o) => !o); setAnMenuScreen('MAIN'); setAnMenuIndex(0); } }}
+                    disabled={anState === 'OFF' || anState === 'ZERO'}
+                  >
+                    {anMenuOpen ? 'Close Menu' : 'Menu'}
                   </button>
                   <button
                     className="btn"
@@ -1468,6 +1582,91 @@ const rheostatRampRef = useRef(null);
                       >
                         {msg}
                       </div>
+
+                      {/* Analyzer advanced menu overlay */}
+                      {anMenuOpen && (
+                        <div className="absolute inset-0 rounded-lg bg-white/95 dark:bg-slate-800/95 border border-slate-300 dark:border-slate-600 p-3 overflow-hidden flex flex-col" data-testid="analyzer-menu">
+                          <div className="text-[10px] uppercase tracking-wide font-semibold text-slate-500 mb-1">Analyzer Menu</div>
+                          {anMenuScreen === 'MAIN' && (
+                            <div className="flex-1 overflow-auto">
+                              {mainMenuItems.map((item, i) => (
+                                <div key={item} className={`px-2 py-1 rounded cursor-pointer text-sm ${i === anMenuIndex ? 'bg-cyan-600 text-white' : 'hover:bg-slate-200 dark:hover:bg-slate-700'}`}>{item}</div>
+                              ))}
+                              <div className="mt-3 text-[10px] text-slate-500">Use ▲▼ then OK. ESC to exit.</div>
+                            </div>
+                          )}
+                          {anMenuScreen === 'MEASUREMENTS' && (
+                            <div className="flex-1 overflow-auto">
+                              <div className="text-xs mb-1 font-medium">Select Measurement</div>
+                              {measurementItems.map((item, i) => (
+                                <div key={item} className={`px-2 py-1 rounded cursor-pointer text-sm ${i === anMenuIndex ? 'bg-cyan-600 text-white' : 'hover:bg-slate-200 dark:hover:bg-slate-700'}`}>{item}</div>
+                              ))}
+                              <div className="mt-3 text-[10px] text-slate-500">OK to choose. ESC to Main Menu.</div>
+                            </div>
+                          )}
+                          {anMenuScreen === 'FUEL' && (
+                            <div className="flex-1 overflow-auto">
+                              <div className="text-xs mb-1 font-medium">Select Fuel</div>
+                              {fuelItems.map((item, i) => (
+                                <div key={item} className={`px-2 py-1 rounded cursor-pointer text-sm ${i === anMenuIndex ? 'bg-cyan-600 text-white' : 'hover:bg-slate-200 dark:hover:bg-slate-700'}`}>{item}</div>
+                              ))}
+                              <div className="mt-3 text-[10px] text-slate-500">OK to begin. ESC to Measurements.</div>
+                            </div>
+                          )}
+                          {anMenuScreen === 'LIVE' && (
+                            <div className="flex-1 overflow-auto">
+                              <div className="text-xs font-medium mb-1">Live Readings {selectedFuel && <>({selectedFuel})</>} {selectedMeasurement && <span className="ml-1 text-slate-400">[{selectedMeasurement}]</span>}</div>
+                              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] leading-tight">
+                                <div>O₂</div><div className="font-semibold">{dispRef.current?.O2?.toFixed?.(2) ?? '--'} %</div>
+                                <div>CO</div><div className="font-semibold">{dispRef.current?.CO ? Math.round(dispRef.current.CO) : '--'} ppm</div>
+                                <div>CO₂</div><div className="font-semibold">{dispRef.current?.CO2?.toFixed?.(2) ?? '--'} %</div>
+                                <div>NOx</div><div className="font-semibold">{dispRef.current?.NOx ? Math.round(dispRef.current.NOx) : '--'} ppm</div>
+                                <div>Stack T</div><div className="font-semibold">{dispRef.current?.StackF ? Math.round(dispRef.current.StackF) : '--'} °F</div>
+                                <div>Eff</div><div className="font-semibold">{dispRef.current?.Eff?.toFixed?.(1) ?? '--'} %</div>
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <button className="btn" onClick={() => { if (anState === 'READY') insertProbe(); }} disabled={anState !== 'READY' || probeInFlue}>Insert Probe</button>
+                                <button className="btn" onClick={() => setProbeInFlue(false)} disabled={!probeInFlue}>Remove Probe</button>
+                                <button className="btn" onClick={() => { setProbeInFlue(false); setAnState('READY'); setAnMenuScreen('MAIN'); }}>Stop</button>
+                                <button className="btn" onClick={holdAnalyzer} disabled={anState !== 'SAMPLING'}>Hold</button>
+                                <button className="btn" onClick={resumeAnalyzer} disabled={anState !== 'HOLD'}>Resume</button>
+                                <button className="btn-primary" onClick={saveReading} disabled={anState === 'OFF'}>Save</button>
+                              </div>
+                            </div>
+                          )}
+                          {anMenuScreen === 'RECORDS' && (
+                            <div className="flex-1 overflow-auto text-[11px]">
+                              <div className="text-xs font-medium mb-1">Saved Measurements</div>
+                              {saved.length === 0 && <div className="text-slate-500">No records.</div>}
+                              {saved.slice(0,50).map(r => (
+                                <div key={r.id} className="border-b border-slate-200 dark:border-slate-700 py-1 flex justify-between">
+                                  <div>{new Date(r.t).toLocaleTimeString()}</div>
+                                  <div className="font-semibold">O₂ {r.O2 ?? '--'}%</div>
+                                </div>
+                              ))}
+                              <div className="mt-2"><button className="btn" onClick={exportSavedReadings} disabled={!saved.length}>Export CSV</button></div>
+                            </div>
+                          )}
+                          {anMenuScreen === 'SETTINGS' && (
+                            <div className="flex-1 text-[11px]">
+                              <div className="text-xs font-medium mb-1">Device Settings (Preview)</div>
+                              <p className="text-slate-500">Full settings UI coming soon.</p>
+                            </div>
+                          )}
+                          {anMenuScreen === 'DIAGNOSIS' && (
+                            <div className="flex-1 text-[11px]">
+                              <div className="text-xs font-medium mb-1">Instrument Diagnosis (Preview)</div>
+                              <p className="text-slate-500">Sensor health & drift simulation is planned.</p>
+                            </div>
+                          )}
+                          <div className="mt-2 flex gap-2 justify-end text-[11px]">
+                            <button className="btn" onClick={() => handleMenuNav('up')} aria-label="Up">▲</button>
+                            <button className="btn" onClick={() => handleMenuNav('down')} aria-label="Down">▼</button>
+                            <button className="btn" onClick={handleMenuOk} aria-label="OK">OK</button>
+                            <button className="btn" onClick={handleMenuEsc} aria-label="Esc">ESC</button>
+                          </div>
+                        </div>
+                      )}
                     </>
                   );
                 })()}
@@ -1731,93 +1930,9 @@ const rheostatRampRef = useRef(null);
                     </div>
                   </div>
                 )}
-                <div className="label">Camshaft Intervals</div>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {[0,10,20,30,40,50,60,70,80,90,100].map((p) => (
-                    <button
-                      key={p}
-                      data-tour={`cam-${p}`}
-                      className={`btn ${rheostat === p ? 'btn-primary' : ''}`}
-                      disabled={!camControlsEnabled}
-                      onClick={() => {
-                        if (!canSetFiring) return;
-                        setRheostat(p);
-                        applyCamIfSaved(p);
-                      }}
-                    >
-                      {p}%
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-3 flex items-center gap-2">
-                  <button
-                    className="btn btn-primary"
-                    disabled={!camControlsEnabled}
-                    onClick={setCamAtCurrent}
-                    title="Save current fuel and air at this cam position"
-                  >
-                    Set {currentCam}%
-                  </button>
-                  <button
-                    className="btn"
-                    disabled={!camControlsEnabled || !camMap[currentCam]}
-                    onClick={clearCamAtCurrent}
-                    title="Clear saved point at this cam position"
-                  >
-                    Clear {currentCam}%
-                  </button>
-                  <button
-                    className="btn"
-                    disabled={!camControlsEnabled}
-                    onClick={applySafeDefaults}
-                    title="Apply safe default curve"
-                  >
-                    Safe Defaults
-                  </button>
-                  {camMap[currentCam] && (
-                    <span data-testid="cam-saved-pill" className="pill bg-green-100">Saved: F {camMap[currentCam].fuel} / A {camMap[currentCam].air}</span>
-                  )}
-                  {defaultsLoaded && (
-                    <span className="pill bg-blue-100">Safe defaults loaded</span>
-                  )}
-                </div>
-                <div className="mt-2 text-xs text-slate-500">
-                  Saved cam points: {Object.keys(camMap).length ? Object.keys(camMap).sort((a,b)=>a-b).join(', ') : 'none'}
-                </div>
-                <div className="flex items-center gap-2 mt-3">
-                  <button
-                    className="btn"
-                    disabled={!canSetFiring}
-                    onClick={() => {
-                      if (!canSetFiring) return;
-                      setRheostat((v) => {
-                        const next = clamp(Math.round(v / 10) * 10 - 10, 0, 100);
-                        applyCamIfSaved(next);
-                        return next;
-                      });
-                    }}
-                  >
-                    -10%
-                  </button>
-                  <div className="value">{rheostat}%</div>
-                  <button
-                    className="btn"
-                    disabled={!canSetFiring}
-                    onClick={() => {
-                      if (!canSetFiring) return;
-                      setRheostat((v) => {
-                        const next = clamp(Math.round(v / 10) * 10 + 10, 0, 100);
-                        applyCamIfSaved(next);
-                        return next;
-                      });
-                    }}
-                  >
-                    +10%
-                  </button>
-                </div>
                 {!tuningActive && (
                   <div className="mt-3 text-xs text-slate-500">
-                    Enable Tuning Mode to adjust Fuel & Air flows (sliders are shown in the Tuning Mode panel).
+                    Enable Tuning Mode to access CAM curve tools (moved to dedicated Tuning Controls panel).
                   </div>
                 )}
               </div>
@@ -2064,6 +2179,100 @@ const rheostatRampRef = useRef(null);
               </div>
             )}
           </GridAutoSizer>
+          {tuningOn && (
+            <GridAutoSizer key="tuning" id="tuning" data-testid="panel-tuning" className="card overflow-hidden" onRows={(r) => setItemRows("tuning", r)} rowHeight={10}>
+              <PanelHeader title="Tuning Controls" />
+              <div className="mt-1 text-xs text-slate-500">
+                Adjust cam curve points and navigate standardized firing intervals.
+              </div>
+              <div className="mt-3">
+                <div className="label">Camshaft Intervals</div>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {[0,10,20,30,40,50,60,70,80,90,100].map((p) => (
+                    <button
+                      key={p}
+                      data-tour={`cam-${p}`}
+                      className={`btn ${rheostat === p ? 'btn-primary' : ''}`}
+                      disabled={!camControlsEnabled}
+                      onClick={() => {
+                        if (!canSetFiring) return;
+                        setRheostat(p);
+                        applyCamIfSaved(p);
+                      }}
+                    >
+                      {p}%
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <button
+                    className="btn btn-primary"
+                    disabled={!camControlsEnabled}
+                    onClick={setCamAtCurrent}
+                    title="Save current fuel and air at this cam position"
+                  >
+                    Set {currentCam}%
+                  </button>
+                  <button
+                    className="btn"
+                    disabled={!camControlsEnabled || !camMap[currentCam]}
+                    onClick={clearCamAtCurrent}
+                    title="Clear saved point at this cam position"
+                  >
+                    Clear {currentCam}%
+                  </button>
+                  <button
+                    className="btn"
+                    disabled={!camControlsEnabled}
+                    onClick={applySafeDefaults}
+                    title="Apply safe default curve"
+                  >
+                    Safe Defaults
+                  </button>
+                  {camMap[currentCam] && (
+                    <span data-testid="cam-saved-pill" className="pill bg-green-100">Saved: F {camMap[currentCam].fuel} / A {camMap[currentCam].air}</span>
+                  )}
+                  {defaultsLoaded && (
+                    <span className="pill bg-blue-100">Safe defaults loaded</span>
+                  )}
+                </div>
+                <div className="mt-2 text-xs text-slate-500">
+                  Saved cam points: {Object.keys(camMap).length ? Object.keys(camMap).sort((a,b)=>a-b).join(', ') : 'none'}
+                </div>
+                <div className="flex items-center gap-2 mt-3">
+                  <button
+                    className="btn"
+                    disabled={!canSetFiring}
+                    onClick={() => {
+                      if (!canSetFiring) return;
+                      setRheostat((v) => {
+                        const next = clamp(Math.round(v / 10) * 10 - 10, 0, 100);
+                        applyCamIfSaved(next);
+                        return next;
+                      });
+                    }}
+                  >
+                    -10%
+                  </button>
+                  <div className="value">{rheostat}%</div>
+                  <button
+                    className="btn"
+                    disabled={!canSetFiring}
+                    onClick={() => {
+                      if (!canSetFiring) return;
+                      setRheostat((v) => {
+                        const next = clamp(Math.round(v / 10) * 10 + 10, 0, 100);
+                        applyCamIfSaved(next);
+                        return next;
+                      });
+                    }}
+                  >
+                    +10%
+                  </button>
+                </div>
+              </div>
+            </GridAutoSizer>
+          )}
           {mainItems.map((id) => {
             const Panel = panels[id].Component;
             return (
