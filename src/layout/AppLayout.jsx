@@ -35,12 +35,12 @@ import Spark from "../components/effects/Spark";
 import Smoke from "../components/effects/Smoke";
 import AppHeader from "./components/AppHeader";
 import AppFooter from "./components/AppFooter";
-import { saveConfig, getDefaultConfig } from "../lib/config";
 import SettingsMenu from "../components/SettingsMenu";
 import useAnalyzer from "../hooks/useAnalyzer";
 import useLayoutManager from "../hooks/useLayoutManager";
 import useDataHistory from "../hooks/useDataHistory";
 import useBurnerProgrammer from "../hooks/useBurnerProgrammer";
+import useSettings from "../hooks/useSettings";
 import AirDrawerIndicator from "../components/AirDrawerIndicator";
 import GridAutoSizer from "../components/GridAutoSizer";
 import { panels, defaultZoneById } from "../panels";
@@ -182,12 +182,24 @@ function PanelHeader({ title, right, dockAction }) {
 
 export default function AppLayout({ initialConfig, children }) {
   const { drawerOpen, setDrawerOpen, seriesVisibility, setSeriesVisibility } = useUIState();
-  const [config, setConfig] = useState(initialConfig || getDefaultConfig());
-  const configBeforeSettings = useRef(null);
+  
+  // ----------------------- Settings Management -----------------------
+  const {
+    config,
+    unitSystem,
+    theme: configTheme,
+    showSettings,
+    setShowSettings,
+    openSettings,
+    handleApply,
+    handleCancel,
+    handlePreview,
+    simSpeedMultiplier,
+    fastForward,
+    tuningOn,
+    setTuningOn
+  } = useSettings(initialConfig);
 
-  // Settings modal visibility
-  const unitSystem = config.units.system;
-  const [showSettings, setShowSettings] = useState(false);
   const lastRowsRef = useRef({});
 
   const [theme, setTheme] = useState(() => {
@@ -305,27 +317,7 @@ export default function AppLayout({ initialConfig, children }) {
     media.addEventListener('change', handler);
     return () => media.removeEventListener('change', handler);
   }, [theme]);
-  const handleApply = (next) => {
-    setConfig(next);
-    saveConfig(next);
-    setTheme(next.general.theme);
-    setShowSettings(false);
-  };
-  const handleCancel = () => {
-    if (configBeforeSettings.current) {
-      setConfig(configBeforeSettings.current);
-      applyTheme(configBeforeSettings.current.general.theme);
-    }
-    setShowSettings(false);
-  };
-  // Live preview handler from SettingsMenu
-  const handlePreview = (next, meta) => {
-    setConfig(next);
-    // Only update theme immediately if the changed field is theme
-    if (meta?.section === 'general' && meta?.field === 'theme') {
-      setTheme(next.general.theme);
-    }
-  };
+  
   // Scenario selection state and handler
   const [scenarioSel, setScenarioSel] = useState("");
   const handleScenarioChange = useCallback((e) => {
@@ -347,7 +339,6 @@ export default function AppLayout({ initialConfig, children }) {
   const [rheostat, setRheostat] = useState(0); // firing-rate input 0–100%
   const [minFuel, setMinFuel] = useState(2); // derived from regulator pressure
   const [maxFuel, setMaxFuel] = useState(18);
-  const [simSpeedMultiplier, setSimSpeedMultiplier] = useState(1); // for tour fast-forward
 
   // User-adjustable flow inputs (molar basis)
   const [fuelFlow, setFuelFlow] = useState(5); // fuel flow (arbitrary mol/min scale)
@@ -442,8 +433,6 @@ useEffect(() => {
     ];
     downloadCSV("oil-meter.csv", rows);
   };
-
-  const [tuningOn, setTuningOn] = useState(false);
 
   const [defaultsLoaded, setDefaultsLoaded] = useState(false);
 
@@ -580,8 +569,6 @@ useEffect(() => {
   useEffect(() => {
     window.setBoilerOn = setBoilerOn;
     window.getBoilerOn = () => boilerOn;
-    window.setSimSpeed = setSimSpeedMultiplier;
-    window.getSimSpeed = () => simSpeedMultiplier;
     window.setRheostat = (val) => {
       try {
         const n = Math.max(0, Math.min(100, parseInt(val)));
@@ -599,13 +586,11 @@ useEffect(() => {
     return () => {
       delete window.setBoilerOn;
       delete window.getBoilerOn;
-      delete window.setSimSpeed;
-      delete window.getSimSpeed;
       delete window.setRheostat;
       delete window.getProgrammerState;
       delete window.advanceProgrammer;
     };
-  }, [setBoilerOn, boilerOn, setSimSpeedMultiplier, simSpeedMultiplier]);
+  }, [setBoilerOn, boilerOn]);
 
   useEffect(() => {
     const mapKey = clamp(Math.round(rheostat / 10) * 10, 0, 100);
@@ -1120,10 +1105,7 @@ const rheostatRampRef = useRef(null);
 
       <AppHeader
         onOpenDrawer={() => setDrawerOpen(true)}
-        onOpenSettings={() => {
-          configBeforeSettings.current = JSON.parse(JSON.stringify(config));
-          setShowSettings(true);
-        }}
+        onOpenSettings={openSettings}
       />
 
       <main className="max-w-7xl mx-auto p-6">
