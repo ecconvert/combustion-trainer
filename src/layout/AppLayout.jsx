@@ -39,6 +39,7 @@ import { saveConfig, getDefaultConfig } from "../lib/config";
 import SettingsMenu from "../components/SettingsMenu";
 import useAnalyzer from "../hooks/useAnalyzer";
 import useLayoutManager from "../hooks/useLayoutManager";
+import useDataHistory from "../hooks/useDataHistory";
 import AirDrawerIndicator from "../components/AirDrawerIndicator";
 import GridAutoSizer from "../components/GridAutoSizer";
 import { panels, defaultZoneById } from "../panels";
@@ -60,7 +61,6 @@ const seriesConfig = [
 
 const RGL_LS_KEY = "ct_layouts_v2";
 const ZONES_KEY = "ct_zones_v1";
-const SAVED_KEY = "ct_saved_v1";
 
 const rglBreakpoints = { lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 };
 const rglCols        = { lg:   12,  md:  10,  sm:   8,  xs:   6,  xxs:  4 };
@@ -163,28 +163,6 @@ function saveZones(z) {
   } catch (e) {
     if (isDev) {
       console.error("Failed to save zones to localStorage:", e);
-    }
-  }
-}
-
-
-function loadSaved() {
-  try {
-    const raw = localStorage.getItem(SAVED_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch (e) {
-    if (isDev) {
-      console.error("Failed to load saved readings:", e);
-    }
-    return [];
-  }
-}
-function persistSaved(next) {
-  try {
-    localStorage.setItem(SAVED_KEY, JSON.stringify(next));
-  } catch (e) {
-    if (isDev) {
-      console.error("Failed to persist saved readings:", e);
     }
   }
 }
@@ -388,7 +366,6 @@ export default function AppLayout({ initialConfig, children }) {
   const stateTimeRef = useRef(0); // milliseconds elapsed in current state
 
   // ----------------------- Analyzer state machine -----------------------
-  const [saved, setSaved] = useState(loadSaved); // logged analyzer readings
   const [t5Spark, setT5Spark] = useState(false); // output relay states for animation
   const [t6Pilot, setT6Pilot] = useState(false);
   const [t7Main, setT7Main] = useState(false);
@@ -890,86 +867,6 @@ useEffect(() => {
     if (s === "PREPURGE_HI") { stateTimeRef.current = EP160.PURGE_HF_SEC * 1000; return; }
   };
 
-  const [history, setHistory] = useState([]);
-  const rheostatRef = useRef(rheostat);
-  useEffect(() => { rheostatRef.current = rheostat; }, [rheostat]);
-  useEffect(() => {
-    const id = setInterval(() => {
-      const now = Date.now();
-      const row = {
-        ts: now,
-        t: new Date(now).toLocaleTimeString(),
-        Rate: rheostatRef.current,
-        FuelFlow: Number(parseFloat(fuelFlowRef.current).toFixed(2)),
-        AirFlow: Number(parseFloat(airFlowRef.current).toFixed(2)),
-        O2: Number(dispRef.current.O2.toFixed(2)),
-        CO2: Number(dispRef.current.CO2.toFixed(2)),
-        CO: Math.round(dispRef.current.CO),
-        NOx: Math.round(dispRef.current.NOx),
-        StackF: Math.round(dispRef.current.StackF),
-        Eff: Number(Number(dispRef.current.Eff).toFixed(1)),
-      };
-      setHistory((h) => [...h.slice(-config.general.trendLength), row]);
-    }, config.analyzer.samplingSec * 1000);
-    return () => clearInterval(id);
-  }, [config.analyzer.samplingSec, config.general.trendLength]);
-
-  const saveReading = useCallback((snapshot) => {
-    const row = { id: crypto.randomUUID(), t: Date.now(), ...snapshot };
-    setSaved((prev) => {
-      const next = [row, ...prev];
-      persistSaved(next);
-      return next;
-    });
-  }, []);
-
-  const exportSavedReadings = useCallback(() => {
-    if (!saved.length) return;
-    const headers = [
-      "id",
-      "t",
-      "fuel",
-      "setFire",
-      "airFlow",
-      "fuelFlow",
-      "stackF",
-      "O2",
-      "CO2",
-      "COppm",
-      "NOxppm",
-      "excessAir",
-      "efficiency",
-      "notes",
-    ];
-    const lines = [headers.join(",")].concat(
-      saved.map((r) =>
-        [
-          r.id,
-          new Date(r.t).toISOString(),
-          r.fuel ?? "",
-          r.setFire ?? "",
-          r.airFlow ?? "",
-          r.fuelFlow ?? "",
-          r.stackF ?? "",
-          r.O2 ?? "",
-          r.CO2 ?? "",
-          r.COppm ?? "",
-          r.NOxppm ?? "",
-          r.excessAir ?? "",
-          r.efficiency ?? "",
-          JSON.stringify(r.notes ?? ""),
-        ].join(","),
-      ),
-    );
-    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "saved_readings.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [saved]);
-
   // ----------------------- Analyzer Simulation -----------------------
   const analyzer = useAnalyzer();
   const {
@@ -1022,6 +919,25 @@ useEffect(() => {
     handleResizeStart,
     handleResizeStop,
   } = layoutManager;
+
+  // ----------------------- Data History Management -----------------------
+  const dataHistory = useDataHistory({ 
+    config, 
+    rheostat, 
+    fuelFlowRef, 
+    airFlowRef, 
+    dispRef 
+  });
+  const {
+    saved,
+    setSaved,
+    history,
+    setHistory,
+    saveReading,
+    exportSavedReadings,
+    clearSavedReadings,
+    deleteSavedReading,
+  } = dataHistory;
 
   const tuningActive = tuningOn;
 
