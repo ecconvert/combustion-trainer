@@ -36,7 +36,6 @@ import { buildSafeCamMap } from "./lib/cam";
 import CollapsibleSection from "./components/CollapsibleSection";
 import RightDrawer from "./components/RightDrawer";
 import { useUIState } from "./components/UIStateContext";
-import { saveConfig, getDefaultConfig } from "./lib/config";
 import SettingsMenu from "./components/SettingsMenu";
 import AirDrawerIndicator from "./components/AirDrawerIndicator";
 import GridAutoSizer from "./components/GridAutoSizer";
@@ -366,8 +365,18 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
     saveReading
   } = appState;
   
-  // Create initial config and simulation speed ref
-  const [config, setConfig] = useState(initialConfig || getDefaultConfig());
+  // Initialize settings hook with initial config
+  const settingsHook = useSettings(initialConfig);
+  const { 
+    config,
+    showSettings,
+    setShowSettings,
+    handleApply,
+    handleCancel,
+    handlePreview,
+    configBeforeSettings,
+    theme
+  } = settingsHook;
   const simSpeedMultiplierRef = useRef(config.general?.fastForward ? 10 : 1);
   
   // ----------------------- Simulation Loop Management -----------------------
@@ -402,39 +411,15 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
   
   const { EP160 } = simulationLoop;
   
-  const configBeforeSettings = useRef(null);
-
+  
   // Settings modal visibility
   const unitSystem = config.units.system;
-  const [showSettings, setShowSettings] = useState(false);
   const [layouts, setLayouts] = useState(loadLayouts());
   const [autoSizeLock, setAutoSizeLock] = useState(false);
   const lastRowsRef = useRef({});
   const [breakpoint, setBreakpoint] = useState('lg');
 
-  const [theme, setTheme] = useState(() => {
-    try {
-      return localStorage.getItem("ct_theme") || "system";
-    } catch (e) {
-      if (isDev) {
-        console.error("Failed to load theme from localStorage:", e);
-      }
-      return "system";
-    }
-  });
-
   useIsomorphicLayoutEffect(() => {
-    applyTheme(theme);
-  }, []);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("ct_theme", theme);
-    } catch (e) {
-      if (isDev) {
-        console.error("Failed to save theme to localStorage:", e);
-      }
-    }
     applyTheme(theme);
   }, [theme]);
 
@@ -524,27 +509,7 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
     media.addEventListener('change', handler);
     return () => media.removeEventListener('change', handler);
   }, [theme]);
-  const handleApply = (next) => {
-    setConfig(next);
-    saveConfig(next);
-    setTheme(next.general.theme);
-    setShowSettings(false);
-  };
-  const handleCancel = () => {
-    if (configBeforeSettings.current) {
-      setConfig(configBeforeSettings.current);
-      applyTheme(configBeforeSettings.current.general.theme);
-    }
-    setShowSettings(false);
-  };
-  // Live preview handler from SettingsMenu
-  const handlePreview = (next, meta) => {
-    setConfig(next);
-    // Only update theme immediately if the changed field is theme
-    if (meta?.section === 'general' && meta?.field === 'theme') {
-      setTheme(next.general.theme);
-    }
-  };
+  
   // Scenario selection state and handler
   const handleScenarioChange = useCallback((e) => {
     const val = e.target.value;
