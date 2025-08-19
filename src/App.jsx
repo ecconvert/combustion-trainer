@@ -1363,9 +1363,10 @@ const rheostatRampRef = useRef(null);
                     <span className="mr-2 break-all">{anState}</span>
                     {probeInFlue && (
                       <span
-                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-100 shadow-sm whitespace-nowrap mt-1 md:mt-0"
+                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-200 text-slate-700 dark:bg-slate-600/80 dark:text-slate-50 shadow-sm mt-1 md:mt-0 max-w-full"
+                        style={{lineHeight: '1.1'}}
                       >
-                        Probe in flue
+                        <span className="truncate">Probe in flue</span>
                       </span>
                     )}
                   </div>
