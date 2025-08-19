@@ -32,7 +32,6 @@ import {
 import { FUELS } from "./lib/fuels";
 import { clamp, lerp, f2c, num } from "./lib/math";
 import { downloadCSV } from "./lib/csv";
-import { computeCombustion } from "./lib/chemistry";
 import { buildSafeCamMap } from "./lib/cam";
 import CollapsibleSection from "./components/CollapsibleSection";
 import RightDrawer from "./components/RightDrawer";
@@ -354,6 +353,7 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
     simStackFRef,
     
     // Derived computations
+    disp,
     effectiveFuel,
     gasCamCFH,
     gasBurnerCFH,
@@ -958,15 +958,12 @@ useEffect(() => {
   }, [rheostat, minFuel, maxFuel, fuel, tuningOn, camMap]);
 
   // Instantaneous chemistry at the simulated stack temperature
-  const steady = useMemo(
-    () => computeCombustion({ fuel, fuelFlow: effectiveFuel, airFlow, stackTempF: simStackF, ambientF }),
-    [fuel, effectiveFuel, airFlow, simStackF, ambientF],
-  );
+  // steady state combustion calculations now provided by useAppState hook as 'disp'
 
   // Analyzer displayed values with sensor lag and states (local state for now)
   const [dispLocal, setDispLocal] = useState({ O2: 20.9, CO2: 0, CO: 0, COaf: 0, NOx: 0, StackF: 70, Eff: 0 });
-  // Use dispLocal as disp for compatibility
-  const disp = dispLocal;
+  // Use hook-provided disp for steady-state calculations, dispLocal for smoothed analyzer display  
+  const steady = disp; // steady-state combustion values from hook
   
   // Keep latest steady-state and stack temperature in refs for a stable analyzer smoother
   const steadyRef = useRef(steady);
@@ -1042,9 +1039,9 @@ useEffect(() => {
 
   // Log history for trend chart
   const [history, setHistory] = useState([]);
-  const dispRef = useRef(disp);
+  const dispRef = useRef(dispLocal);
   // rheostatRef now provided by useAppState hook
-  useEffect(() => { dispRef.current = disp; }, [disp]);
+  useEffect(() => { dispRef.current = dispLocal; }, [dispLocal]);
   // rheostat ref sync now handled by useAppState hook
   useEffect(() => {
     const id = setInterval(() => {
@@ -1909,14 +1906,14 @@ const rheostatRampRef = useRef(null);
           <GridAutoSizer key="readouts" id="readouts" data-testid="panel-readouts" className="card" onRows={(r) => setItemRows("readouts", r)} rowHeight={10}>
             <PanelHeader title="Readouts" />
             <div className="grid grid-cols-2 gap-3" role="group" aria-label="readouts">
-              <div><div className="label">O₂ (dry)</div><div className="value">{disp.O2.toFixed(2)}%</div></div>
-              <div><div className="label">CO₂ (dry)</div><div className="value">{disp.CO2.toFixed(2)}%</div></div>
-              <div><div className="label">CO</div><div className="value">{Math.round(disp.CO)} ppm</div></div>
-              <div><div className="label">CO air-free</div><div className="value">{Math.round(disp.COaf)} ppm</div></div>
-              <div><div className="label">NOₓ</div><div className="value">{Math.round(disp.NOx)} ppm</div></div>
+              <div><div className="label">O₂ (dry)</div><div className="value">{dispLocal.O2.toFixed(2)}%</div></div>
+              <div><div className="label">CO₂ (dry)</div><div className="value">{dispLocal.CO2.toFixed(2)}%</div></div>
+              <div><div className="label">CO</div><div className="value">{Math.round(dispLocal.CO)} ppm</div></div>
+              <div><div className="label">CO air-free</div><div className="value">{Math.round(dispLocal.COaf)} ppm</div></div>
+              <div><div className="label">NOₓ</div><div className="value">{Math.round(dispLocal.NOx)} ppm</div></div>
               <div><div className="label">Excess Air</div><div className="value">{((steady.excessAir - 1) * 100).toFixed(1)}%</div></div>
-              <div><div className="label">Efficiency</div><div className="value">{Number(disp.Eff).toFixed(1)}%</div></div>
-              <div><div className="label">Stack</div><div className="value">{Math.round(disp.StackF)} °F</div></div>
+              <div><div className="label">Efficiency</div><div className="value">{Number(dispLocal.Eff).toFixed(1)}%</div></div>
+              <div><div className="label">Stack</div><div className="value">{Math.round(dispLocal.StackF)} °F</div></div>
               <div className="col-span-2 text-xs text-slate-500 mt-1">
                 Targets for {fuelKey}: O₂ {fuel.targets.O2[0]} to {fuel.targets.O2[1]} percent; CO AF ≤ {fuel.targets.COafMax} ppm; stack {fuel.targets.stackF[0]} to {fuel.targets.stackF[1]} °F.
               </div>
@@ -1930,13 +1927,13 @@ const rheostatRampRef = useRef(null);
                       setFire: rheostat,
                       airFlow: Number(Number(airFlow).toFixed(2)),
                       fuelFlow: Number(Number(fuelFlow).toFixed(2)),
-                      stackF: Math.round(disp.StackF),
-                      O2: Number(disp.O2.toFixed(2)),
-                      CO2: Number(disp.CO2.toFixed(2)),
-                      COppm: Math.round(disp.CO),
-                      NOxppm: Math.round(disp.NOx),
+                      stackF: Math.round(dispLocal.StackF),
+                      O2: Number(dispLocal.O2.toFixed(2)),
+                      CO2: Number(dispLocal.CO2.toFixed(2)),
+                      COppm: Math.round(dispLocal.CO),
+                      NOxppm: Math.round(dispLocal.NOx),
                       excessAir: Number(((steady.excessAir - 1) * 100).toFixed(1)),
-                      efficiency: Number(Number(disp.Eff).toFixed(1)),
+                      efficiency: Number(Number(dispLocal.Eff).toFixed(1)),
                     })
                   }
                 >
