@@ -37,6 +37,7 @@ import AppHeader from "./components/AppHeader";
 import AppFooter from "./components/AppFooter";
 import { saveConfig, getDefaultConfig } from "../lib/config";
 import SettingsMenu from "../components/SettingsMenu";
+import useAnalyzer from "../hooks/useAnalyzer";
 import AirDrawerIndicator from "../components/AirDrawerIndicator";
 import GridAutoSizer from "../components/GridAutoSizer";
 import { panels, defaultZoneById } from "../panels";
@@ -1004,88 +1005,37 @@ useEffect(() => {
     a.click();
     URL.revokeObjectURL(url);
   }, [saved]);
-  const [anState, setAnState] = useState("OFF");
-  const [probeInFlue, setProbeInFlue] = useState(false);
-  const [zeroProgress, setZeroProgress] = useState(0);
-  const ZERO_DURATION_MS = 6000; // 6s stabilization demo
-  const startAnalyzer = () => setAnState("ZERO");
-  const finishZero = () => setAnState("READY");
-  const insertProbe = () => {
-    setProbeInFlue(true);
-    setAnState("SAMPLING");
-  };
-  const holdAnalyzer = () => setAnState("HOLD");
-  const resumeAnalyzer = () => setAnState("SAMPLING");
+
+  // ----------------------- Analyzer Simulation -----------------------
+  const analyzer = useAnalyzer();
+  const {
+    anState,
+    probeInFlue,
+    zeroProgress,
+    anMenuOpen,
+    anMenuScreen,
+    anMenuIndex,
+    selectedMeasurement,
+    selectedFuel,
+    mainMenuItems,
+    measurementItems,
+    fuelItems,
+    startAnalyzer,
+    finishZero,
+    holdAnalyzer,
+    resumeAnalyzer,
+    insertProbe,
+    removeProbe,
+    stopAnalyzer,
+    handleMenuNav,
+    handleMenuOk,
+    handleMenuEsc,
+    openMenu,
+    closeMenu,
+    getHelpText,
+  } = analyzer;
+
   const tuningActive = tuningOn;
-  const [anMenuOpen, setAnMenuOpen] = useState(false);
-  const [anMenuScreen, setAnMenuScreen] = useState('MAIN'); // MAIN | MEASUREMENTS | FUEL | LIVE | RECORDS | SETTINGS | DIAGNOSIS
-  const [anMenuIndex, setAnMenuIndex] = useState(0);
-  const [selectedMeasurement, setSelectedMeasurement] = useState(null); // e.g. 'Flue Gas Analysis'
-  const [selectedFuel, setSelectedFuel] = useState(null);
-
-  const mainMenuItems = [
-    'Measurements',
-    'Measurement Records',
-    'Device Settings',
-    'Instrument Diagnosis',
-  ];
-  const measurementItems = [
-    'Flue Gas Analysis',
-    'Draught Measurement',
-    'Differential Pressure',
-    'CO Ambient',
-  ];
-  const fuelItems = [
-    'Natural Gas',
-    'Light Oil',
-    'Wood Pellets',
-  ];
-
-  const handleMenuNav = (dir) => {
-    if (!anMenuOpen) return;
-    const list = anMenuScreen === 'MAIN' ? mainMenuItems
-      : anMenuScreen === 'MEASUREMENTS' ? measurementItems
-      : anMenuScreen === 'FUEL' ? fuelItems
-      : [];
-    if (!list.length) return;
-    setAnMenuIndex((i) => {
-      const next = (i + (dir === 'up' ? -1 : 1) + list.length) % list.length;
-      return next;
-    });
-  };
-  const handleMenuOk = () => {
-    if (!anMenuOpen) return;
-    if (anMenuScreen === 'MAIN') {
-      const sel = mainMenuItems[anMenuIndex];
-      if (sel === 'Measurements') { setAnMenuScreen('MEASUREMENTS'); setAnMenuIndex(0); }
-      else if (sel === 'Measurement Records') { setAnMenuScreen('RECORDS'); }
-      else if (sel === 'Device Settings') { setAnMenuScreen('SETTINGS'); }
-      else if (sel === 'Instrument Diagnosis') { setAnMenuScreen('DIAGNOSIS'); }
-    } else if (anMenuScreen === 'MEASUREMENTS') {
-      const sel = measurementItems[anMenuIndex];
-      setSelectedMeasurement(sel);
-      if (sel === 'Flue Gas Analysis') {
-        setAnMenuScreen('FUEL');
-        setAnMenuIndex(0);
-      } else {
-        setAnMenuScreen('LIVE');
-      }
-    } else if (anMenuScreen === 'FUEL') {
-      const sel = fuelItems[anMenuIndex];
-      setSelectedFuel(sel);
-      setAnMenuScreen('LIVE');
-    } else if (anMenuScreen === 'LIVE') {
-      if (anState === 'READY' && !probeInFlue) insertProbe();
-    }
-  };
-  const handleMenuEsc = () => {
-    if (!anMenuOpen) return;
-    if (anMenuScreen === 'MAIN') { setAnMenuOpen(false); return; }
-    if (anMenuScreen === 'MEASUREMENTS') { setAnMenuScreen('MAIN'); setAnMenuIndex(0); return; }
-    if (anMenuScreen === 'FUEL') { setAnMenuScreen('MEASUREMENTS'); setAnMenuIndex(0); return; }
-    if (anMenuScreen === 'LIVE') { setAnMenuScreen('MAIN'); return; }
-    if (['RECORDS','SETTINGS','DIAGNOSIS'].includes(anMenuScreen)) { setAnMenuScreen('MAIN'); return; }
-  };
 
   useEffect(() => {
     if (!tuningOn) return;
@@ -1181,21 +1131,7 @@ const rheostatRampRef = useRef(null);
       }
     };
   }, [burnerState, boilerOn, rheostat]);
-  useEffect(() => {
-    let id = null;
-    if (anState === 'ZERO') {
-      const start = Date.now();
-      setZeroProgress(0);
-      id = setInterval(() => {
-        const elapsed = Date.now() - start;
-        const pct = Math.min(100, Math.round((elapsed / ZERO_DURATION_MS) * 100));
-        setZeroProgress(pct);
-      }, 100);
-    } else {
-      setZeroProgress(0);
-    }
-    return () => { if (id) clearInterval(id); };
-  }, [anState]);
+
   useEffect(() => {
     if (burnerState === "PREPURGE_HI" || burnerState === "DRIVE_HI") {
       setRheostat(100);
@@ -1301,7 +1237,7 @@ const rheostatRampRef = useRef(null);
                 </button>
                 <button
                   className="btn"
-                  onClick={() => { if (anState !== 'OFF') { setAnMenuOpen((o) => !o); setAnMenuScreen('MAIN'); setAnMenuIndex(0); } }}
+                  onClick={openMenu}
                   disabled={anState === 'OFF' || anState === 'ZERO'}
                 >
                   {anMenuOpen ? 'Close Menu' : 'Menu'}
@@ -1315,7 +1251,7 @@ const rheostatRampRef = useRef(null);
                 </button>
                 <button
                   className="btn"
-                  onClick={() => setProbeInFlue(false)}
+                  onClick={removeProbe}
                 >
                   Remove Probe
                 </button>
@@ -1343,14 +1279,7 @@ const rheostatRampRef = useRef(null);
                 </button>
               </div>
               {(() => {
-                const help = {
-                  OFF: 'Analyzer is powered down. Click Start to begin zeroing (ambient baseline).',
-                  ZERO: 'ZERO: Establishing baseline in ambient air – wait, then click Finish Zero when stable.',
-                  READY: 'READY: Baseline captured, electronics stable. Safe to Insert Probe into the flue.',
-                  SAMPLING: 'SAMPLING: Probe in flue; readings updating in real time. Wait for stability before saving.',
-                  HOLD: 'HOLD: Sampling paused – gas path isolated. Resume to continue updating readings.'
-                };
-                const msg = help[anState] || '';
+                const msg = getHelpText();
                 return (
                   <>
                     {anState === 'ZERO' && (
@@ -1427,8 +1356,8 @@ const rheostatRampRef = useRef(null);
                             </div>
                             <div className="mt-2 flex flex-wrap gap-2">
                               <button className="btn" onClick={() => { if (anState === 'READY') insertProbe(); }} disabled={anState !== 'READY' || probeInFlue}>Insert Probe</button>
-                              <button className="btn" onClick={() => setProbeInFlue(false)} disabled={!probeInFlue}>Remove Probe</button>
-                              <button className="btn" onClick={() => { setProbeInFlue(false); setAnState('READY'); setAnMenuScreen('MAIN'); }}>Stop</button>
+                              <button className="btn" onClick={removeProbe} disabled={!probeInFlue}>Remove Probe</button>
+                              <button className="btn" onClick={stopAnalyzer}>Stop</button>
                               <button className="btn" onClick={holdAnalyzer} disabled={anState !== 'SAMPLING'}>Hold</button>
                               <button className="btn" onClick={resumeAnalyzer} disabled={anState !== 'HOLD'}>Resume</button>
                               <button className="btn-primary" onClick={saveReading} disabled={anState === 'OFF'}>Save</button>
