@@ -399,6 +399,8 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
     flameOutTimerRef,
   });
   
+  const { EP160 } = simulationLoop;
+  
   const configBeforeSettings = useRef(null);
 
   // Settings modal visibility
@@ -554,8 +556,7 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
   // Helper booleans for conditional UI/logic
   const isOil = fuelKey === "Fuel Oil #2" || fuelKey === "Biodiesel";
 
-  // Programmer timing constants derived from a common Fireye EP-160 sequence
-  const EP160 = { PURGE_HF_SEC: 30, LOW_FIRE_MIN_SEC: 30, LOW_FIRE_DRIVE_SEC: 5, PTFI_SEC: 10, MTFI_SPARK_OFF_SEC: 10, MTFI_PILOT_OFF_SEC: 15, POST_PURGE_SEC: 15, FFRT_SEC: 4 };
+  // EP160 timing constants now provided by useSimulationLoop hook
   // Ranges for air/fuel ratio expressed as excess air (EA)
   const IGNITABLE_EA = { min: 0.85, max: 1.6 }; // flame can light within this EA window
   const STABLE_EA = { min: 0.9, max: 1.5 }; // stable flame once running
@@ -794,178 +795,8 @@ useEffect(() => {
   // simSpeedMultiplierRef created earlier, sync with tour value
   useEffect(() => { simSpeedMultiplierRef.current = simSpeedMultiplier; }, [simSpeedMultiplier]);
 
-  // Main 10 Hz loop that advances the burner state machine and simulated sensors
-  useEffect(() => {
-    const id = setInterval(() => {
-      const dtms = 100; // loop interval in milliseconds
-      const speedMultiplier = simSpeedMultiplierRef.current;
-      const effectiveDtms = dtms * speedMultiplier; // apply speed multiplier
-      stateTimeRef.current += effectiveDtms; // track elapsed time in current state
+  // Main simulation loop now handled by useSimulationLoop hook
 
-      // --- Get latest values from refs ---
-      const currentBoilerOn = boilerOnRef.current;
-      const currentBurnerState = burnerStateRef.current;
-      const currentFuel = fuelRef.current;
-      const currentFuelFlow = fuelFlowRef.current;
-      const currentAirFlow = airFlowRef.current;
-      const currentFlameSignal = flameSignalRef.current;
-      const currentLockoutPending = lockoutPendingRef.current;
-      const currentAmbientF = ambientFRef.current;
-      const currentSetpointF = setpointFRef.current;
-
-
-      // Compute current excess air (EA) for control logic
-      const { C: _C, H: _H, O: _O } = currentFuel.formula;
-      const _O2_needed = Math.max(0.0001, currentFuelFlow) * (_C + _H / 4 - _O / 2);
-      const _airStoich = _O2_needed / 0.21;
-      const EA_now = Math.max(0.1, currentAirFlow / Math.max(0.001, _airStoich));
-
-      let nextBurnerState = currentBurnerState;
-      // ---- Programmer state machine ----
-      // Each branch represents a step in the ignition sequence.
-      if (!currentBoilerOn) {
-        // If power is cut, jump to postpurge to clear the chamber
-        if (currentBurnerState !== "OFF" && currentBurnerState !== "POSTPURGE") {
-          setT5Spark(false); setT6Pilot(false); setT7Main(false);
-          nextBurnerState = "POSTPURGE";
-          stateTimeRef.current = 0;
-        }
-      } else if (currentBurnerState === "OFF") {
-        nextBurnerState = "DRIVE_HI";
-        stateTimeRef.current = 0;
-      } else if (currentBurnerState === "DRIVE_HI") {
-        // brief high-fire drive to open air damper
-        if (stateTimeRef.current >= 1000) { nextBurnerState = "PREPURGE_HI"; stateTimeRef.current = 0; }
-      } else if (currentBurnerState === "PREPURGE_HI") {
-        // high-fire purge clears the chamber
-        if (stateTimeRef.current >= EP160.PURGE_HF_SEC * 1000) { nextBurnerState = "DRIVE_LOW"; stateTimeRef.current = 0; }
-      } else if (currentBurnerState === "DRIVE_LOW") {
-        // move to low-fire for minimum purge
-        if (stateTimeRef.current >= EP160.LOW_FIRE_DRIVE_SEC * 1000) { nextBurnerState = "LOW_PURGE_MIN"; stateTimeRef.current = 0; }
-      } else if (currentBurnerState === "LOW_PURGE_MIN") {
-        if (stateTimeRef.current >= EP160.LOW_FIRE_MIN_SEC * 1000) {
-          // begin pilot trial for ignition (PTFI)
-          nextBurnerState = "PTFI";
-          setT5Spark(true); setT6Pilot(true); setT7Main(false);
-          stateTimeRef.current = 0;
-        }
-      } else if (currentBurnerState === "PTFI") {
-        // pilot trial: wait for flame or lockout
-        if (stateTimeRef.current >= EP160.PTFI_SEC * 1000) {
-          if (currentFlameSignal >= 10) {
-            setT7Main(true); // main flame on
-            nextBurnerState = "MTFI";
-            stateTimeRef.current = 0;
-          } else {
-            // flame not proven → lockout
-            setT5Spark(false); setT6Pilot(false); setT7Main(false);
-            nextBurnerState = "LOCKOUT";
-            setLockoutReason("PTFI FLAME FAIL");
-            stateTimeRef.current = 0;
-          }
-        }
-      } else if (currentBurnerState === "MTFI") {
-        // main-trial-for-ignition: drop spark then pilot
-        if (stateTimeRef.current >= EP160.MTFI_SPARK_OFF_SEC * 1000) setT5Spark(false);
-        if (stateTimeRef.current >= EP160.MTFI_PILOT_OFF_SEC * 1000) {
-          setT6Pilot(false);
-          nextBurnerState = "RUN_AUTO";
-          stateTimeRef.current = 0;
-        }
-      } else if (currentBurnerState === "RUN_AUTO") {
-        // running state: monitor EA and flame signal
-        if (EA_now < IGNITABLE_EA.min || EA_now > IGNITABLE_EA.max) {
-          // EA out of range causes immediate flame blowout
-          setT7Main(false);
-          nextBurnerState = "POSTPURGE";
-          setLockoutReason("FLAME BLOWOUT (EA out of range)");
-          setLockoutPending(true);
-          stateTimeRef.current = 0;
-        } else if (currentFlameSignal < 10) {
-          // delay timer for flame failure
-          flameOutTimerRef.current += effectiveDtms;
-          if (flameOutTimerRef.current >= EP160.FFRT_SEC * 1000) {
-            setT7Main(false);
-            nextBurnerState = "LOCKOUT";
-            setLockoutReason("FLAME FAIL");
-            stateTimeRef.current = 0;
-          }
-        } else {
-          flameOutTimerRef.current = 0;
-        }
-      } else if (currentBurnerState === "POSTPURGE") {
-        // continue fan to clear gases, then either lockout or off
-        if (stateTimeRef.current >= EP160.POST_PURGE_SEC * 1000) {
-          if (currentLockoutPending) {
-            nextBurnerState = "LOCKOUT";
-          } else {
-            nextBurnerState = "OFF";
-          }
-          setLockoutPending(false);
-          setStateCountdown(null);
-          stateTimeRef.current = 0;
-        }
-      }
-
-      if (nextBurnerState !== currentBurnerState) {
-        setBurnerState(nextBurnerState);
-        try {
-          window.dispatchEvent(new CustomEvent('programmerStateChanged', { detail: { state: nextBurnerState } }));
-        } catch (e) {
-          if (isDev) console.error('Failed to dispatch programmer event', e);
-        }
-      }
-
-      // Display remaining time for states that have a fixed duration
-      let remaining = null;
-  if (currentBurnerState === "PREPURGE_HI") remaining = EP160.PURGE_HF_SEC - stateTimeRef.current / 1000;
-  else if (currentBurnerState === "DRIVE_LOW") remaining = EP160.LOW_FIRE_DRIVE_SEC - stateTimeRef.current / 1000;
-      else if (currentBurnerState === "LOW_PURGE_MIN") remaining = EP160.LOW_FIRE_MIN_SEC - stateTimeRef.current / 1000;
-      else if (currentBurnerState === "PTFI") remaining = EP160.PTFI_SEC - stateTimeRef.current / 1000;
-      else if (currentBurnerState === "MTFI") remaining = EP160.MTFI_PILOT_OFF_SEC - stateTimeRef.current / 1000;
-      else if (currentBurnerState === "POSTPURGE") remaining = EP160.POST_PURGE_SEC - stateTimeRef.current / 1000;
-      setStateCountdown(remaining !== null ? Math.max(0, Math.ceil(remaining)) : null);
-
-      // Simulate flame-sensor response with a bit of noise for realism
-      setFlameSignal((prev) => {
-        if (!(currentBurnerState === "PTFI" || currentBurnerState === "MTFI" || currentBurnerState === "RUN_AUTO")) {
-          return 0;
-        }
-        let target = 0;
-        const { C, H, O } = currentFuel.formula;
-        const O2_needed = Math.max(0.0001, currentFuelFlow) * (C + H / 4 - O / 2);
-        const airStoich = O2_needed / 0.21;
-        const EA = Math.max(0.1, currentAirFlow / Math.max(0.001, airStoich));
-        const k = Math.exp(-Math.pow((EA - 1.05) / 0.35, 2));
-        if (currentBurnerState === "PTFI") {
-          const ignitable = EA > IGNITABLE_EA.min && EA < IGNITABLE_EA.max && currentFuelFlow > 0.5;
-          target = ignitable ? 22 + 6 * k : 5;
-        } else if (currentBurnerState === "MTFI" || currentBurnerState === "RUN_AUTO") {
-          target = 25 + 55 * k * Math.tanh(currentFuelFlow / 10);
-        }
-        const noise = (Math.random() - 0.5) * 2;
-        return clamp(prev + (target - prev) * 0.25 + noise, 0, 80);
-      });
-
-      // First-order lag to approximate stack temperature rise and fall
-      setSimStackF((prev) => {
-        const dt = 0.1; // integration step seconds
-        let tau = 1.5; // time constant
-        let target = currentAmbientF;
-        if (currentBurnerState === "OFF" || currentBurnerState === "DRIVE_HI" || currentBurnerState === "PREPURGE_HI" || currentBurnerState === "DRIVE_LOW" || currentBurnerState === "LOW_PURGE_MIN" || currentBurnerState === "POSTPURGE" || currentBurnerState === "LOCKOUT") {
-          tau = 3; target = currentAmbientF; // cool to ambient
-        } else if (currentBurnerState === "PTFI") {
-          tau = 2.5; target = Math.max(currentAmbientF + 40, currentSetpointF - 80);
-        } else if (currentBurnerState === "MTFI") {
-          tau = 4; target = Math.max(currentAmbientF + 80, currentSetpointF - 40);
-        } else if (currentBurnerState === "RUN_AUTO") {
-          tau = 6; target = currentSetpointF;
-        }
-        return prev + (target - prev) * (dt / tau);
-      });
-    }, 100);
-    return () => clearInterval(id);
-  }, []);
   // Link rheostat to fuel/air flows
   useEffect(() => {
     // If a tuned cam point exists for this position, apply it
