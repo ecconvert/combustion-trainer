@@ -1357,30 +1357,23 @@ const rheostatRampRef = useRef(null);
             </div>
             <CollapsibleSection title="Analyzer">
               <div className="card" data-tour="analyzer">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm">
-                      State: {anState}{" "}
-                      {probeInFlue && (
-                        <span className="pill bg-slate-100 ml-2">
-                          Probe in flue
-                        </span>
-                      )}
-                    </div>
+                <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+                  <div className="flex items-center flex-wrap text-sm leading-snug min-w-0">
+                    <span className="font-medium mr-1">State:</span>
+                    <span className="mr-2 break-all">{anState}</span>
+                    {probeInFlue && (
+                      <span
+                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-100 shadow-sm whitespace-nowrap mt-1 md:mt-0"
+                      >
+                        Probe in flue
+                      </span>
+                    )}
                   </div>
-                  <div className="flex gap-2 items-center">
+                  <div className="flex gap-2 items-center shrink-0">
                     <Led on={anState !== "OFF"} label="Power" />
                     <Led on={anState === "ZERO"} label="Zero" color="#06b6d4" />
-                    <Led
-                      on={anState === "SAMPLING"}
-                      label="Sampling"
-                      color="#84cc16"
-                    />
-                    <Led
-                      on={anState === "HOLD"}
-                      label="Hold"
-                      color="#f59e0b"
-                    />
+                    <Led on={anState === "SAMPLING"} label="Sampling" color="#84cc16" />
+                    <Led on={anState === "HOLD"} label="Hold" color="#f59e0b" />
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -1467,7 +1460,7 @@ const rheostatRampRef = useRef(null);
                       )}
 
                       <div
-                        className="mt-2 text-xs text-slate-500"
+                        className="mt-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed"
                         data-testid="analyzer-state-help"
                         aria-live="polite"
                         role="status"
