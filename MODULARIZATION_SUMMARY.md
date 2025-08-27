@@ -21,9 +21,19 @@
 
 **Status**: 🚨 **READY FOR PRODUCTION DEPLOYMENT** - Critical bugs resolved
 
-**Latest Fix Applied**: ✅ **CROSS-ORIGIN IFRAME ERROR RESOLVED**
+**Latest Fix Applied**: ✅ **TOUR FLICKERING SAFER SOLUTION IDENTIFIED**
 
-- Fixed Vercel preview frame cross-origin access error
+- **Root Cause Confirmed**: Duplicate rheostat state management causing conflicts
+- **Problem**: Two files with conflicting useState and useEffect for rheostat
+- **Analysis Result**: `AppLayout.jsx` is NOT just a duplicate - it's a 1100+ line alternative architecture
+- **Contains Unique Logic**: useAnalyzer, useDataHistory, useBurnerProgrammer, useTuningMode hooks
+- **Contains Unique Components**: AppHeader, AppFooter components
+- **Safer Solution**: Temporarily disable file instead of deleting (preserve alternative architecture)
+- **Action**: Rename `src/layout/AppLayout.jsx` → `src/layout/AppLayout.jsx.disabled`
+- **Benefit**: Fixes flickering while preserving potentially valuable alternative implementation
+
+**Previous Fix**: ✅ **CROSS-ORIGIN IFRAME ERROR RESOLVED**- Fixed Vercel preview frame cross-origin access error
+
 - Error: "Blocked a frame with origin 'https://vercel.live' from accessing a frame with origin 'https://combustion-trainer-\*.vercel.app'"
 - Root cause: Browser security blocking cross-origin iframe access in Vercel's live preview
 - Solution: Added cross-origin detection and safe window API access guards
