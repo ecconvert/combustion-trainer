@@ -19,7 +19,15 @@
 - Removed unused `f2c` import and temperature conversion
 - Fixed missing `useCallback` and `FUELS` imports
 
-**Status**: 🚨 **READY FOR PRODUCTION DEPLOYMENT** - Critical bug resolved
+**Status**: 🚨 **READY FOR PRODUCTION DEPLOYMENT** - Critical bugs resolved
+
+**Latest Fix Applied**: ✅ **TOUR-APP FLICKERING RESOLVED**
+
+- Fixed state synchronization conflict between tour system and main app
+- Root cause: Race condition between `simSpeedMultiplier` state and `simSpeedMultiplierRef`
+- Solution: Direct ref synchronization with debounced updates to prevent rapid flickering
+- Updated useTour hook to accept and manage simSpeedMultiplierRef directly
+- Eliminated circular dependency in speed control system
 
 ---
 

@@ -612,12 +612,14 @@ useEffect(() => {
     boilerOn,
     setBoilerOn,
     setRheostat,
-    burnerStateRef
+    burnerStateRef,
+    simSpeedMultiplierRef
   });
 
-  const { simSpeedMultiplier, setAdvanceStep, TourComponent } = tour;
-  // simSpeedMultiplierRef created earlier, sync with tour value
-  useEffect(() => { simSpeedMultiplierRef.current = simSpeedMultiplier; }, [simSpeedMultiplier]);
+  const { setAdvanceStep, TourComponent } = tour;
+  
+  // Note: simSpeedMultiplierRef is now managed internally by useTour to prevent flickering
+  // The tour hook maintains both state and ref synchronization internally
 
   // Main simulation loop now handled by useSimulationLoop hook
 

@@ -1,26 +1,38 @@
 /**
  * useTour Hook
- * 
+ *
  * Manages tour/onboarding system functionality including:
  * - JoyrideHost component state and global API exposure
  * - Simulation speed multiplier for tour fast-forward
  * - Global window API for tour integration with boiler controls
  * - Tour lifecycle and integration points
- * 
+ *
  * Extracted from App.jsx for modular architecture.
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import JoyrideHost from '../tour/JoyrideHost';
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import JoyrideHost from "../tour/JoyrideHost";
 
-export function useTour({ 
+export function useTour({
   boilerOn,
   setBoilerOn,
   setRheostat,
-  burnerStateRef
+  burnerStateRef,
+  simSpeedMultiplierRef,
 }) {
   // Tour simulation speed for fast-forward functionality
   const [simSpeedMultiplier, setSimSpeedMultiplier] = useState(1);
+
+  // Sync state to the provided ref when state changes (debounced to prevent flickering)
+  useEffect(() => {
+    if (simSpeedMultiplierRef) {
+      // Use a small delay to prevent rapid updates causing flickering
+      const timeout = setTimeout(() => {
+        simSpeedMultiplierRef.current = simSpeedMultiplier;
+      }, 10);
+      return () => clearTimeout(timeout);
+    }
+  }, [simSpeedMultiplier, simSpeedMultiplierRef]);
 
   // advanceStep function reference for dynamic updates
   const advanceStepRef = useRef(null);
@@ -35,11 +47,11 @@ export function useTour({
     // Boiler control functions for tour
     window.setBoilerOn = setBoilerOn;
     window.getBoilerOn = () => boilerOn;
-    
+
     // Simulation speed control for tour fast-forward
     window.setSimSpeed = setSimSpeedMultiplier;
     window.getSimSpeed = () => simSpeedMultiplier;
-    
+
     // Test helper: forcibly set rheostat (firing rate) bypassing disabled state for deterministic e2e
     window.setRheostat = (val) => {
       try {
@@ -49,17 +61,17 @@ export function useTour({
         // ignore invalid values
       }
     };
-    
+
     // Expose programmer/burner state for tour fast-forward auto-exit logic
     window.getProgrammerState = () => burnerStateRef.current;
-    
+
     // Expose a test helper to advance the programmer state machine
     const adv = () => {
       try {
         const advanceStep = advanceStepRef.current;
-        if (typeof advanceStep === 'function') { 
-          advanceStep(); 
-          return true; 
+        if (typeof advanceStep === "function") {
+          advanceStep();
+          return true;
         }
       } catch {
         // ignore errors in step advancement
@@ -83,7 +95,8 @@ export function useTour({
     setBoilerOn,
     simSpeedMultiplier,
     setRheostat,
-    burnerStateRef
+    burnerStateRef,
+    simSpeedMultiplierRef,
   ]);
 
   // Manual tour start function that can be exposed globally
@@ -107,13 +120,13 @@ export function useTour({
   return {
     // State
     simSpeedMultiplier,
-    
+
     // Actions
     setSimSpeedMultiplier,
     setAdvanceStep,
     startTour,
-    
+
     // Component
-    TourComponent
+    TourComponent,
   };
 }
