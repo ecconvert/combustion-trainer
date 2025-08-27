@@ -65,25 +65,43 @@ export default function JoyrideHost({ runOnFirstVisit = true }: { runOnFirstVisi
   const handleJoyrideCallback = useCallback((data: CallBackProps) => {
     const { status, type, step, action } = data;
 
+    // Guard against cross-origin frame access errors
+    const safeWindowAccess = (fn: () => void) => {
+      try {
+        // Check if we're in a cross-origin iframe
+        if (window.parent !== window && window.top !== window) {
+          try {
+            // Test if we can access parent - will throw if cross-origin
+            window.parent.location.href;
+          } catch {
+            // Cross-origin detected - skip window API calls
+            console.warn('Cross-origin frame detected, skipping window API access');
+            return;
+          }
+        }
+        fn();
+      } catch (err) {
+        console.warn('Window API access failed (likely cross-origin):', err);
+      }
+    };
+
     // When power step is shown, save original state and turn boiler on
     if (run && type === 'step:after' && step?.target === "[data-tour='power']") {
-      if ((window as any).getBoilerOn && (window as any).setBoilerOn) {
-        try {
+      safeWindowAccess(() => {
+        if ((window as any).getBoilerOn && (window as any).setBoilerOn) {
           const currentState = (window as any).getBoilerOn();
           setOriginalBoilerState(currentState);
           if (!currentState) {
             (window as any).setBoilerOn(true);
           }
-        } catch (err) {
-          console.warn('Boiler startup for tour failed:', err);
         }
-      }
+      });
     }
 
     // When programmer/startup step is shown, enable fast-forward
     if ((type === 'step:after' || type === 'step:before') && step?.target === STARTUP_STEP_SELECTOR) {
-      if ((window as any).setSimSpeed && (window as any).getSimSpeed) {
-        try {
+      safeWindowAccess(() => {
+        if ((window as any).setSimSpeed && (window as any).getSimSpeed) {
           const current = (window as any).getSimSpeed();
           if (current !== FAST_FORWARD_MULTIPLIER) {
             previousSpeedRef.current = current;
@@ -92,16 +110,14 @@ export default function JoyrideHost({ runOnFirstVisit = true }: { runOnFirstVisi
             setFastForwardActive(true);
             forceTick();
           }
-        } catch (err) {
-          console.warn('Fast-forward activation failed:', err);
         }
-      }
+      });
     }
 
     // When firing rate step is shown, demonstrate ramping effects
     if (type === 'step:after' && step?.target === "[data-tour='firing-rate']") {
-      if ((window as any).setRheostat) {
-        try {
+      safeWindowAccess(() => {
+        if ((window as any).setRheostat) {
           // Start a demonstration ramp from 20% to 60% and back
           let currentRate = 20;
           let direction = 1; // 1 for up, -1 for down
@@ -133,10 +149,8 @@ export default function JoyrideHost({ runOnFirstVisit = true }: { runOnFirstVisi
           // Clean up interval on component unmount or tour end
           const cleanupFiringRateDemo = () => clearInterval(rampInterval);
           (window as any).__cleanupFiringRateDemo = cleanupFiringRateDemo;
-        } catch (err) {
-          console.warn('Firing rate demonstration failed:', err);
         }
-      }
+      });
     }
 
     // Handle technician drawer pausing behavior

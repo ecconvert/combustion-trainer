@@ -21,7 +21,16 @@
 
 **Status**: 🚨 **READY FOR PRODUCTION DEPLOYMENT** - Critical bugs resolved
 
-**Latest Fix Applied**: ✅ **TOUR-APP FLICKERING RESOLVED**
+**Latest Fix Applied**: ✅ **CROSS-ORIGIN IFRAME ERROR RESOLVED**
+
+- Fixed Vercel preview frame cross-origin access error
+- Error: "Blocked a frame with origin 'https://vercel.live' from accessing a frame with origin 'https://combustion-trainer-\*.vercel.app'"
+- Root cause: Browser security blocking cross-origin iframe access in Vercel's live preview
+- Solution: Added cross-origin detection and safe window API access guards
+- Tour system now gracefully handles iframe restrictions without errors
+- App functions normally in both standalone and iframe environments
+
+**Previous Fix**: ✅ **TOUR-APP FLICKERING RESOLVED**
 
 - Fixed state synchronization conflict between tour system and main app
 - Root cause: Race condition between `simSpeedMultiplier` state and `simSpeedMultiplierRef`
