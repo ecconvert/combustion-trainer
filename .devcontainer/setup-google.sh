@@ -51,6 +51,12 @@ else
 fi
 
 echo "[google-setup] Installing Playwright browsers (safe to re-run)..."
-npx --yes playwright install
+# npx --yes playwright install  # Temporarily disabled due to file system error
+# Add error handling for Playwright installation
+if npx --yes playwright install; then
+  echo "[google-setup] Playwright browsers installed successfully"
+else
+  echo "[google-setup] WARNING: Playwright browser installation failed - you can run 'npx playwright install' manually later"
+fi
 
 echo "[google-setup] Done."

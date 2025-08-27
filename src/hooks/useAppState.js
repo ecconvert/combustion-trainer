@@ -1,21 +1,20 @@
 /**
  * useAppState Hook
- * 
+ *
  * Central state coordination hook that manages:
  * - Core simulation state (boiler, burner, fuel, air)
  * - Cross-component state synchronization
  * - Shared computations and derived state
  * - Event coordination between systems
  * - Reference management for performance
- * 
+ *
  * This hook serves as the central nervous system for the combustion trainer,
  * coordinating state that multiple components and systems depend on.
  */
 
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { FUELS } from '../lib/fuels';
-import { f2c } from '../lib/math';
-import { computeCombustion } from '../lib/chemistry';
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
+import { computeCombustion } from "../lib/chemistry";
+import { FUELS } from "../lib/fuels";
 
 const SAVED_KEY = "ct_saved_v1";
 
@@ -81,49 +80,88 @@ export function useAppState() {
   const simStackFRef = useRef(simStackF);
 
   // Update refs when state changes
-  useEffect(() => { boilerOnRef.current = boilerOn; }, [boilerOn]);
-  useEffect(() => { burnerStateRef.current = burnerState; }, [burnerState]);
-  useEffect(() => { fuelRef.current = fuel; }, [fuel]);
-  useEffect(() => { flameSignalRef.current = flameSignal; }, [flameSignal]);
-  useEffect(() => { lockoutPendingRef.current = lockoutPending; }, [lockoutPending]);
-  useEffect(() => { ambientFRef.current = ambientF; }, [ambientF]);
-  useEffect(() => { setpointFRef.current = setpointF; }, [setpointF]);
-  useEffect(() => { fuelFlowRef.current = fuelFlow; }, [fuelFlow]);
-  useEffect(() => { airFlowRef.current = airFlow; }, [airFlow]);
-  useEffect(() => { rheostatRef.current = rheostat; }, [rheostat]);
-  useEffect(() => { simStackFRef.current = simStackF; }, [simStackF]);
+  useEffect(() => {
+    boilerOnRef.current = boilerOn;
+  }, [boilerOn]);
+  useEffect(() => {
+    burnerStateRef.current = burnerState;
+  }, [burnerState]);
+  useEffect(() => {
+    fuelRef.current = fuel;
+  }, [fuel]);
+  useEffect(() => {
+    flameSignalRef.current = flameSignal;
+  }, [flameSignal]);
+  useEffect(() => {
+    lockoutPendingRef.current = lockoutPending;
+  }, [lockoutPending]);
+  useEffect(() => {
+    ambientFRef.current = ambientF;
+  }, [ambientF]);
+  useEffect(() => {
+    setpointFRef.current = setpointF;
+  }, [setpointF]);
+  useEffect(() => {
+    fuelFlowRef.current = fuelFlow;
+  }, [fuelFlow]);
+  useEffect(() => {
+    airFlowRef.current = airFlow;
+  }, [airFlow]);
+  useEffect(() => {
+    rheostatRef.current = rheostat;
+  }, [rheostat]);
+  useEffect(() => {
+    simStackFRef.current = simStackF;
+  }, [simStackF]);
 
   // ----------------------- Derived computations -----------------------
   // Combustion calculations
   const disp = useMemo(() => {
     try {
-      return computeCombustion(fuelFlow, airFlow, fuel, f2c(simStackF), f2c(ambientF));
+      return computeCombustion({
+        fuel,
+        fuelFlow,
+        airFlow,
+        stackTempF: simStackF,
+        ambientF,
+      });
     } catch (e) {
       console.warn("Combustion calculation failed:", e);
-      return { 
-        O2_pct: 20.9, 
-        CO2_pct: 0, 
-        CO_ppm: 0, 
+      return {
+        O2_pct: 20.9,
+        CO2_pct: 0,
+        CO_ppm: 0,
         CO_airfree: 0,
-        NOx_ppm: 0, 
+        NOx_ppm: 0,
         stackTempF: simStackF,
         excessAir: 1.0,
         efficiency: 0,
         flameTempF: simStackF,
-        warnings: { soot: false, overTemp: false, underTemp: false }
+        warnings: { soot: false, overTemp: false, underTemp: false },
       };
     }
   }, [fuelFlow, airFlow, fuel, simStackF, ambientF]);
 
   // Effective fuel flow (accounting for valve states)
   const effectiveFuel = useMemo(
-    () => (t7Main ? fuelFlow : (t6Pilot ? Math.min(fuelFlow, Math.max(0.5, minFuel * 0.5)) : 0)),
+    () =>
+      t7Main
+        ? fuelFlow
+        : t6Pilot
+        ? Math.min(fuelFlow, Math.max(0.5, minFuel * 0.5))
+        : 0,
     [t7Main, t6Pilot, fuelFlow, minFuel]
   );
 
   // Gas flow calculations for meters
-  const gasCamCFH = useMemo(() => (isGas ? Math.max(0, fuelFlow) : 0), [isGas, fuelFlow]);
-  const gasBurnerCFH = useMemo(() => (isGas ? Math.max(0, effectiveFuel) : 0), [isGas, effectiveFuel]);
+  const gasCamCFH = useMemo(
+    () => (isGas ? Math.max(0, fuelFlow) : 0),
+    [isGas, fuelFlow]
+  );
+  const gasBurnerCFH = useMemo(
+    () => (isGas ? Math.max(0, effectiveFuel) : 0),
+    [isGas, effectiveFuel]
+  );
 
   // ----------------------- State coordination actions -----------------------
   // Reset burner system
@@ -146,15 +184,18 @@ export function useAppState() {
   }, []);
 
   // Save reading to localStorage
-  const saveReading = useCallback((reading) => {
-    const newSaved = [...saved, reading].slice(-100); // keep only latest 100
-    setSaved(newSaved);
-    try {
-      localStorage.setItem(SAVED_KEY, JSON.stringify(newSaved));
-    } catch (e) {
-      console.error("Failed to save reading:", e);
-    }
-  }, [saved]);
+  const saveReading = useCallback(
+    (reading) => {
+      const newSaved = [...saved, reading].slice(-100); // keep only latest 100
+      setSaved(newSaved);
+      try {
+        localStorage.setItem(SAVED_KEY, JSON.stringify(newSaved));
+      } catch (e) {
+        console.error("Failed to save reading:", e);
+      }
+    },
+    [saved]
+  );
 
   return {
     // Core state
@@ -231,6 +272,6 @@ export function useAppState() {
     // Coordination actions
     resetBurner,
     applyScenario,
-    saveReading
+    saveReading,
   };
 }

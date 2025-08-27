@@ -179,7 +179,9 @@ function PanelHeader({ title, right, dockAction }) {
 export default function CombustionTrainer({ initialConfig } = { initialConfig: undefined }) {
   const { drawerOpen, setDrawerOpen, seriesVisibility, setSeriesVisibility } = useUIState();
   
-  // ----------------------- Core State Management -----------------------
+  // ----------------------- PHASE 2 MODULARIZED HOOKS -----------------------
+  
+  // Core Application State - centralized state management for simulation, burner, and analyzer
   const appState = useAppState();
   const {
     // Core simulation state
@@ -254,7 +256,7 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
     saveReading
   } = appState;
   
-  // Initialize settings hook with initial config
+  // Settings System - configuration, themes, and settings modal management
   const settingsHook = useSettings(initialConfig);
   const { 
     config,
@@ -268,7 +270,7 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
   } = settingsHook;
   const simSpeedMultiplierRef = useRef(config.general?.fastForward ? 10 : 1);
   
-  // ----------------------- Simulation Loop Management -----------------------
+  // Simulation Loop - coordinated 10Hz simulation with EP160 constants
   const simulationLoop = useSimulationLoop({
     // State refs for performance
     simSpeedMultiplierRef,
@@ -300,11 +302,8 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
   
   const { EP160 } = simulationLoop;
   
-  
-  // Settings modal visibility
+  // Layout Management - responsive grid layout with persistence and auto-sizing
   const unitSystem = config.units.system;
-
-  // Initialize layout manager hook
   const layoutManager = useLayoutManager();
   const { 
     rglBreakpoints,
@@ -319,15 +318,17 @@ export default function CombustionTrainer({ initialConfig } = { initialConfig: u
     handleResetLayouts
   } = layoutManager;
 
+  // Panel Management - dynamic panel system with docking capabilities
+  const panelManagement = usePanelManagement();
+  const { mainItems, dock } = panelManagement;
+
+  // ----------------------- THEME AND UI MANAGEMENT -----------------------
+  
   useIsomorphicLayoutEffect(() => {
     applyTheme(theme);
   }, [theme]);
 
-  // ----------------------- Panel Management -----------------------
-  const panelManagement = usePanelManagement();
-  const { mainItems, dock } = panelManagement;
-
-  // Calculate isDarkMode from hook-provided theme  
+  // Calculate isDarkMode from hook-provided theme for chart styling
   const isDarkMode = useMemo(() => {
     if (typeof window === 'undefined') return false;
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
